@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-runewidth"
-	"github.com/user/futon/internal/tui/imgrender"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func (m ReaderModel) View() string {

@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/user/futon/internal/api"
-	"github.com/user/futon/internal/tui/imgrender"
+	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func downloadImageBytes(url string) ([]byte, error) {

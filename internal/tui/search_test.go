@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/user/futon/internal/api"
-	"github.com/user/futon/internal/models"
-	"github.com/user/futon/internal/storage"
+	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/models"
+	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
 func testSearchModel() SearchModel {

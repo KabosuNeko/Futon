@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/user/futon/internal/storage"
+	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
 type searchTriggerMsg struct {

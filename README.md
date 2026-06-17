@@ -32,12 +32,12 @@ A terminal that supports the **Kitty Graphics Protocol**:
 ### From source
 
 ```bash
-go install github.com/user/futon@latest
+go install github.com/KabosuNeko/Futon@latest
 ```
 
 ### Pre-built binaries
 
-Download the latest release for your platform from the [Releases](https://github.com/user/futon/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/KabosuNeko/Futon/releases) page.
 
 Builds available for:
 - Linux (amd64, arm64)

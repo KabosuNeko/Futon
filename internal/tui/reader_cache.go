@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/user/futon/internal/tui/imgrender"
+import "github.com/KabosuNeko/Futon/internal/tui/imgrender"
 
 const maxImageCache = 20
 

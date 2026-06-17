@@ -1,6 +1,6 @@
 package api
 
-import "github.com/user/futon/internal/models"
+import "github.com/KabosuNeko/Futon/internal/models"
 
 // MangaSearchResultMsg được gửi khi tìm kiếm manga hoàn tất.
 type MangaSearchResultMsg struct {

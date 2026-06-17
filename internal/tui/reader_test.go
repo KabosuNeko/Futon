@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/user/futon/internal/tui/imgrender"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func TestRightKeyBlockedWhenNotReady(t *testing.T) {
