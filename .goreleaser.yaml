@@ -9,6 +9,7 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
+    main: ./cmd/main.go
     goos:
       - linux
       - darwin
@@ -20,21 +21,15 @@ builds:
     binary: futon
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_
       {{- if eq .Os "darwin" }}macOS
       {{- else }}{{ .Os }}{{ end }}_
       {{- .Arch }}
-    format_overrides:
-      - goos: linux
-        format: tar.gz
 
 checksum:
   name_template: 'checksums.txt'
-
-snapshot:
-  name_template: '{{ .Version }}-SNAPSHOT-{{ .ShortCommit }}'
 
 changelog:
   sort: asc
