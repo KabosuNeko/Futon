@@ -7,7 +7,7 @@ Compact guidance for working in this repository.
 Futon is a terminal manga reader. It searches multiple manga sources, lists chapters, and renders pages inline using Kitty graphics or Sixel.
 
 - Language: Go 1.24.2
-- Module: `github.com/user/futon`
+- Module: `github.com/KabosuNeko/Futon`
 - Entrypoint: `cmd/main.go` → `internal/tui.NewAppModel()`
 - Build: `go build ./...`
 - Run: `go run ./cmd/...`

@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/user/futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/api"
 )
 
 type ViewMangaMsg struct {

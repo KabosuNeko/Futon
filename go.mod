@@ -1,4 +1,4 @@
-module github.com/user/futon
+module github.com/KabosuNeko/Futon
 
 go 1.25.0
 

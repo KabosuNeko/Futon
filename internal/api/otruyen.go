@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/user/futon/internal/models"
+	"github.com/KabosuNeko/Futon/internal/models"
 )
 
 const otruyenBaseURL = "https://otruyenapi.com/v1/api"

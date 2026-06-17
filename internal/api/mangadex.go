@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/user/futon/internal/models"
+	"github.com/KabosuNeko/Futon/internal/models"
 )
 
 type MangaDexProvider struct {

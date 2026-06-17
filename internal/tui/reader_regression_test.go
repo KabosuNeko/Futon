@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/user/futon/internal/tui/imgrender"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func TestImageCacheLRUDiscardsOldest(t *testing.T) {

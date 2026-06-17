@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/user/futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/api"
 )
 
 func TestTypingUpdatesInput(t *testing.T) {

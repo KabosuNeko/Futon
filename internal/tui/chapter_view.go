@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/user/futon/internal/storage"
-	"github.com/user/futon/internal/tui/imgrender"
+	"github.com/KabosuNeko/Futon/internal/storage"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func (m ChapterListModel) View() string {
