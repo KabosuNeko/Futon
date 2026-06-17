@@ -1,24 +1,29 @@
 # Futon
 
-Trình đọc manga trên terminal, nhanh và tối giản, viết bằng Go.
+<p><br/></p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2b1cd5ba-eb66-4632-82d8-284f7c1e3780" alt="Futon Logo" style="width: 192px" />
+</p>
+<p><br/></p>
 
-Futon render ảnh manga trực tiếp trong terminal nhờ Kitty Graphics Protocol — không cần phần mềm xem ảnh rời. Tìm kiếm truyện từ nhiều nguồn, duyệt chapter, và đọc với phím tắt kiểu Vim.
+Trình đọc manga trên terminal, nhanh và tối giản, viết bằng Go.
+Futon render ảnh manga trực tiếp trong terminal nhờ Kitty Graphics Protocol hoặc Sixel — không cần phần mềm xem ảnh rời. Tìm kiếm truyện từ nhiều nguồn, duyệt chapter, và đọc với phím tắt kiểu Vim.
 
 ## Tính năng
 
-- **Render ảnh trong terminal** — Kitty Graphics Protocol (dự phòng Sixel)
-- **Nhiều nguồn truyện** — MangaDex, OTruyen (chuyển bằng `tab`)
+- **Render ảnh trong terminal** — Kitty Graphics Protocol hoặc Sixel
+- **Nhiều nguồn truyện** — MangaDex, OTruyen (chuyển bằng `tab`) (sẽ cập nhật thêm)
 - **Yêu thích & Lịch sử đọc** — đánh dấu truyện, đọc tiếp từ vị trí đã dừng
-- **Tải ảnh ngoại tuyến** — lưu trang ảnh bằng `ctrl+d`
+- **Tải ảnh** — lưu trang ảnh bằng `ctrl+d`
 - **Preload chapter kế** — chuyển chapter mượt mà không chờ load
-- **LRU image cache** (20 ảnh) — lật trang nhanh
+- **LRU image cache** — lật trang nhanh
 - **Nhảy nhanh** — gõ số chapter rồi `enter`
 - **Lọc ngôn ngữ** — `/lang vi` hoặc `/lang en` cho MangaDex
 - **Phím tắt Vim-like** — phím mũi tên, nhảy số
 
 ## Yêu cầu
 
-Terminal hỗ trợ **Kitty Graphics Protocol** (khuyên dùng) hoặc **Sixel**:
+Terminal hỗ trợ **Kitty Graphics Protocol** hoặc **Sixel**:
 
 | Terminal | Giao thức |
 |----------|-----------|
@@ -35,13 +40,13 @@ Terminal hỗ trợ **Kitty Graphics Protocol** (khuyên dùng) hoặc **Sixel**
 
 ## Cài đặt
 
-### Từ nguồn
+### Từ source
 
 ```bash
 go install github.com/KabosuNeko/Futon@latest
 ```
 
-### Binary có sẵn
+### Binary
 
 Tải bản mới nhất từ mục [Releases](https://github.com/KabosuNeko/Futon/releases).
 
