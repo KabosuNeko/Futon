@@ -35,7 +35,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		}
 		return m, nil
 
-	case "right":
+	case "right", "l":
 		if m.step != stepRead || m.isLoading {
 			return m, nil
 		}
@@ -99,7 +99,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		}
 		return m, nil
 
-	case "left":
+	case "left", "h":
 		if m.step != stepRead || m.isLoading {
 			return m, nil
 		}

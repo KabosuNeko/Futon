@@ -36,7 +36,7 @@ func (m ReaderModel) View() string {
 		offsetX, offsetY, _, cellsH := m.imageRect(img)
 		b.WriteString(m.centeredImage(img))
 
-		footer := fmt.Sprintf("Trang %d/%d | <- -> : chuyển trang | esc: thoát | ctrl+d: tải ảnh", m.currentIdx+1, m.total)
+		footer := fmt.Sprintf("Trang %d/%d | <-/h ->/l : chuyển trang | esc: thoát | ctrl+d: tải ảnh", m.currentIdx+1, m.total)
 		if m.hasNextChapter() && m.currentIdx == m.total-1 {
 			footer += " | ->: chap tiếp"
 		}
