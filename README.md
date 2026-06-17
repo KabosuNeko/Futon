@@ -40,6 +40,20 @@ Terminal hỗ trợ **Kitty Graphics Protocol** hoặc **Sixel**:
 
 ## Cài đặt
 
+### Tự động (khuyên dùng)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | bash
+```
+
+Script sẽ tự động phát hiện hệ điều hành và kiến trúc, tải bản mới nhất từ GitHub Releases, và cài đặt vào `/usr/local/bin/`.
+
+Để gỡ cài đặt:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | bash -s -- uninstall
+```
+
 ### Từ source
 
 ```bash

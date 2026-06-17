@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/updater"
 )
 
 type ViewMangaMsg struct {
@@ -17,12 +20,21 @@ type ViewChapterMsg struct {
 	MangaTitle     string
 	ChapterID      string
 	ChapterNumber  string
-	AllChapterIDs  []string // toàn bộ chapter ID để auto-next
-	ChapterIndex   int      // vị trí chapter hiện tại
-	StartPageIndex int      // -1: không chỉ định (dùng lịch sử hoặc 0); -2: trang cuối; >=0: trang cụ thể
+	AllChapterIDs  []string
+	ChapterIndex   int
+	StartPageIndex int
 }
 
 type BackToChaptersMsg struct{}
+
+type UpdateAvailableMsg struct {
+	Version string
+	URL     string
+}
+
+type UpdateReadyMsg struct {
+	Err error
+}
 
 type appState int
 
@@ -30,9 +42,9 @@ const (
 	stateSearch appState = iota
 	stateChapters
 	stateReader
+	stateUpdating
 )
 
-// AppModel đóng vai trò Router, điều phối giữa các màn hình con.
 type AppModel struct {
 	state           appState
 	search          SearchModel
@@ -40,10 +52,16 @@ type AppModel struct {
 	reader          ReaderModel
 	providers       []api.MangaProvider
 	currentProvider api.MangaProvider
+
+	appVersion      string
+	updateAvailable bool
+	updateVersion   string
+	updateURL       string
+	updateError     error
+	updateSuccess   bool
 }
 
-// NewAppModel tạo AppModel với màn hình tìm kiếm mặc định.
-func NewAppModel() AppModel {
+func NewAppModel(version string) AppModel {
 	providers := []api.MangaProvider{
 		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
@@ -54,11 +72,29 @@ func NewAppModel() AppModel {
 		search:          NewSearchModel(providers),
 		providers:       providers,
 		currentProvider: providers[0],
+		appVersion:      version,
 	}
 }
 
 func (m AppModel) Init() tea.Cmd {
-	return m.search.Init()
+	return tea.Batch(m.search.Init(), checkForUpdateCmd(m.appVersion))
+}
+
+func checkForUpdateCmd(currentVersion string) tea.Cmd {
+	return func() tea.Msg {
+		available, version, url, err := updater.CheckForUpdate(currentVersion)
+		if err != nil || !available {
+			return nil
+		}
+		return UpdateAvailableMsg{Version: version, URL: url}
+	}
+}
+
+func applyUpdateCmd(downloadURL string) tea.Cmd {
+	return func() tea.Msg {
+		err := updater.ApplyUpdate(downloadURL)
+		return UpdateReadyMsg{Err: err}
+	}
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -93,10 +129,38 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = stateChapters
 		return m, nil
 
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
+	case UpdateAvailableMsg:
+		m.updateAvailable = true
+		m.updateVersion = msg.Version
+		m.updateURL = msg.URL
+		return m, nil
+
+	case UpdateReadyMsg:
+		if msg.Err != nil {
+			m.updateError = msg.Err
+			m.state = stateSearch
+			return m, nil
 		}
+		m.updateSuccess = true
+		m.updateAvailable = false
+		m.state = stateSearch
+		return m, nil
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "U":
+			if m.updateAvailable && m.state == stateSearch {
+				m.state = stateUpdating
+				return m, applyUpdateCmd(m.updateURL)
+			}
+			return m, nil
+		}
+	}
+
+	if m.state == stateUpdating {
+		return m, nil
 	}
 
 	switch m.state {
@@ -131,14 +195,37 @@ func (m *AppModel) syncProvider() {
 }
 
 func (m AppModel) View() string {
+	if m.state == stateUpdating {
+		if m.updateError != nil {
+			return fmt.Sprintf("Cập nhật thất bại: %v\nNhấn Enter để tiếp tục.", m.updateError)
+		}
+		return fmt.Sprintf("Đang tải và cập nhật lên %s...", m.updateVersion)
+	}
+
+	var updateBanner string
+	if m.updateAvailable && m.state == stateSearch {
+		updateBanner = fmt.Sprintf("[!] Đã có bản cập nhật %s. Nhấn 'U' để tự động cài đặt.", m.updateVersion)
+	}
+
+	view := ""
 	switch m.state {
 	case stateSearch:
-		return m.search.View()
+		view = m.search.View()
 	case stateChapters:
-		return m.chapter.View()
+		view = m.chapter.View()
 	case stateReader:
-		return m.reader.View()
+		view = m.reader.View()
 	default:
-		return "Unknown state"
+		view = "Unknown state"
 	}
+
+	if updateBanner != "" {
+		view = view + "\n" + updateBanner
+	}
+
+	if m.updateSuccess {
+		view = view + "\nCập nhật thành công! Vui lòng thoát (Ctrl+C) và mở lại futon."
+	}
+
+	return view
 }
