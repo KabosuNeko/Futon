@@ -18,14 +18,20 @@ Futon render ảnh manga trực tiếp trong terminal nhờ Kitty Graphics Proto
 
 ## Yêu cầu
 
-Terminal hỗ trợ **Kitty Graphics Protocol**:
+Terminal hỗ trợ **Kitty Graphics Protocol** (khuyên dùng) hoặc **Sixel**:
 
-| Terminal | Hỗ trợ |
-|----------|--------|
-| [Kitty](https://sw.kovidgoyal.net/kitty/) | Native |
-| [WezTerm](https://wezfurlong.org/wezterm/) | Native |
-| [Ghostty](https://ghostty.org/) | Native |
-| Khác | Sixel dự phòng |
+| Terminal | Giao thức |
+|----------|-----------|
+| [Kitty](https://sw.kovidgoyal.net/kitty/) | Kitty (native) |
+| [WezTerm](https://wezfurlong.org/wezterm/) | Kitty + Sixel |
+| [Ghostty](https://ghostty.org/) | Kitty + Sixel |
+| [foot](https://codeberg.org/dnkl/foot) | Sixel |
+| [iTerm2](https://iterm2.com/) | Sixel |
+| [Konsole](https://konsole.kde.org/) | Sixel |
+| [mlterm](https://github.com/arakiken/mlterm) | Sixel |
+| [XTerm](https://invisible-island.net/xterm/) | Sixel (biên dịch với `--enable-sixel`) |
+
+> **Lưu ý:** Kitty graphics nhanh hơn và mượt hơn Sixel trên cùng một terminal. Nếu terminal bạn hỗ trợ cả hai, Futon sẽ ưu tiên dùng Kitty.
 
 ## Cài đặt
 
