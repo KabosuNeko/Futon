@@ -70,7 +70,7 @@ func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderMode
 		cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.width))
 	}
 	cmds = append(cmds, m.scheduleDownloads()...)
-	if len(cmds) == 0 && m.validCurrentImage() {
+	if len(cmds) == 0 && m.step != stepRead && m.validCurrentImage() {
 		m.step = stepRead
 		m.isLoading = true
 		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.width)

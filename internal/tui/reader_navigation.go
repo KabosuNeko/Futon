@@ -63,13 +63,19 @@ func (m ReaderModel) buildDownloadOrder(startIdx int) []int {
 	return order
 }
 
+// preloadPageLimit controls how many pages ahead of the current page are
+// pre-rendered into the image cache. A small window prevents the infinite
+// render loop that occurs when nextRenderIndex scans the entire chapter
+// and re-renders cache-evicted pages endlessly.
+const preloadPageLimit = 3
+
 func (m ReaderModel) nextRenderIndex() int {
-	for i := m.currentIdx + 1; i < m.total && i < len(m.imageData); i++ {
-		if _, cached := m.imageCache[i]; !cached && len(m.imageData[i]) > 0 {
-			return i
-		}
+	start := m.currentIdx + 1
+	end := m.currentIdx + preloadPageLimit + 1
+	if end > m.total {
+		end = m.total
 	}
-	for i := 0; i < m.currentIdx && i < len(m.imageData); i++ {
+	for i := start; i < end && i < len(m.imageData); i++ {
 		if _, cached := m.imageCache[i]; !cached && len(m.imageData[i]) > 0 {
 			return i
 		}
