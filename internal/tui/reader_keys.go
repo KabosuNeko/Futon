@@ -8,6 +8,18 @@ import (
 	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
+func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
+	if _, ok := m.getCached(m.currentIdx); ok {
+		m.isLoading = false
+		return m, nil
+	}
+	m.isLoading = true
+	if m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0 {
+		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.width)}
+	}
+	return m, nil
+}
+
 func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -44,18 +56,10 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			m.currentIdx++
 
 			var cmds []tea.Cmd
-
-			if _, ok := m.getCached(m.currentIdx); ok {
-				m.isLoading = false
-			} else if m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0 {
-				m.isLoading = true
-				cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.width))
-			} else {
-				m.isLoading = true
-			}
-
+			m, pageCmds := m.loadCurrentPage()
+			cmds = append(cmds, pageCmds...)
 			cmds = append(cmds, storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.chapterID, m.chapterNumber, m.currentIdx))
-			if m.currentIdx == m.total-3 && m.currentIdx >= 0 && !m.isPreloadingNext && m.hasNextChapter() {
+			if m.currentIdx == m.total-3 && !m.isPreloadingNext && m.hasNextChapter() {
 				m.isPreloadingNext = true
 				nextID := m.allChapterIDs[m.chapterIndex+1]
 				cmds = append(cmds, preloadNextChapter(nextID, m.provider))
@@ -108,16 +112,8 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			m.currentIdx--
 
 			var cmds []tea.Cmd
-
-			if _, ok := m.getCached(m.currentIdx); ok {
-				m.isLoading = false
-			} else if m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0 {
-				m.isLoading = true
-				cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.width))
-			} else {
-				m.isLoading = true
-			}
-
+			m, pageCmds := m.loadCurrentPage()
+			cmds = append(cmds, pageCmds...)
 			cmds = append(cmds, storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.chapterID, m.chapterNumber, m.currentIdx))
 			return m, tea.Batch(cmds...)
 		} else if m.hasPreviousChapter() {

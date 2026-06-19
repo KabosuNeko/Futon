@@ -73,14 +73,8 @@ func (m ReaderModel) centerText(text string) string {
 		w, h = ts.Cols, ts.Rows
 	}
 	textWidth := runewidth.StringWidth(text)
-	col := (w - textWidth) / 2
-	if col < 1 {
-		col = 1
-	}
-	row := h / 2
-	if row < 1 {
-		row = 1
-	}
+	col := max(1, (w-textWidth)/2)
+	row := max(1, h/2)
 	return fmt.Sprintf("\x1b[%d;%dH%s", row, col, text)
 }
 
@@ -102,33 +96,13 @@ func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY, c
 		ts.PxH = ts.Rows * 16
 	}
 
-	cellW := ts.PxW / ts.Cols
-	cellH := ts.PxH / ts.Rows
-	if cellW < 1 {
-		cellW = 1
-	}
-	if cellH < 1 {
-		cellH = 1
-	}
-
-	cellsW = img.WidthPx / cellW
-	cellsH = img.HeightPx / cellH
-	if cellsW < 1 {
-		cellsW = 1
-	}
-	if cellsH < 1 {
-		cellsH = 1
-	}
-
-	offsetX = (ts.Cols - cellsW) / 2
-	offsetY = (ts.Rows - cellsH) / 2
-	if offsetX < 0 {
-		offsetX = 0
-	}
-	if offsetY < 0 {
-		offsetY = 0
-	}
-	return offsetX, offsetY, cellsW, cellsH
+	cellW := max(1, ts.PxW/ts.Cols)
+	cellH := max(1, ts.PxH/ts.Rows)
+	cellsW = max(1, img.WidthPx/cellW)
+	cellsH = max(1, img.HeightPx/cellH)
+	offsetX = max(0, (ts.Cols-cellsW)/2)
+	offsetY = max(0, (ts.Rows-cellsH)/2)
+	return
 }
 
 func (m ReaderModel) centeredImage(img imgrender.RenderedImage) string {
