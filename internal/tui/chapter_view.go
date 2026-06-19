@@ -88,7 +88,7 @@ func (m ChapterListModel) View() string {
 	if m.inputBuffer != "" {
 		hint = fmt.Sprintf("Chuyển đến Chapter: %s█", m.inputBuffer)
 	} else {
-		hint = "↑/↓: chọn  |  esc: quay lại  |  q: thoát  |  ctrl+f: yêu thích  |  gõ số + Enter: nhảy chapter"
+		hint = "↑/↓: chọn  |  esc: quay lại  |  ctrl+c: thoát  |  ctrl+f: yêu thích  |  gõ số + Enter: nhảy chapter"
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Center, header, body, hintStyle.Render(hint))

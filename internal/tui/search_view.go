@@ -78,11 +78,11 @@ func (m SearchModel) View() string {
 	var footer string
 	switch {
 	case m.showingFavorites:
-		footer = fmt.Sprintf("enter: mở truyện  |  d: xóa yêu thích  |  esc: quay lại  |  q: thoát  |  Nguồn: %s", sourceName)
+		footer = fmt.Sprintf("enter: mở truyện  |  ctrl+d: xóa yêu thích  |  esc: quay lại  |  ctrl+c: thoát  |  Nguồn: %s", sourceName)
 	case m.showingHistory:
-		footer = fmt.Sprintf("enter: mở truyện  |  d: xóa lịch sử  |  esc: quay lại  |  q: thoát  |  Nguồn: %s", sourceName)
+		footer = fmt.Sprintf("enter: mở truyện  |  ctrl+d: xóa lịch sử  |  esc: quay lại  |  ctrl+c: thoát  |  Nguồn: %s", sourceName)
 	default:
-		footer = fmt.Sprintf("q: thoát  |  /fav: truyện yêu thích  |  /his: lịch sử đọc  |  /lang: chỉnh ngôn ngữ  |  tab: đổi nguồn  |  Nguồn: %s", sourceName)
+		footer = fmt.Sprintf("ctrl+c: thoát  |  /fav: truyện yêu thích  |  /his: lịch sử đọc  |  /lang: chỉnh ngôn ngữ  |  tab: đổi nguồn  |  Nguồn: %s", sourceName)
 	}
 	content = lipgloss.JoinVertical(lipgloss.Center, content, hintStyle.Render(footer))
 
