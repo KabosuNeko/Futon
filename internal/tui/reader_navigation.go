@@ -46,7 +46,7 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 			continue
 		}
 		m.downloading[idx] = struct{}{}
-		cmds = append(cmds, downloadOne(m.urls[idx], idx))
+		cmds = append(cmds, downloadOne(m.urls[idx], idx, m.chapterID))
 	}
 	return cmds
 }

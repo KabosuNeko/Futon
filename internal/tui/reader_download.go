@@ -14,13 +14,16 @@ import (
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
-func downloadImageBytes(url string) ([]byte, error) {
+func downloadImageBytes(url, referer string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Futon-App/1.0")
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -33,9 +36,9 @@ func downloadImageBytes(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func downloadOne(url string, index int) tea.Cmd {
+func downloadOne(url string, index int, referer string) tea.Cmd {
 	return func() tea.Msg {
-		data, err := downloadImageBytes(url)
+		data, err := downloadImageBytes(url, referer)
 		if err != nil {
 			return downloadProgressMsg{index: index, err: fmt.Errorf("tải ảnh %d: %w", index+1, err)}
 		}
@@ -71,7 +74,7 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 		}
 		images := make([][]byte, 0, preloadCount)
 		for i := 0; i < preloadCount; i++ {
-			data, err := downloadImageBytes(urls[i])
+			data, err := downloadImageBytes(urls[i], nextID)
 			if err != nil {
 				break
 			}

@@ -67,6 +67,7 @@ func NewAppModel(version string) AppModel {
 	providers := []api.MangaProvider{
 		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
+		api.NewTruyenQQProvider(),
 	}
 
 	return AppModel{
