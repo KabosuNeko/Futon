@@ -13,7 +13,7 @@ Futon render ảnh manga trực tiếp trong terminal của bạn qua **Kitty Gr
 ## Tính năng nổi bật
 
 - **Render ảnh trong terminal** — Kitty Graphics Protocol hoặc Sixel
-- **Đa nguồn truyện** — MangaDex, OTruyen (chuyển bằng `tab`) (sắp có thêm)
+- **Đa nguồn truyện** — OTruyen, MangaDex, TruyenQQ, FoxTruyen, BaoTangTruyen (chuyển bằng `tab`, chế độ All để tìm tất cả)
 - **Favorites & Lịch sử đọc** — đánh dấu truyện yêu thích, đọc tiếp từ trang đã dừng
 - **Tải ảnh** — lưu trang bằng `ctrl+d`
 - **Preload chapter kế tiếp** — chuyển chapter mượt mà, không chờ load
@@ -82,7 +82,7 @@ futon
 | Phím | Chức năng |
 |------|-----------|
 | `ctrl+c` | Thoát |
-| `tab` | Chuyển nguồn manga |
+| `tab` | Chuyển nguồn manga (All → OTruyen → MangaDex → ... → All) |
 | `enter` | Tìm kiếm / mở truyện đang chọn |
 | `lên` / `xuống` | Di chuyển danh sách |
 | `/fav` | Xem danh sách yêu thích |
@@ -129,13 +129,25 @@ futon
 ## Kiến trúc
 
 ```
-cmd/main.go          — entry point
+cmd/main.go            — entry point
 internal/
-  api/               — MangaProvider interface & HTTP clients
-  models/            — shared data types
-  storage/           — JSON persistence (favorites, history)
-  tui/               — Bubble Tea screens (search, chapters, reader)
-  tui/imgrender/     — Kitty / Sixel renderer selection
+  api/                 — MangaProvider interface & HTTP clients
+    provider.go        — interface definition + shared tea.Msg types
+    source.go          — tea.Cmd wrappers (SearchCmd, GlobalSearchCmd, Fetch*Cmd)
+    otruyen.go         — OTruyen provider
+    mangadex.go        — MangaDex provider
+    truyenqq.go        — TruyenQQ provider
+    foxtruyen.go       — FoxTruyen provider
+    baotangtruyen.go   — BaoTangTruyen provider
+  models/              — shared data types (manga.go, chapter.go)
+  storage/             — JSON persistence (favorites, history)
+  tui/                 — Bubble Tea screens (search, chapters, reader)
+    app.go             — router: search → chapters → reader
+    search*.go         — search screen (model, keys, cmd, view)
+    chapter*.go        — chapter list screen (model, view)
+    reader*.go         — reader screen (model, keys, msgs, cache, navigation, view, download)
+    flash.go           — flash message helper
+    imgrender/         — Kitty / Sixel renderer selection
 ```
 
 ## Giấy phép

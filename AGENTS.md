@@ -20,9 +20,12 @@ cmd/main.go          # entrypoint: starts the Bubble Tea program
 internal/
   api/               # provider interface and HTTP implementations
     provider.go      # MangaProvider interface + shared tea.Msg types
-    source.go        # tea.Cmd wrappers: SearchCmd, FetchChaptersCmd, FetchPagesCmd
+    source.go        # tea.Cmd wrappers: SearchCmd, GlobalSearchCmd, FetchChaptersCmd, FetchPagesCmd
     mangadex.go      # MangaDex provider
-    otruyen.go       # OTruyen provider (default)
+    otruyen.go       # OTruyen provider
+    truyenqq.go      # TruyenQQ provider
+    foxtruyen.go     # FoxTruyen provider
+    baotangtruyen.go # BaoTangTruyen provider
   models/            # response and domain structs
     chapter.go
     manga.go
@@ -54,10 +57,13 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 
 ## Providers
 
-- Default provider: **OTruyen** (`api.NewOTruyenProvider()`).
-- `tab` cycles through available providers (currently OTruyen, MangaDex).
-- The footer shows the active source name.
+- Default mode: **All** (searches all sources concurrently via `GlobalSearchCmd`).
+- `tab` cycles through `All → OTruyen → MangaDex → TruyenQQ → FoxTruyen → BaoTangTruyen → All`.
+- `providerIdx = -1` means "All" mode; `CurrentProvider()` returns `nil` in All mode.
+- The footer shows "All" or the active source name.
 - Provider interface: `Name`, `Search`, `FetchChapters`, `FetchPages`.
+- `GlobalSearchCmd` in `source.go` uses `sync.WaitGroup` + `sync.Mutex` for concurrent searches.
+- Titles are standardized to `Name (source)` format in all search modes.
 
 ## Runtime State
 
