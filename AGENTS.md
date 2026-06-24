@@ -88,7 +88,13 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 - MangaDex: `api.mangadex.org`
 - OTruyen: `otruyenapi.com`
-- All HTTP requests set `User-Agent: Futon-App/1.0`.
+- All API search/chapter requests set `User-Agent: Futon-App/1.0`.
+
+## Image Downloads
+
+- MangaDex image requests use `User-Agent: Futon-App/1.0 (https://github.com/KabosuNeko/Futon)` and **no** `Referer` header to avoid placeholder responses.
+- Other providers may send a chapter-scoped `Referer` when required by their CDN.
+- Download URLs are logged to `debug_md.log` for debugging.
 
 ## Concurrency
 

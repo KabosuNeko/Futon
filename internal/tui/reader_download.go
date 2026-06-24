@@ -14,12 +14,38 @@ import (
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
-func downloadImageBytes(url, referer string) ([]byte, error) {
+const mangaDexImageUserAgent = "Futon-App/1.0 (https://github.com/KabosuNeko/Futon)"
+
+const kittyClearSeq = "\x1b_Ga=d;\x1b\\"
+
+var filenameReplacer = strings.NewReplacer(
+	"/", "-",
+	"\\", "-",
+	":", "-",
+	"*", "-",
+	"?", "-",
+	"\"", "-",
+	"<", "-",
+	">", "-",
+	"|", "-",
+)
+
+func downloadImageBytes(url, referer, userAgent string) ([]byte, error) {
+	f, _ := os.OpenFile("debug_md.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		f.WriteString(url + "\n")
+		f.Close()
+	}
+
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Futon-App/1.0")
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	} else {
+		req.Header.Set("User-Agent", "Futon-App/1.0")
+	}
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
 	if referer != "" {
 		req.Header.Set("Referer", referer)
@@ -36,9 +62,9 @@ func downloadImageBytes(url, referer string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func downloadOne(url string, index int, referer string) tea.Cmd {
+func downloadOne(url string, index int, referer, userAgent string) tea.Cmd {
 	return func() tea.Msg {
-		data, err := downloadImageBytes(url, referer)
+		data, err := downloadImageBytes(url, referer, userAgent)
 		if err != nil {
 			return downloadProgressMsg{index: index, err: fmt.Errorf("tải ảnh %d: %w", index+1, err)}
 		}
@@ -72,9 +98,17 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 		if len(urls) < preloadCount {
 			preloadCount = len(urls)
 		}
+
+		var referer, userAgent string
+		if provider != nil && provider.Name() == "MangaDex" {
+			userAgent = mangaDexImageUserAgent
+		} else {
+			referer = nextID
+		}
+
 		images := make([][]byte, 0, preloadCount)
 		for i := 0; i < preloadCount; i++ {
-			data, err := downloadImageBytes(urls[i], nextID)
+			data, err := downloadImageBytes(urls[i], referer, userAgent)
 			if err != nil {
 				break
 			}
@@ -119,14 +153,14 @@ func prevChapterCmd(prevID, mangaID, mangaTitle string, allChapterIDs []string, 
 
 func clearGraphicsCmd() tea.Cmd {
 	return func() tea.Msg {
-		fmt.Print("\x1b_Ga=d;\x1b\\")
+		fmt.Print(kittyClearSeq)
 		return clearDoneMsg{}
 	}
 }
 
 func clearScreenCmd() tea.Cmd {
 	return func() tea.Msg {
-		fmt.Print("\x1b_Ga=d;\x1b\\")
+		fmt.Print(kittyClearSeq)
 		fmt.Print("\x1b[H\x1b[2J")
 		return clearDoneMsg{}
 	}
@@ -170,16 +204,5 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 }
 
 func sanitizeFilename(name string) string {
-	replacer := strings.NewReplacer(
-		"/", "-",
-		"\\", "-",
-		":", "-",
-		"*", "-",
-		"?", "-",
-		"\"", "-",
-		"<", "-",
-		">", "-",
-		"|", "-",
-	)
-	return replacer.Replace(name)
+	return filenameReplacer.Replace(name)
 }

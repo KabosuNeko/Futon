@@ -33,10 +33,11 @@ const maxConcurrentDownloads = 4
 
 func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 	var cmds []tea.Cmd
+	isMangaDex := m.provider != nil && m.provider.Name() == "MangaDex"
 	for len(m.downloading) < maxConcurrentDownloads && m.downloadPos < len(m.downloadOrder) {
 		idx := m.downloadOrder[m.downloadPos]
 		m.downloadPos++
-		if idx >= len(m.urls) || idx >= len(m.imageData) {
+		if idx >= len(m.urls) {
 			continue
 		}
 		if len(m.imageData[idx]) > 0 {
@@ -46,7 +47,14 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 			continue
 		}
 		m.downloading[idx] = struct{}{}
-		cmds = append(cmds, downloadOne(m.urls[idx], idx, m.chapterID))
+
+		var referer, userAgent string
+		if isMangaDex {
+			userAgent = mangaDexImageUserAgent
+		} else {
+			referer = m.chapterID
+		}
+		cmds = append(cmds, downloadOne(m.urls[idx], idx, referer, userAgent))
 	}
 	return cmds
 }
@@ -93,9 +101,7 @@ func (m *ReaderModel) applyPreloadedChapter(nextID string) {
 	m.cacheOrder = nil
 	m.downloading = make(map[int]struct{})
 	for i, data := range m.preloadedImages {
-		if i < m.total {
-			m.imageData[i] = data
-		}
+		m.imageData[i] = data
 	}
 	m.downloaded = len(m.preloadedImages)
 	m.currentIdx = 0
