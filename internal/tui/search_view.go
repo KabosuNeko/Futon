@@ -91,7 +91,7 @@ func (m SearchModel) View() string {
 	return placed + "\n" + flash
 }
 
-func renderList(title, emptyMsg string, items []string, cursor int) string {
+func (m SearchModel) renderList(title, emptyMsg string, items []string, cursor int) string {
 	if len(items) == 0 && emptyMsg != "" {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
@@ -109,15 +109,21 @@ func renderList(title, emptyMsg string, items []string, cursor int) string {
 		Foreground(lipgloss.Color("51")).
 		MarginTop(0)
 
+	visible := m.listVisibleItems()
+	viewportEnd := m.viewportStart + visible
+	if viewportEnd > len(items) {
+		viewportEnd = len(items)
+	}
+
 	lines := []string{titleStyle}
-	for i, text := range items {
+	for i := m.viewportStart; i < viewportEnd; i++ {
 		prefix := "  "
 		style := normalStyle
 		if i == cursor {
 			prefix = "> "
 			style = selectedStyle
 		}
-		lines = append(lines, style.Render(prefix+text))
+		lines = append(lines, style.Render(prefix+items[i]))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
@@ -129,7 +135,7 @@ func (m SearchModel) renderSearchResults(content string) string {
 	}
 	title := fmt.Sprintf("Kết quả cho \"%s\":", m.currentQuery)
 	return lipgloss.JoinVertical(lipgloss.Center, content,
-		renderList(title, "", items, m.cursor))
+		m.renderList(title, "", items, m.cursor))
 }
 
 func (m SearchModel) renderFavorites(content string) string {
@@ -138,7 +144,7 @@ func (m SearchModel) renderFavorites(content string) string {
 		items[i] = fmt.Sprintf("• %s", fav.Title)
 	}
 	return lipgloss.JoinVertical(lipgloss.Center, content,
-		renderList("Truyện Yêu Thích:", "Chưa có truyện yêu thích nào.", items, m.cursor))
+		m.renderList("Truyện Yêu Thích:", "Chưa có truyện yêu thích nào.", items, m.cursor))
 }
 
 func (m SearchModel) renderHistory(content string) string {
@@ -158,5 +164,5 @@ func (m SearchModel) renderHistory(content string) string {
 		items[i] = fmt.Sprintf("• %s - Ch. %s (Trang %d)", title, chLabel, h.PageIndex+1)
 	}
 	return lipgloss.JoinVertical(lipgloss.Center, content,
-		renderList("Lịch Sử Đọc:", "Chưa có lịch sử đọc nào.", items, m.cursor))
+		m.renderList("Lịch Sử Đọc:", "Chưa có lịch sử đọc nào.", items, m.cursor))
 }

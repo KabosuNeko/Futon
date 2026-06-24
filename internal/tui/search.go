@@ -22,6 +22,7 @@ type SearchModel struct {
 	showingFavorites bool
 	showingHistory   bool
 	cursor           int
+	viewportStart    int
 	isSearching      bool
 	loadingFavorites bool
 	loadingHistory   bool
@@ -81,6 +82,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.favorites = msg.favorites
 		m.cursor = 0
+		m.viewportStart = 0
 		return m, nil
 
 	case historyLoadedMsg:
@@ -91,6 +93,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.history = msg.history
 		m.cursor = 0
+		m.viewportStart = 0
 		return m, nil
 
 	case searchTriggerMsg:
@@ -121,6 +124,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.results = msg.Manga
 		m.cursor = 0
+		m.viewportStart = 0
 		m.err = nil
 		return m, nil
 
@@ -137,6 +141,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.adjustViewport()
 	}
 
 	oldVal := m.input.Value()
@@ -151,6 +156,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentQuery = ""
 			m.results = nil
 			m.cursor = 0
+			m.viewportStart = 0
 			m.isSearching = false
 			m.err = nil
 			return m, cmd
@@ -162,9 +168,45 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.results = nil
 		m.cursor = 0
+		m.viewportStart = 0
 		m.isSearching = false
 		m.err = nil
 	}
 
 	return m, cmd
+}
+
+func (m SearchModel) listVisibleItems() int {
+	h := m.height
+	visible := h - 9
+	if visible < 1 {
+		visible = 1
+	}
+	return visible
+}
+
+func (m *SearchModel) adjustViewport() {
+	visible := m.listVisibleItems()
+	var total int
+	switch {
+	case m.showingFavorites:
+		total = len(m.favorites)
+	case m.showingHistory:
+		total = len(m.history)
+	default:
+		total = len(m.results)
+	}
+
+	if m.cursor < m.viewportStart {
+		m.viewportStart = m.cursor
+	}
+	if m.cursor >= m.viewportStart+visible {
+		m.viewportStart = m.cursor - visible + 1
+	}
+	if m.viewportStart < 0 {
+		m.viewportStart = 0
+	}
+	if m.viewportStart >= total && total > 0 {
+		m.viewportStart = total - 1
+	}
 }

@@ -33,6 +33,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m.history = nil
 		m.results = nil
 		m.cursor = 0
+		m.viewportStart = 0
 		m.err = nil
 
 		if len(strings.TrimSpace(m.currentQuery)) >= 3 {
@@ -51,23 +52,28 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.history = nil
 			m.favorites = nil
 			m.cursor = 0
+			m.viewportStart = 0
 			return m, nil, true
 		}
 
-	case "up":
+	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
+			m.adjustViewport()
 		}
 		return m, nil, true
 
-	case "down":
+	case "down", "j":
 		switch {
 		case m.showingFavorites && m.cursor < len(m.favorites)-1:
 			m.cursor++
+			m.adjustViewport()
 		case m.showingHistory && m.cursor < len(m.history)-1:
 			m.cursor++
+			m.adjustViewport()
 		case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
 			m.cursor++
+			m.adjustViewport()
 		}
 		return m, nil, true
 
@@ -78,6 +84,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			if m.cursor >= len(m.favorites) && m.cursor > 0 {
 				m.cursor--
 			}
+			m.adjustViewport()
 			m.flashMsg = fmt.Sprintf("Đã xóa \"%s\" khỏi Yêu thích", fav.Title)
 			return m, tea.Batch(
 				func() tea.Msg { return favoriteSavedMsg{err: storage.RemoveFavorite(fav.MangaID)} },
@@ -90,6 +97,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			if m.cursor >= len(m.history) && m.cursor > 0 {
 				m.cursor--
 			}
+			m.adjustViewport()
 			return m, storage.DeleteHistoryCmd(h.MangaID), true
 		}
 		return m, nil, true
@@ -103,6 +111,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.results = nil
 			m.currentQuery = ""
 			m.cursor = 0
+			m.viewportStart = 0
 			m.input.SetValue("")
 			return m, loadFavoritesCmd(), true
 		}
@@ -130,6 +139,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.showingFavorites = false
 			m.currentQuery = ""
 			m.cursor = 0
+			m.viewportStart = 0
 			m.input.SetValue("")
 			return m, loadHistoryCmd(), true
 		}
@@ -139,6 +149,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.showingFavorites = false
 			m.favorites = nil
 			m.cursor = 0
+			m.viewportStart = 0
 			providerName := fav.Provider
 			if providerName == "" && len(m.providers) > 0 {
 				providerName = m.providers[0].Name()
@@ -153,6 +164,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.showingHistory = false
 			m.history = nil
 			m.cursor = 0
+			m.viewportStart = 0
 			title := h.MangaTitle
 			if title == "" {
 				title = h.MangaID
@@ -187,6 +199,8 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m.showingFavorites = false
 		m.currentQuery = val
 		m.results = nil
+		m.cursor = 0
+		m.viewportStart = 0
 		m.err = nil
 		m.isSearching = true
 		if m.providerIdx < 0 {
