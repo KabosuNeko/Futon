@@ -100,28 +100,6 @@ func TestSearchViewportScrollsWithCursor(t *testing.T) {
 	}
 }
 
-func TestSearchJKNavigation(t *testing.T) {
-	m := testSearchModel()
-	m.width = 80
-	m.height = 24
-	m.results = []models.Manga{
-		{ID: "m1", Title: "Alpha"},
-		{ID: "m2", Title: "Beta"},
-	}
-
-	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	m = newM.(SearchModel)
-	if m.cursor != 1 {
-		t.Errorf("expected cursor 1 after j, got %d", m.cursor)
-	}
-
-	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	m = newM.(SearchModel)
-	if m.cursor != 0 {
-		t.Errorf("expected cursor 0 after k, got %d", m.cursor)
-	}
-}
-
 func TestSearchWindowSizeAdjustsViewport(t *testing.T) {
 	m := testSearchModel()
 	m.width = 80

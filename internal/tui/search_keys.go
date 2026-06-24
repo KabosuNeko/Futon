@@ -56,14 +56,14 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			return m, nil, true
 		}
 
-	case "up", "k":
+	case "up":
 		if m.cursor > 0 {
 			m.cursor--
 			m.adjustViewport()
 		}
 		return m, nil, true
 
-	case "down", "j":
+	case "down":
 		switch {
 		case m.showingFavorites && m.cursor < len(m.favorites)-1:
 			m.cursor++
