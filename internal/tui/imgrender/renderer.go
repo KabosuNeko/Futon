@@ -2,6 +2,7 @@ package imgrender
 
 import (
 	"os"
+	"strings"
 )
 
 type RenderedImage struct {
@@ -16,8 +17,22 @@ type Renderer interface {
 }
 
 func New() Renderer {
-	if os.Getenv("TERM") == "xterm-kitty" || os.Getenv("KITTY_WINDOW_ID") != "" {
+	term := os.Getenv("TERM")
+
+	switch os.Getenv("FUTON_RENDERER") {
+	case "kitty":
+		return kittyRenderer{}
+	case "sixel":
+		return sixelRenderer{}
+	}
+
+	if term == "xterm-kitty" || os.Getenv("KITTY_WINDOW_ID") != "" {
 		return kittyRenderer{}
 	}
+
+	if strings.HasPrefix(term, "st-") {
+		return kittyRenderer{}
+	}
+
 	return sixelRenderer{}
 }

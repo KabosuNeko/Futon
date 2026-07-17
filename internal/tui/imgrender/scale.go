@@ -45,9 +45,13 @@ func decodeAndScale(imgData []byte, maxWidthPx int) (image.Image, error) {
 	if maxWidthPx > 0 && int(targetW) > maxWidthPx {
 		targetW = uint(maxWidthPx)
 	}
+
+	cellH := max(1, ts.PxH/ts.Rows)
+	availH := (ts.Rows - 1) * cellH
+
 	scaledH := int(targetW) * imgH / imgW
-	if scaledH > ts.PxH {
-		targetW = uint(ts.PxH * imgW / imgH)
+	if scaledH > availH {
+		targetW = uint(availH * imgW / imgH)
 	}
 
 	return resize.Resize(targetW, 0, img, resize.Lanczos3), nil
