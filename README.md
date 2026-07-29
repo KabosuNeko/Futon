@@ -6,23 +6,23 @@
 </p>
 <p><br/></p>
 
-**Terminal manga reader** — written in Go, renders manga directly in your terminal via **Kitty Graphics Protocol** or **Sixel**. No image viewer needed. Search từ nhiều sources, browse chapters, đọc với Vim-style keys.
+Một **terminal manga reader** viết bằng **Go** — render manga trực tiếp trong terminal qua **Kitty Graphics Protocol** hoặc **Sixel**, không cần mở app xem ảnh riêng. Search từ nhiều nguồn, browse chapters, đọc với Vim-style keys.
 
 ## Highlights
 
-- **Render in terminal** — Kitty or Sixel, auto-detect
-- **Multi-source** — OTruyen, MangaDex, TruyenQQ (tab to cycle, All mode searches everything)
-- **Favorites & History** — bookmark truyện yêu thích, resume từ trang đã đọc
-- **Save images** — `ctrl+d` to download current page
-- **Preload next chapter** — seamless chapter transition, zero waiting
-- **LRU image cache** — 20 rendered images cached, flip pages without re-render
-- **Quick jump** — type chapter number + enter
-- **Language filter** — `/lang vi` or `/lang en` for MangaDex
-- **Vim-style navigation** — arrow keys, h/l, number jump
+- **Render ảnh trong terminal** — Kitty hoặc Sixel, auto-detect
+- **Multi-source search** — OTruyen, MangaDex, TruyenQQ (tab để cycle, All mode cho search tất cả)
+- **Favorites & History** — Bookmark truyện, resume từ trang đã đọc
+- **Save ảnh** — `ctrl+d` để download trang hiện tại
+- **Preload chapter** — Chuyển chapter mượt, zero waiting
+- **LRU image cache** — 20 ảnh cached, flip page ko cần re-render
+- **Quick jump** — Gõ số chapter + enter
+- **Language filter** — `/lang vi` hoặc `/lang en` cho MangaDex
+- **Vim-style navigation** — Arrow keys, h/l, number jump
 
-## Requirements
+## Yêu cầu
 
-A terminal that speaks **Kitty** or **Sixel**:
+Terminal cần support **Kitty Graphics Protocol** hoặc **Sixel**:
 
 | Terminal | Protocol |
 |----------|----------|
@@ -33,11 +33,11 @@ A terminal that speaks **Kitty** or **Sixel**:
 | [iTerm2](https://iterm2.com/) | Sixel |
 | [Konsole](https://konsole.kde.org/) | Sixel |
 | [mlterm](https://github.com/arakiken/mlterm) | Sixel |
-| [XTerm](https://invisible-island.net/xterm/) | Sixel (compile with `--enable-sixel`) |
+| [XTerm](https://invisible-island.net/xterm/) | Sixel (compile với `--enable-sixel`) |
 
-Kitty protocol is faster. If your terminal supports both, Futon picks Kitty.
+Kitty protocol nhanh hơn. Nếu terminal support cả hai, Futon tự động ưu tiên Kitty.
 
-## Install
+## Cài đặt
 
 ### Auto (recommended)
 
@@ -45,13 +45,13 @@ Kitty protocol is faster. If your terminal supports both, Futon picks Kitty.
 curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | bash
 ```
 
-Uninstall:
+Gỡ cài đặt:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | bash -s -- uninstall
 ```
 
-### From source
+### Build từ source
 
 ```bash
 go install github.com/KabosuNeko/Futon@latest
@@ -59,13 +59,13 @@ go install github.com/KabosuNeko/Futon@latest
 
 ### Binary
 
-Grab the latest from [Releases](https://github.com/KabosuNeko/Futon/releases).
+Tải bản mới nhất từ [Releases](https://github.com/KabosuNeko/Futon/releases).
 
-Platforms:
+Hỗ trợ:
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
 
-## Usage
+## Cách dùng
 
 ```bash
 futon
@@ -77,21 +77,21 @@ futon
 
 | Key | Action |
 |-----|--------|
-| `ctrl+c` | Quit |
+| `ctrl+c` | Thoát |
 | `tab` | Cycle source (All → OTruyen → MangaDex → ... → All) |
-| `enter` | Search / open selected manga |
-| `↑` / `↓` | Navigate list |
-| `/fav` | Show favorites |
-| `/his` | Show history |
-| `/lang vi\|en` | Set chapter language (MangaDex) |
+| `enter` | Search / mở truyện đang chọn |
+| `↑` / `↓` | Di chuyển list |
+| `/fav` | Xem favorites |
+| `/his` | Xem history |
+| `/lang vi\|en` | Set ngôn ngữ chapter (MangaDex) |
 
 #### Favorites / History
 
 | Key | Action |
 |-----|--------|
-| `enter` | Open manga |
-| `ctrl+d` | Remove from list |
-| `esc` | Back to search |
+| `enter` | Mở truyện |
+| `ctrl+d` | Xoá khỏi list |
+| `esc` | Quay lại search |
 
 #### Chapter list
 
@@ -99,28 +99,28 @@ futon
 |-----|--------|
 | `↑` / `↓` | Browse chapters |
 | `ctrl+f` | Toggle favorite |
-| `enter` | Open chapter |
-| `[number]` + `enter` | Jump to chapter |
-| `esc` | Back to search |
-| `ctrl+c` | Quit |
+| `enter` | Mở chapter |
+| `[number]` + `enter` | Jump tới chapter |
+| `esc` | Quay lại search |
+| `ctrl+c` | Thoát |
 
 #### Reader
 
 | Key | Action |
 |-----|--------|
-| `→` / `l` | Next page |
-| `←` / `h` | Previous page |
-| `ctrl+d` | Save current page |
-| `esc` | Back to chapter list |
-| `ctrl+c` | Quit |
+| `→` / `l` | Trang tiếp |
+| `←` / `h` | Trang trước |
+| `ctrl+d` | Save trang hiện tại |
+| `esc` | Về chapter list |
+| `ctrl+c` | Thoát |
 
 ## Data
 
-| What | Where |
-|------|-------|
+| Gì | Ở đâu |
+|----|--------|
 | Favorites | `~/.config/futon/favorites.json` |
 | Reading history | `~/.config/futon/history.json` |
-| Downloaded images | `~/Downloads/Futon_Downloads/` |
+| Ảnh đã download | `~/Downloads/Futon_Downloads/` |
 
 ## Architecture
 
