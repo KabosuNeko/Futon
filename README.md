@@ -6,7 +6,14 @@
 </p>
 <p><br/></p>
 
+<p><br/></p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/5ad42490-a636-4ecc-94f6-44f0d1592531" alt="Futon Preview" />
+</p>
+<p><br/></p>
+
 Một **terminal manga reader** viết bằng **Go** — render manga trực tiếp trong terminal qua **Kitty Graphics Protocol** hoặc **Sixel**, không cần mở app xem ảnh riêng. Search từ nhiều nguồn, browse chapters, đọc với Vim-style keys.
+
 
 ## Highlights
 
