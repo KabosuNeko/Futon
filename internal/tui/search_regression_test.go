@@ -24,34 +24,73 @@ func TestTypingUpdatesInput(t *testing.T) {
 	}
 }
 
-func TestTabCyclesProviders(t *testing.T) {
+func TestSourceCommandToggles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	providers := []api.MangaProvider{api.NewOTruyenProvider(), api.NewMangaDexProvider()}
 	m := NewSearchModel(providers)
 
-	// Default is "All" mode, CurrentProvider returns nil
-	if m.CurrentProvider() != nil {
-		t.Fatalf("expected nil (All mode), got %v", m.CurrentProvider())
+	// All should be checked by default
+	for i := range m.providers {
+		if !m.providerToggles[i] {
+			t.Fatalf("expected provider %d to be toggled on by default", i)
+		}
 	}
 
-	// Tab 1: All -> OTruyen
-	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	rm := newM.(SearchModel)
-	if rm.CurrentProvider().Name() != "OTruyen" {
-		t.Errorf("expected provider OTruyen after tab, got %s", rm.CurrentProvider().Name())
+	// Type /src and press enter
+	for _, r := range "/src" {
+		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = newM.(SearchModel)
+	}
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(SearchModel)
+	if !m.showingSources {
+		t.Fatalf("expected showingSources after /src")
 	}
 
-	// Tab 2: OTruyen -> MangaDex
-	newM, _ = rm.Update(tea.KeyMsg{Type: tea.KeyTab})
-	rm = newM.(SearchModel)
-	if rm.CurrentProvider().Name() != "MangaDex" {
-		t.Errorf("expected provider MangaDex after second tab, got %s", rm.CurrentProvider().Name())
+	// Space toggles off current (cursor = 0)
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(SearchModel)
+	if m.providerToggles[0] {
+		t.Errorf("expected provider 0 to be toggled off after space")
 	}
 
-	// Tab 3: MangaDex -> All
-	newM, _ = rm.Update(tea.KeyMsg{Type: tea.KeyTab})
-	rm = newM.(SearchModel)
-	if rm.CurrentProvider() != nil {
-		t.Errorf("expected All mode after third tab, got %v", rm.CurrentProvider().Name())
+	// Space toggles back on
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(SearchModel)
+	if !m.providerToggles[0] {
+		t.Errorf("expected provider 0 to be toggled on after second space")
+	}
+
+	// Down arrow moves cursor
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newM.(SearchModel)
+	if m.sourceCursor != 1 {
+		t.Errorf("expected sourceCursor 1, got %d", m.sourceCursor)
+	}
+
+	// Space toggles provider at cursor 1
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = newM.(SearchModel)
+	if m.providerToggles[1] {
+		t.Errorf("expected provider 1 to be toggled off")
+	}
+
+	// ESC closes sources
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = newM.(SearchModel)
+	if m.showingSources {
+		t.Errorf("expected showingSources false after ESC")
+	}
+
+	// activeProviders returns only checked ones
+	m.providerToggles = []bool{true, false}
+	m.showingSources = false
+	active := m.activeProviders()
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active provider, got %d", len(active))
+	}
+	if active[0].Name() != "OTruyen" {
+		t.Errorf("expected OTruyen, got %s", active[0].Name())
 	}
 }
 

@@ -90,7 +90,8 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		return err
 	}
 
-	// Keep old title/number if caller forgot to tell us (happens more than you'd think).
+	// Keep old title/number if caller forgot to tell us.
+	// Spoiler: callers forget. All the time. Every time.
 	if old, ok := historyCache[mangaID]; ok {
 		if mangaTitle == "" {
 			mangaTitle = old.MangaTitle

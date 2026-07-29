@@ -77,6 +77,8 @@ func renderPage(r imgrender.Renderer, imgData []byte, index int) tea.Cmd {
 	}
 }
 
+// preloadNextChapter fetches the next chapter's pages before the user asks.
+// Because waiting is for people without ADHD.
 func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 	return func() tea.Msg {
 		urls, err := provider.FetchPages(nextID)

@@ -11,9 +11,10 @@ Một **terminal manga reader** viết bằng **Go** — render manga trực ti�
 ## Highlights
 
 - **Render ảnh trong terminal** — Kitty hoặc Sixel, auto-detect
-- **Multi-source search** — OTruyen, MangaDex, TruyenQQ (tab để cycle, All mode cho search tất cả)
+- **Multi-source search** — OTruyen, MangaDex, TruyenQQ, FoxTruyen, BaoTangTruyen (chọn nguồn qua `/src`)
 - **Favorites & History** — Bookmark truyện, resume từ trang đã đọc
-- **Save ảnh** — `ctrl+d` để download trang hiện tại
+- **Filter trong fav/his/src** — Gõ chữ để lọc danh sách real-time
+- **Save ảnh** — `ctrl+s` để download trang hiện tại
 - **Preload chapter** — Chuyển chapter mượt, zero waiting
 - **LRU image cache** — 20 ảnh cached, flip page ko cần re-render
 - **Quick jump** — Gõ số chapter + enter
@@ -78,12 +79,14 @@ futon
 | Key | Action |
 |-----|--------|
 | `ctrl+c` | Thoát |
-| `tab` | Cycle source (All → OTruyen → MangaDex → ... → All) |
 | `enter` | Search / mở truyện đang chọn |
 | `↑` / `↓` | Di chuyển list |
 | `/fav` | Xem favorites |
 | `/his` | Xem history |
+| `/src` | Chọn nguồn (space để toggle) |
 | `/lang vi\|en` | Set ngôn ngữ chapter (MangaDex) |
+
+Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sách.
 
 #### Favorites / History
 
@@ -110,7 +113,7 @@ futon
 |-----|--------|
 | `→` / `l` | Trang tiếp |
 | `←` / `h` | Trang trước |
-| `ctrl+d` | Save trang hiện tại |
+| `ctrl+s` | Save trang hiện tại |
 | `esc` | Về chapter list |
 | `ctrl+c` | Thoát |
 
@@ -118,7 +121,7 @@ futon
 
 | Gì | Ở đâu |
 |----|--------|
-| Favorites | `~/.config/futon/favorites.json` |
+| Favorites + Sources | `~/.config/futon/userdata.json` |
 | Reading history | `~/.config/futon/history.json` |
 | Ảnh đã download | `~/Downloads/Futon_Downloads/` |
 
@@ -128,13 +131,19 @@ futon
 cmd/main.go            — entry point
 internal/
   api/                 — MangaProvider interface & HTTP clients
-    provider.go        — interface + shared tea.Msg types
+    provider.go        — interface + shared helpers, tea.Msg types
     source.go          — tea.Cmd wrappers (Search, GlobalSearch, Fetch*)
     otruyen.go         — OTruyen provider
     mangadex.go        — MangaDex provider
     truyenqq.go        — TruyenQQ provider
+    baotangtruyen.go   — BaoTangTruyen provider
+    foxtruyen.go       — FoxTruyen provider
   models/              — shared types (manga, chapter)
-  storage/             — JSON persistence (favorites, history)
+  storage/             — local JSON persistence
+    userdata.go        — UserData (favorites + sources merged)
+    sources.go         — Load/SaveSources → delegates to userdata
+    favorites.go       — Load/SaveFavorites → delegates to userdata
+    history.go         — per-manga reading history
   tui/                 — Bubble Tea screens
     app.go             — state machine: search → chapters → reader
     search*.go         — search screen (model, keys, cmd, view)

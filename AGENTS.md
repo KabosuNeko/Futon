@@ -19,17 +19,21 @@ Futon is a terminal manga reader. It searches multiple manga sources, lists chap
 cmd/main.go          # entrypoint: starts the Bubble Tea program
 internal/
   api/               # provider interface and HTTP implementations
-    provider.go      # MangaProvider interface + shared tea.Msg types
+    provider.go      # MangaProvider interface + shared helpers, tea.Msg types
     source.go        # tea.Cmd wrappers: SearchCmd, GlobalSearchCmd, FetchChaptersCmd, FetchPagesCmd
     mangadex.go      # MangaDex provider
     otruyen.go       # OTruyen provider
     truyenqq.go      # TruyenQQ provider
+    baotangtruyen.go # BaoTangTruyen provider
+    foxtruyen.go     # FoxTruyen provider
   models/            # response and domain structs
     chapter.go
     manga.go
   storage/           # local JSON persistence
-    favorites.go     # ~/.config/futon/favorites.json
-    history.go       # ~/.config/futon/history.json
+    userdata.go      # UserData struct (favorites + sources merged), LoadUserData, SaveUserData, migrateOldData
+    sources.go       # LoadSources/SaveSources → delegates to userdata
+    favorites.go     # Load/Save/Add/RemoveFavorite → delegates to userdata
+    history.go       # per-manga reading history with debounced flush
     *_test.go        # storage regression tests
   tui/               # Bubble Tea screens (split by responsibility)
     app.go           # router: search → chapters → reader
@@ -55,19 +59,22 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 
 ## Providers
 
-- Default mode: **All** (searches all sources concurrently via `GlobalSearchCmd`).
-- `tab` cycles through `All → OTruyen → MangaDex → TruyenQQ → All`.
-- `providerIdx = -1` means "All" mode; `CurrentProvider()` returns `nil` in All mode.
-- The footer shows "All" or the active source name.
+- `/src` opens a checklist of providers with `[X]`/`[ ]` toggles.
+- Arrow keys move cursor, `space` toggles the focused provider, `esc` closes the list.
+- All providers are checked by default (searches all sources via `GlobalSearchCmd`).
+- Only checked providers are searched; if none are checked, an error is shown.
+- Toggle state is persisted to `userdata.json` and restored on next launch.
+- Typing in `/src` mode filters the provider list (case-insensitive substring).
 - Provider interface: `Name`, `Search`, `FetchChapters`, `FetchPages`.
 - `GlobalSearchCmd` in `source.go` uses `sync.WaitGroup` + `sync.Mutex` for concurrent searches.
 - Titles are standardized to `Name (source)` format in all search modes.
 
 ## Runtime State
 
-- Favorites: `~/.config/futon/favorites.json`
+- Favorites + source toggles: `~/.config/futon/userdata.json`
 - Reading history (last chapter + page per manga): `~/.config/futon/history.json`
 - Downloaded images: `~/Downloads/Futon_Downloads/`
+- Old `favorites.json` and `sources.json` are auto-migrated to `userdata.json` on first launch.
 
 ## Image Rendering
 
@@ -101,12 +108,13 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 ## UI Conventions
 
-- Slash commands on the search screen: `/fav`, `/his`, `/lang vi|en`.
-- `esc` in `/fav` or `/his` returns to the search screen.
+- Slash commands on the search screen: `/fav`, `/his`, `/lang vi|en`, `/src`.
+- `esc` in `/fav`, `/his`, or `/src` returns to the search screen.
 - `ctrl+d` in `/fav` removes a favorite; `ctrl+d` in `/his` removes a history entry.
 - `h`/`l` for page navigation are **only** active in Reader mode (not caught by other screens).
 - `q` is **not** a keybinding anywhere — use `ctrl+c` to quit, `esc` to go back.
 - The search screen does **not** show cover images.
+- When in `/fav`, `/his`, or `/src`, typing filters the list in real-time (case-insensitive substring match).
 - UI text is mixed Vietnamese and English; preserve existing wording unless asked to change it.
 
 ## Testing

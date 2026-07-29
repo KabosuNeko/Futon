@@ -32,11 +32,14 @@ type SearchModel struct {
 	currentQuery     string
 	flashMsg         string
 
+	filterQuery    string
 	chapterLanguage string
-	systemMsg   string
+	systemMsg       string
 
-	providers   []api.MangaProvider
-	providerIdx int
+	providers       []api.MangaProvider
+	providerToggles []bool
+	showingSources  bool
+	sourceCursor    int
 }
 
 func NewSearchModel(providers []api.MangaProvider) SearchModel {
@@ -46,21 +49,120 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 	ti.CharLimit = 156
 	ti.Width = 40
 
+	toggles := loadSourceToggles(providers)
+
 	return SearchModel{
-		input:       ti,
-		width:       80,
-		height:      24,
+		input:           ti,
+		width:           80,
+		height:          24,
 		chapterLanguage: "vi",
-		providers:   providers,
-		providerIdx: -1, // -1 = "All" (tìm kiếm tất cả nguồn)
+		providers:       providers,
+		providerToggles: toggles,
 	}
 }
 
-func (m SearchModel) CurrentProvider() api.MangaProvider {
-	if m.providerIdx < 0 || m.providerIdx >= len(m.providers) {
-		return nil
+func (m SearchModel) activeProviders() []api.MangaProvider {
+	var active []api.MangaProvider
+	for i, p := range m.providers {
+		if m.providerToggles[i] {
+			active = append(active, p)
+		}
 	}
-	return m.providers[m.providerIdx]
+	return active
+}
+
+func loadSourceToggles(providers []api.MangaProvider) []bool {
+	toggles := make([]bool, len(providers))
+	for i := range toggles {
+		toggles[i] = true
+	}
+
+	saved, err := storage.LoadSources()
+	if err != nil || len(saved) == 0 || len(saved) > len(providers) {
+		return toggles
+	}
+
+	for i := range toggles {
+		toggles[i] = false
+	}
+	savedSet := make(map[string]bool, len(saved))
+	for _, name := range saved {
+		savedSet[name] = true
+	}
+	for i, p := range providers {
+		if savedSet[p.Name()] {
+			toggles[i] = true
+		}
+	}
+	return toggles
+}
+
+func (m SearchModel) activeProviderNames() []string {
+	var names []string
+	for i, p := range m.providers {
+		if m.providerToggles[i] {
+			names = append(names, p.Name())
+		}
+	}
+	return names
+}
+
+func (m SearchModel) filteredFavIndices() []int {
+	if m.filterQuery == "" || m.showingSources {
+		indices := make([]int, len(m.favorites))
+		for i := range m.favorites {
+			indices[i] = i
+		}
+		return indices
+	}
+	var indices []int
+	q := strings.ToLower(m.filterQuery)
+	for i, fav := range m.favorites {
+		if strings.Contains(strings.ToLower(fav.Title), q) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
+func (m SearchModel) filteredHistoryIndices() []int {
+	if m.filterQuery == "" || m.showingSources {
+		indices := make([]int, len(m.history))
+		for i := range m.history {
+			indices[i] = i
+		}
+		return indices
+	}
+	var indices []int
+	q := strings.ToLower(m.filterQuery)
+	for i, h := range m.history {
+		title := strings.ToLower(h.MangaTitle)
+		if title == "" {
+			title = strings.ToLower(h.MangaID)
+		}
+		if strings.Contains(title, q) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
+func (m SearchModel) filteredProviderIndices() []int {
+	if m.filterQuery == "" || !m.showingSources {
+		indices := make([]int, len(m.providers))
+		for i := range m.providers {
+			indices[i] = i
+		}
+		return indices
+	}
+	var indices []int
+	q := strings.ToLower(m.filterQuery)
+	for i, p := range m.providers {
+		if strings.Contains(strings.ToLower(p.Name()), q) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
 }
 
 func (m SearchModel) Init() tea.Cmd {
@@ -100,11 +202,13 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case searchTriggerMsg:
 		if msg.query == m.currentQuery && len(strings.TrimSpace(msg.query)) >= 3 {
-			m.isSearching = true
-			if m.providerIdx < 0 {
-				return m, tea.Batch(cmd, api.GlobalSearchCmd(m.providers, msg.query))
+			active := m.activeProviders()
+			if len(active) == 0 {
+				m.err = fmt.Errorf("Chọn ít nhất một nguồn trong /src")
+				return m, nil
 			}
-			return m, tea.Batch(cmd, api.SearchCmd(m.CurrentProvider(), msg.query))
+			m.isSearching = true
+			return m, tea.Batch(cmd, api.GlobalSearchCmd(active, msg.query))
 		}
 		return m, nil
 
@@ -116,13 +220,6 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(strings.TrimSpace(m.currentQuery)) < 3 {
 			return m, nil
-		}
-		if m.providerIdx >= 0 {
-			provider := m.providers[m.providerIdx]
-			for i := range msg.Manga {
-				msg.Manga[i].Title = fmt.Sprintf("%s (%s)", msg.Manga[i].Title, strings.ToLower(provider.Name()))
-				msg.Manga[i].Provider = provider.Name()
-			}
 		}
 		m.results = msg.Manga
 		m.cursor = 0
@@ -153,6 +250,16 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if oldVal != newVal {
 		trimmed := strings.TrimSpace(newVal)
 		m.systemMsg = ""
+
+		if m.showingFavorites || m.showingHistory || m.showingSources {
+			m.filterQuery = trimmed
+			m.cursor = 0
+			m.viewportStart = 0
+			if m.showingSources {
+				m.sourceCursor = 0
+			}
+			return m, cmd
+		}
 
 		if strings.HasPrefix(trimmed, "/") {
 			m.currentQuery = ""
@@ -193,9 +300,9 @@ func (m *SearchModel) adjustViewport() {
 	var total int
 	switch {
 	case m.showingFavorites:
-		total = len(m.favorites)
+		total = len(m.filteredFavIndices())
 	case m.showingHistory:
-		total = len(m.history)
+		total = len(m.filteredHistoryIndices())
 	default:
 		total = len(m.results)
 	}

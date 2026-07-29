@@ -69,6 +69,8 @@ func NewAppModel(version string) AppModel {
 		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
 		api.NewTruyenQQProvider(),
+		api.NewFoxTruyenProvider(),
+		api.NewBaoTangTruyenProvider(),
 	}
 
 	return AppModel{

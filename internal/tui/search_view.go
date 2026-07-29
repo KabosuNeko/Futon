@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -48,6 +49,8 @@ func (m SearchModel) View() string {
 	} else if m.loadingHistory {
 		content = lipgloss.JoinVertical(lipgloss.Center, content,
 			statusStyle.Render("Đang tải lịch sử đọc..."))
+	} else if m.showingSources {
+		content = m.renderSources(content)
 	} else if m.showingFavorites {
 		content = m.renderFavorites(content)
 	} else if m.showingHistory {
@@ -61,21 +64,16 @@ func (m SearchModel) View() string {
 		content = m.renderSearchResults(content)
 	}
 
-	sourceName := "All"
-	if m.providerIdx >= 0 {
-		if p := m.CurrentProvider(); p != nil {
-			sourceName = p.Name()
-		}
-	}
-
 	var footer string
 	switch {
+	case m.showingSources:
+		footer = "space: chọn/bỏ chọn  |  up/down: di chuyển  |  esc: quay lại  |  ctrl+c: thoát"
 	case m.showingFavorites:
-		footer = fmt.Sprintf("enter: mở truyện  |  ctrl+d: xóa yêu thích  |  esc: quay lại  |  ctrl+c: thoát  |  Nguồn: %s", sourceName)
+		footer = "enter: mở truyện  |  ctrl+d: xóa yêu thích  |  esc: quay lại  |  ctrl+c: thoát"
 	case m.showingHistory:
-		footer = fmt.Sprintf("enter: mở truyện  |  ctrl+d: xóa lịch sử  |  esc: quay lại  |  ctrl+c: thoát  |  Nguồn: %s", sourceName)
+		footer = "enter: mở truyện  |  ctrl+d: xóa lịch sử  |  esc: quay lại  |  ctrl+c: thoát"
 	default:
-		footer = fmt.Sprintf("ctrl+c: thoát  |  /fav: truyện yêu thích  |  /his: lịch sử đọc  |  /lang: chỉnh ngôn ngữ  |  tab: đổi nguồn  |  Nguồn: %s", sourceName)
+		footer = "ctrl+c: thoát  |  /fav: truyện yêu thích  |  /his: lịch sử đọc  |  /src: chọn nguồn  |  /lang: chỉnh ngôn ngữ"
 	}
 	content = lipgloss.JoinVertical(lipgloss.Center, content, subtleStyle.Render(footer))
 
@@ -128,6 +126,41 @@ func (m SearchModel) renderList(title, emptyMsg string, items []string, cursor i
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
+func (m SearchModel) renderSources(content string) string {
+	indices := m.filteredProviderIndices()
+	items := make([]string, len(indices))
+	for i, idx := range indices {
+		check := "[ ]"
+		if m.providerToggles[idx] {
+			check = "[X]"
+		}
+		items[i] = fmt.Sprintf("%s %s", check, m.providers[idx].Name())
+	}
+	var title string
+	if m.filterQuery != "" {
+		title = fmt.Sprintf("Nguồn (lọc: %s):", m.filterQuery)
+	} else {
+		title = "Chọn nguồn:"
+	}
+	return lipgloss.JoinVertical(lipgloss.Center, content,
+		m.renderList(title, "Không tìm thấy nguồn nào.", items, m.sourceCursor))
+}
+
+func (m SearchModel) renderSourceName() string {
+	active := m.activeProviders()
+	if len(active) == 0 {
+		return "Chưa chọn nguồn"
+	}
+	names := make([]string, len(active))
+	for i, p := range active {
+		names[i] = p.Name()
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names, ", ")
+}
+
 func (m SearchModel) renderSearchResults(content string) string {
 	items := make([]string, len(m.results))
 	for i, manga := range m.results {
@@ -139,17 +172,26 @@ func (m SearchModel) renderSearchResults(content string) string {
 }
 
 func (m SearchModel) renderFavorites(content string) string {
-	items := make([]string, len(m.favorites))
-	for i, fav := range m.favorites {
-		items[i] = fmt.Sprintf("• %s", fav.Title)
+	indices := m.filteredFavIndices()
+	items := make([]string, len(indices))
+	for i, idx := range indices {
+		items[i] = fmt.Sprintf("• %s", m.favorites[idx].Title)
+	}
+	var emptyMsg string
+	if m.filterQuery != "" {
+		emptyMsg = "Không tìm thấy truyện yêu thích."
+	} else {
+		emptyMsg = "Chưa có truyện yêu thích nào."
 	}
 	return lipgloss.JoinVertical(lipgloss.Center, content,
-		m.renderList("Truyện Yêu Thích:", "Chưa có truyện yêu thích nào.", items, m.cursor))
+		m.renderList("Truyện Yêu Thích:", emptyMsg, items, m.cursor))
 }
 
 func (m SearchModel) renderHistory(content string) string {
-	items := make([]string, len(m.history))
-	for i, h := range m.history {
+	indices := m.filteredHistoryIndices()
+	items := make([]string, len(indices))
+	for i, idx := range indices {
+		h := m.history[idx]
 		title := h.MangaTitle
 		if title == "" {
 			title = h.MangaID
@@ -163,6 +205,12 @@ func (m SearchModel) renderHistory(content string) string {
 		}
 		items[i] = fmt.Sprintf("• %s - Ch. %s (Trang %d)", title, chLabel, h.PageIndex+1)
 	}
+	var emptyMsg string
+	if m.filterQuery != "" {
+		emptyMsg = "Không tìm thấy lịch sử đọc."
+	} else {
+		emptyMsg = "Chưa có lịch sử đọc nào."
+	}
 	return lipgloss.JoinVertical(lipgloss.Center, content,
-		m.renderList("Lịch Sử Đọc:", "Chưa có lịch sử đọc nào.", items, m.cursor))
+		m.renderList("Lịch Sử Đọc:", emptyMsg, items, m.cursor))
 }

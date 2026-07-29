@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,50 +24,28 @@ func ConfigDir() (string, error) {
 	return dir, nil
 }
 
-func favoritesPath() (string, error) {
-	dir, err := ConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "favorites.json"), nil
-}
-
 func LoadFavorites() ([]FavoriteManga, error) {
-	path, err := favoritesPath()
+	ud, err := LoadUserData()
 	if err != nil {
 		return nil, err
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return []FavoriteManga{}, nil
-		}
-		return nil, fmt.Errorf("đọc file favorites: %w", err)
+	if ud == nil {
+		return []FavoriteManga{}, nil
 	}
-
-	var favorites []FavoriteManga
-	if err := json.Unmarshal(data, &favorites); err != nil {
-		return nil, fmt.Errorf("parse favorites JSON: %w", err)
-	}
-	return favorites, nil
+	return ud.Favorites, nil
 }
 
 func SaveFavorites(favorites []FavoriteManga) error {
-	path, err := favoritesPath()
+	ud, err := LoadUserData()
 	if err != nil {
 		return err
 	}
-
-	data, err := json.MarshalIndent(favorites, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode favorites JSON: %w", err)
+	if ud == nil {
+		ud = &UserData{Favorites: favorites}
+	} else {
+		ud.Favorites = favorites
 	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("ghi file favorites: %w", err)
-	}
-	return nil
+	return SaveUserData(ud)
 }
 
 func AddFavorite(manga FavoriteManga) error {
@@ -80,7 +56,7 @@ func AddFavorite(manga FavoriteManga) error {
 
 	for _, f := range favorites {
 		if f.MangaID == manga.MangaID {
-			return nil // Already favorited — no-op.
+			return nil
 		}
 	}
 
