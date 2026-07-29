@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,8 +11,8 @@ import (
 )
 
 const (
-	truyenqqDiscoveryURL = "https://truyenqq.link/"
-	truyenqqFallbackURL  = "https://metruyenqq.net"
+	truyenqqPrimaryURL = "https://truyenqqko.com"
+	truyenqqFallbackURL = "https://metruyenqq.net"
 )
 
 var truyenqqBrowserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -26,66 +25,15 @@ type TruyenQQProvider struct {
 func NewTruyenQQProvider() *TruyenQQProvider {
 	p := &TruyenQQProvider{
 		httpClient: &http.Client{},
+		baseURL:    truyenqqPrimaryURL,
 	}
-	p.baseURL = p.discoverDomain()
+	_ = p.tryDomain(truyenqqPrimaryURL) ||
+		p.tryDomain(truyenqqFallbackURL)
 	return p
 }
 
-func (p *TruyenQQProvider) discoverDomain() string {
-	domain := p.discoverFromLink()
-	if domain == "" || !p.checkAPI(domain) {
-		if p.checkAPI(truyenqqFallbackURL) {
-			return truyenqqFallbackURL
-		}
-		return truyenqqFallbackURL
-	}
-	return domain
-}
-
-func (p *TruyenQQProvider) discoverFromLink() string {
-	req, err := http.NewRequest(http.MethodGet, truyenqqDiscoveryURL, nil)
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("User-Agent", truyenqqBrowserUA)
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return ""
-	}
-
-	var found string
-	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
-		if found != "" {
-			return
-		}
-		href, exists := s.Attr("href")
-		if !exists {
-			return
-		}
-		lower := strings.ToLower(href)
-		if !strings.Contains(lower, "truyenqq") ||
-			strings.Contains(lower, "truyenqq.link") {
-			return
-		}
-		u, err := url.Parse(href)
-		if err != nil || u.Scheme == "" || u.Host == "" {
-			return
-		}
-		found = u.Scheme + "://" + u.Host
-	})
-	return found
-}
-
-func (p *TruyenQQProvider) checkAPI(domain string) bool {
-	domain = strings.TrimRight(domain, "/")
-	req, err := http.NewRequest(http.MethodGet, domain+"/api/search?q=test", nil)
+func (p *TruyenQQProvider) tryDomain(domain string) bool {
+	req, err := http.NewRequest(http.MethodGet, domain, nil)
 	if err != nil {
 		return false
 	}
@@ -95,7 +43,11 @@ func (p *TruyenQQProvider) checkAPI(domain string) bool {
 		return false
 	}
 	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if resp.StatusCode == http.StatusOK {
+		p.baseURL = domain
+		return true
+	}
+	return false
 }
 
 func (p *TruyenQQProvider) Name() string {
@@ -132,33 +84,61 @@ func (p *TruyenQQProvider) resolveURL(path string) string {
 }
 
 func (p *TruyenQQProvider) Search(keyword string) ([]models.Manga, error) {
-	endpoint := p.resolveURL("/api/search") + "?q=" + url.QueryEscape(keyword)
+	endpoint := p.resolveURL("/frontend/search/search")
 
-	resp, err := p.truyenqqGet(endpoint)
+	form := url.Values{
+		"search": {keyword},
+		"type":   {"0"},
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("tạo request: %w", err)
+	}
+	req.Header.Set("User-Agent", truyenqqBrowserUA)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Referer", p.baseURL)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gọi HTTP: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var apiResult struct {
-		Data []struct {
-			Name  string `json:"name"`
-			Slug  string `json:"slug"`
-			Cover string `json:"cover"`
-			URL   string `json:"url"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResult); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	mangas := make([]models.Manga, 0, len(apiResult.Data))
-	for _, item := range apiResult.Data {
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	var mangas []models.Manga
+	doc.Find("li").Each(func(i int, s *goquery.Selection) {
+		if s.HasClass("no_result") {
+			return
+		}
+		a := s.Find("a")
+		href, exists := a.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+		name := strings.TrimSpace(s.Find(".search_info .name").Text())
+		if name == "" {
+			return
+		}
+		cover, _ := s.Find(".search_avatar img").Attr("src")
 		mangas = append(mangas, models.Manga{
-			ID:       item.URL,
-			Title:    item.Name,
-			CoverURL: item.Cover,
+			ID:       href,
+			Title:    name,
+			CoverURL: cover,
 		})
+	})
+
+	if mangas == nil {
+		mangas = []models.Manga{}
 	}
 	return mangas, nil
 }
@@ -185,7 +165,7 @@ func (p *TruyenQQProvider) FetchChapters(mangaURL string) ([]models.Chapter, err
 			return
 		}
 		chapters = append(chapters, models.Chapter{
-			ID:    strings.TrimSpace(href),
+			ID:    p.resolveURL(strings.TrimSpace(href)),
 			Title: title,
 		})
 	})
@@ -214,7 +194,7 @@ func (p *TruyenQQProvider) FetchPages(chapterID string) ([]string, error) {
 	}
 
 	var urls []string
-	doc.Find(".chapter-images img.chapter-img").Each(func(i int, s *goquery.Selection) {
+	doc.Find(".page-chapter img").Each(func(i int, s *goquery.Selection) {
 		src, exists := srcAttr(s)
 		if !exists || src == "" {
 			return
