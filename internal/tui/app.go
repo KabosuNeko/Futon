@@ -155,7 +155,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
-		case "U":
+		case "ctrl+u":
 			if m.updateAvailable && m.state == stateSearch {
 				m.state = stateUpdating
 				return m, runInstallScriptCmd()
