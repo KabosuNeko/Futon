@@ -19,7 +19,7 @@ var (
 type kittyRenderer struct{}
 
 func (r kittyRenderer) Render(imgData []byte) (RenderedImage, error) {
-	img, err := decodeAndScale(imgData, 0)
+	img, err := decodeAndScale(imgData)
 	if err != nil {
 		return RenderedImage{}, err
 	}

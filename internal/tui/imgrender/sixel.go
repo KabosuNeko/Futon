@@ -9,7 +9,7 @@ import (
 type sixelRenderer struct{}
 
 func (s sixelRenderer) Render(imgData []byte) (RenderedImage, error) {
-	img, err := decodeAndScale(imgData, 0)
+	img, err := decodeAndScale(imgData)
 	if err != nil {
 		return RenderedImage{}, err
 	}

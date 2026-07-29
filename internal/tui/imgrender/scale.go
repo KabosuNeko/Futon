@@ -10,7 +10,7 @@ import (
 	"github.com/nfnt/resize"
 )
 
-func decodeAndScale(imgData []byte, maxWidthPx int) (image.Image, error) {
+func decodeAndScale(imgData []byte) (image.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(imgData))
 	if err != nil {
 		return nil, err
@@ -42,9 +42,6 @@ func decodeAndScale(imgData []byte, maxWidthPx int) (image.Image, error) {
 	}
 
 	targetW := uint(ts.PxW)
-	if maxWidthPx > 0 && int(targetW) > maxWidthPx {
-		targetW = uint(maxWidthPx)
-	}
 
 	cellH := max(1, ts.PxH/ts.Rows)
 	availH := (ts.Rows - 1) * cellH
