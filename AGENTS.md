@@ -86,7 +86,7 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 - MangaDex: `api.mangadex.org`
 - OTruyen: `otruyenapi.com`
-- All API search/chapter requests set `User-Agent: Futon-App/1.0`.
+- API requests default to `User-Agent: Futon-App/1.0`; TruyenQQ sends a full browser UA to bypass bot detection.
 
 ## Image Downloads
 
