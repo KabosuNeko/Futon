@@ -24,10 +24,9 @@ type historyLoadedMsg struct {
 }
 
 func debounceSearch(query string, delay time.Duration) tea.Cmd {
-	return func() tea.Msg {
-		time.Sleep(delay)
+	return tea.Tick(delay, func(time.Time) tea.Msg {
 		return searchTriggerMsg{query: query}
-	}
+	})
 }
 
 func loadFavoritesCmd() tea.Cmd {

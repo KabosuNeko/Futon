@@ -18,12 +18,8 @@ var (
 
 type kittyRenderer struct{}
 
-func (r kittyRenderer) Render(imgData []byte, terminalWidth int) (RenderedImage, error) {
-	return r.RenderCapped(imgData, 0)
-}
-
-func (r kittyRenderer) RenderCapped(imgData []byte, maxWidthPx int) (RenderedImage, error) {
-	img, err := decodeAndScale(imgData, maxWidthPx)
+func (r kittyRenderer) Render(imgData []byte) (RenderedImage, error) {
+	img, err := decodeAndScale(imgData, 0)
 	if err != nil {
 		return RenderedImage{}, err
 	}

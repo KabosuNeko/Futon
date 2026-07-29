@@ -28,7 +28,7 @@ func otruyenGet(endpoint string) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tạo request: %w", err)
 	}
-	req.Header.Set("User-Agent", "Futon-App/1.0")
+	req.Header.Set("User-Agent", defaultUserAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -8,12 +8,8 @@ import (
 
 type sixelRenderer struct{}
 
-func (s sixelRenderer) Render(imgData []byte, terminalWidth int) (RenderedImage, error) {
-	return s.RenderCapped(imgData, 0)
-}
-
-func (s sixelRenderer) RenderCapped(imgData []byte, maxWidthPx int) (RenderedImage, error) {
-	img, err := decodeAndScale(imgData, maxWidthPx)
+func (s sixelRenderer) Render(imgData []byte) (RenderedImage, error) {
+	img, err := decodeAndScale(imgData, 0)
 	if err != nil {
 		return RenderedImage{}, err
 	}

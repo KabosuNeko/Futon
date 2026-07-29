@@ -233,6 +233,8 @@ func scheduleFlush() {
 		flushTimer.Stop()
 	}
 	flushTimer = time.AfterFunc(flushDelay, func() {
-		_ = FlushHistory()
+		if err := FlushHistory(); err != nil {
+			fmt.Fprintf(os.Stderr, "futon: flush history: %v\n", err)
+		}
 	})
 }

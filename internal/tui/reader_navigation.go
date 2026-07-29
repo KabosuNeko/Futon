@@ -40,9 +40,6 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 	for len(m.downloading) < maxConcurrentDownloads && m.downloadPos < len(m.downloadOrder) {
 		idx := m.downloadOrder[m.downloadPos]
 		m.downloadPos++
-		if idx >= len(m.urls) {
-			continue
-		}
 		if len(m.imageData[idx]) > 0 {
 			continue
 		}

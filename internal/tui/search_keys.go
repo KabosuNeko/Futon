@@ -118,15 +118,16 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 
 		if strings.HasPrefix(val, "/lang") {
 			parts := strings.Fields(val)
-			if len(parts) >= 2 && (parts[1] == "vi" || parts[1] == "en") {
-				m.chapterLanguage = parts[1]
-				if p, ok := m.CurrentProvider().(*api.MangaDexProvider); ok {
-					p.SetLang(parts[1])
-				}
-				m.systemMsg = "Đã cài đặt ngôn ngữ chapter mặc định: " + parts[1]
-			} else {
+			if len(parts) < 2 || (parts[1] != "vi" && parts[1] != "en") {
 				m.systemMsg = "Dùng: /lang vi hoặc /lang en"
+				m.input.SetValue("")
+				return m, nil, true
 			}
+			m.chapterLanguage = parts[1]
+			if p, ok := m.CurrentProvider().(*api.MangaDexProvider); ok {
+				p.SetLang(parts[1])
+			}
+			m.systemMsg = "Đã cài đặt ngôn ngữ chapter mặc định: " + parts[1]
 			m.input.SetValue("")
 			return m, nil, true
 		}

@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// Treat non-numeric components as 0 — good enough for semver comparison.
 func versLE(a, b string) bool {
 	ap := strings.Split(a, ".")
 	bp := strings.Split(b, ".")

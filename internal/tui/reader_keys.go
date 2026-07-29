@@ -16,7 +16,7 @@ func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 	}
 	m.isLoading = true
 	if m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0 {
-		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.width)}
+		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx)}
 	}
 	return m, nil
 }

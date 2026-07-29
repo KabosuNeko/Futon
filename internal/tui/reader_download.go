@@ -67,14 +67,9 @@ func downloadOne(url string, index int, referer, userAgent string) tea.Cmd {
 	}
 }
 
-func renderPage(r imgrender.Renderer, imgData []byte, index int, termWidth int) tea.Cmd {
+func renderPage(r imgrender.Renderer, imgData []byte, index int) tea.Cmd {
 	return func() tea.Msg {
-		ts, err := imgrender.GetTerminalSize()
-		width := termWidth
-		if err == nil && ts.Cols > 0 {
-			width = ts.Cols
-		}
-		img, err := r.Render(imgData, width)
+		img, err := r.Render(imgData)
 		if err != nil {
 			return renderDoneMsg{index: index, err: fmt.Errorf("render trang %d: %w", index+1, err)}
 		}
@@ -144,7 +139,7 @@ func clearGraphicsCmd() tea.Cmd {
 
 func clearScreenCmd() tea.Cmd {
 	return func() tea.Msg {
-		clearGraphicsCmd()()
+		fmt.Print(kittyClearSeq)
 		fmt.Print("\x1b[H\x1b[2J")
 		return clearDoneMsg{}
 	}

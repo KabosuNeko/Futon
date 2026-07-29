@@ -12,8 +12,7 @@ type RenderedImage struct {
 }
 
 type Renderer interface {
-	Render(imgData []byte, terminalWidth int) (RenderedImage, error)
-	RenderCapped(imgData []byte, maxWidthPx int) (RenderedImage, error)
+	Render(imgData []byte) (RenderedImage, error)
 }
 
 func New() Renderer {

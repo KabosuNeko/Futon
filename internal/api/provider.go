@@ -24,6 +24,8 @@ type ChapterImagesMsg struct {
 	Err  error
 }
 
+const defaultUserAgent = "Futon-App/1.0"
+
 // MangaProvider is the contract every source must sign.
 type MangaProvider interface {
 	Name() string
