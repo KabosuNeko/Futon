@@ -113,7 +113,7 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 |-----|--------|
 | `→` / `l` | Trang tiếp |
 | `←` / `h` | Trang trước |
-| `ctrl+s` | Save trang hiện tại |
+| `ctrl+d` | Save trang hiện tại |
 | `esc` | Về chapter list |
 | `ctrl+c` | Thoát |
 
