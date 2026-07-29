@@ -68,6 +68,7 @@ type ReaderModel struct {
 type readerStep int
 
 const (
+	// Lifecycle: FetchURLs → Download → Read → (LoadingNext → back to Read) → Error.
 	stepFetchURLs readerStep = iota
 	stepDownload
 	stepRead

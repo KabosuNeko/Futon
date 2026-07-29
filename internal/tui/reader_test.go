@@ -13,7 +13,7 @@ func TestRightKeyBlockedWhenNotReady(t *testing.T) {
 
 	// stepFetchURLs: should ignore right.
 	m.step = stepFetchURLs
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("right")})
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	rm := newM.(ReaderModel)
 	if cmd != nil {
 		t.Errorf("expected nil cmd in stepFetchURLs, got %v", cmd)
@@ -25,7 +25,7 @@ func TestRightKeyBlockedWhenNotReady(t *testing.T) {
 	// stepRead but rendering: should ignore right.
 	m.step = stepRead
 	m.isLoading = true
-	newM, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("right")})
+	newM, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	rm = newM.(ReaderModel)
 	if cmd != nil {
 		t.Errorf("expected nil cmd while loading, got %v", cmd)
@@ -42,7 +42,7 @@ func TestRightKeyClampsCurrentIndex(t *testing.T) {
 	m.currentIdx = 10
 	m.imageData = make([][]byte, 3)
 
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("right")})
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	rm := newM.(ReaderModel)
 	if cmd != nil {
 		t.Errorf("expected nil cmd, got %v", cmd)
@@ -59,7 +59,7 @@ func TestLeftKeyClampsCurrentIndex(t *testing.T) {
 	m.currentIdx = -5
 	m.imageData = make([][]byte, 3)
 
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("left")})
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	rm := newM.(ReaderModel)
 	if cmd != nil {
 		t.Errorf("expected nil cmd, got %v", cmd)

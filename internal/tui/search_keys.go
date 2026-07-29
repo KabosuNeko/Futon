@@ -23,7 +23,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 
 		if m.providerIdx >= 0 {
 			if p, ok := m.providers[m.providerIdx].(*api.MangaDexProvider); ok {
-				p.SetLang(m.chapterLang)
+				p.SetLang(m.chapterLanguage)
 			}
 		}
 
@@ -119,7 +119,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		if strings.HasPrefix(val, "/lang") {
 			parts := strings.Fields(val)
 			if len(parts) >= 2 && (parts[1] == "vi" || parts[1] == "en") {
-				m.chapterLang = parts[1]
+				m.chapterLanguage = parts[1]
 				if p, ok := m.CurrentProvider().(*api.MangaDexProvider); ok {
 					p.SetLang(parts[1])
 				}

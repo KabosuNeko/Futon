@@ -2,6 +2,7 @@ package tui
 
 import "github.com/KabosuNeko/Futon/internal/tui/imgrender"
 
+// Cap LRU to 20 rendered images — enough for smooth scrolling, won't OOM your laptop.
 const maxImageCache = 20
 
 func (m *ReaderModel) setCached(idx int, img imgrender.RenderedImage) {

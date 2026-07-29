@@ -12,6 +12,8 @@ import (
 	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
+const searchUIOffset = 9
+
 type SearchModel struct {
 	input            textinput.Model
 	width            int
@@ -30,7 +32,7 @@ type SearchModel struct {
 	currentQuery     string
 	flashMsg         string
 
-	chapterLang string
+	chapterLanguage string
 	systemMsg   string
 
 	providers   []api.MangaProvider
@@ -48,7 +50,7 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		input:       ti,
 		width:       80,
 		height:      24,
-		chapterLang: "vi",
+		chapterLanguage: "vi",
 		providers:   providers,
 		providerIdx: -1, // -1 = "All" (tìm kiếm tất cả nguồn)
 	}
@@ -164,6 +166,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.currentQuery = trimmed
 		if len(trimmed) >= 3 {
+			// 300ms debounce — fast enough to feel responsive, slow enough to not DDoS APIs.
 			return m, tea.Batch(cmd, debounceSearch(trimmed, 300*time.Millisecond))
 		}
 		m.results = nil
@@ -178,7 +181,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m SearchModel) listVisibleItems() int {
 	h := m.height
-	visible := h - 9
+	visible := h - searchUIOffset
 	if visible < 1 {
 		visible = 1
 	}

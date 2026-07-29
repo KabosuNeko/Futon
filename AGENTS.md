@@ -24,8 +24,6 @@ internal/
     mangadex.go      # MangaDex provider
     otruyen.go       # OTruyen provider
     truyenqq.go      # TruyenQQ provider
-    foxtruyen.go     # FoxTruyen provider
-    baotangtruyen.go # BaoTangTruyen provider
   models/            # response and domain structs
     chapter.go
     manga.go
@@ -58,7 +56,7 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 ## Providers
 
 - Default mode: **All** (searches all sources concurrently via `GlobalSearchCmd`).
-- `tab` cycles through `All → OTruyen → MangaDex → TruyenQQ → FoxTruyen → BaoTangTruyen → All`.
+- `tab` cycles through `All → OTruyen → MangaDex → TruyenQQ → All`.
 - `providerIdx = -1` means "All" mode; `CurrentProvider()` returns `nil` in All mode.
 - The footer shows "All" or the active source name.
 - Provider interface: `Name`, `Search`, `FetchChapters`, `FetchPages`.
@@ -94,7 +92,7 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 - MangaDex image requests use `User-Agent: Futon-App/1.0 (https://github.com/KabosuNeko/Futon)` and **no** `Referer` header to avoid placeholder responses.
 - Other providers may send a chapter-scoped `Referer` when required by their CDN.
-- Download URLs are logged to `debug_md.log` for debugging.
+- Download URLs are logged for debugging.
 
 ## Concurrency
 

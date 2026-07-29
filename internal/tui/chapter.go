@@ -65,7 +65,7 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.mangaID == "" {
 				return m, nil
 			}
-			m.flashMsg = fmt.Sprintf("Đã thêm \\\"%s\\\" vào Yêu thích", m.mangaTitle)
+			m.flashMsg = fmt.Sprintf("Đã thêm \"%s\" vào Yêu thích", m.mangaTitle)
 			return m, tea.Batch(
 				func() tea.Msg {
 					err := storage.AddFavorite(storage.FavoriteManga{

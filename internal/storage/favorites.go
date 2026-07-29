@@ -80,7 +80,7 @@ func AddFavorite(manga FavoriteManga) error {
 
 	for _, f := range favorites {
 		if f.MangaID == manga.MangaID {
-			return nil
+			return nil // Already favorited — no-op.
 		}
 	}
 

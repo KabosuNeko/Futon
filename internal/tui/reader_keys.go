@@ -7,6 +7,8 @@ import (
 	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
+const preloadTriggerOffset = 3
+
 func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 	if _, ok := m.getCached(m.currentIdx); ok {
 		m.isLoading = false
@@ -54,7 +56,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			m, pageCmds := m.loadCurrentPage()
 			cmds = append(cmds, pageCmds...)
 			cmds = append(cmds, storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.provider.Name(), m.chapterID, m.chapterNumber, m.currentIdx))
-			if m.currentIdx == m.total-3 && !m.isPreloadingNext && m.hasNextChapter() {
+			if m.currentIdx == m.total-preloadTriggerOffset && !m.isPreloadingNext && m.hasNextChapter() {
 				m.isPreloadingNext = true
 				nextID := m.allChapterIDs[m.chapterIndex+1]
 				cmds = append(cmds, preloadNextChapter(nextID, m.provider))
@@ -79,7 +81,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			return m, tea.Sequence(
 				saveCmd,
 				clearScreenCmd(),
-				nextChapterCmd(nextID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.chapterIndex),
+				chapterNavCmd(nextID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.chapterIndex+1, 0),
 			)
 		}
 		return m, nil
@@ -106,7 +108,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			return m, tea.Sequence(
 				saveCmd,
 				clearScreenCmd(),
-				prevChapterCmd(prevID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.chapterIndex),
+				chapterNavCmd(prevID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.chapterIndex-1, -2),
 			)
 		}
 		return m, nil

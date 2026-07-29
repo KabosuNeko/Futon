@@ -8,6 +8,8 @@ import (
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
+const chapterUIOffset = 4
+
 func (m ChapterListModel) View() string {
 	w, h := m.width, m.height
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
@@ -137,7 +139,7 @@ func (m ChapterListModel) visibleItems() int {
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Rows > 0 {
 		h = ts.Rows
 	}
-	visible := h - 4
+	visible := h - chapterUIOffset
 	if visible < 1 {
 		visible = 1
 	}

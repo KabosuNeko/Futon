@@ -88,7 +88,7 @@ func (o *OTruyenProvider) FetchChapters(slug string) ([]models.Chapter, error) {
 		return []models.Chapter{}, nil
 	}
 
-	// Lấy server_data từ server đầu tiên.
+	// OTruyen always puts chapter data in the first server group; 1+ are mirrors.
 	serverData := result.Data.Item.Chapters[0].ServerData
 	chapters := make([]models.Chapter, 0, len(serverData))
 	for _, ch := range serverData {

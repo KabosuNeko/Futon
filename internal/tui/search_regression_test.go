@@ -34,21 +34,21 @@ func TestTabCyclesProviders(t *testing.T) {
 	}
 
 	// Tab 1: All -> OTruyen
-	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("tab")})
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	rm := newM.(SearchModel)
 	if rm.CurrentProvider().Name() != "OTruyen" {
 		t.Errorf("expected provider OTruyen after tab, got %s", rm.CurrentProvider().Name())
 	}
 
 	// Tab 2: OTruyen -> MangaDex
-	newM, _ = rm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("tab")})
+	newM, _ = rm.Update(tea.KeyMsg{Type: tea.KeyTab})
 	rm = newM.(SearchModel)
 	if rm.CurrentProvider().Name() != "MangaDex" {
 		t.Errorf("expected provider MangaDex after second tab, got %s", rm.CurrentProvider().Name())
 	}
 
 	// Tab 3: MangaDex -> All
-	newM, _ = rm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("tab")})
+	newM, _ = rm.Update(tea.KeyMsg{Type: tea.KeyTab})
 	rm = newM.(SearchModel)
 	if rm.CurrentProvider() != nil {
 		t.Errorf("expected All mode after third tab, got %v", rm.CurrentProvider().Name())
@@ -71,7 +71,7 @@ func TestSearchViewportScrollsWithCursor(t *testing.T) {
 
 	target := visible + 3
 	for i := 0; i < target; i++ {
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("down")})
+		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		m = newM.(SearchModel)
 	}
 
@@ -88,7 +88,7 @@ func TestSearchViewportScrollsWithCursor(t *testing.T) {
 	}
 
 	for i := 0; i < target; i++ {
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("up")})
+		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
 		m = newM.(SearchModel)
 	}
 
@@ -137,7 +137,7 @@ func TestSearchViewFitsTerminalHeight(t *testing.T) {
 	}
 }
 
-var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*[a-zA-Z]")
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*[a-zA-Z]|\x1b_G[^\x1b]*\x1b\\\\")
 
 func stripANSI(s string) string {
 	return ansiRe.ReplaceAllString(s, "")

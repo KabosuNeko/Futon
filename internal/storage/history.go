@@ -13,7 +13,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// ReadHistory lưu tiến độ đọc gần nhất của một bộ truyện.
 type ReadHistory struct {
 	MangaID       string `json:"manga_id"`
 	MangaTitle    string `json:"manga_title,omitempty"`
@@ -24,7 +23,6 @@ type ReadHistory struct {
 	UpdatedAt     int64  `json:"updated_at"`
 }
 
-// HistorySavedMsg được gửi khi việc ghi lịch sử hoàn tất (thành công hoặc lỗi).
 type HistorySavedMsg struct {
 	Err error
 }
@@ -79,8 +77,7 @@ func loadHistory() error {
 	return nil
 }
 
-// SaveHistory cập nhật cache trong bộ nhớ và lên lịch flush ra đĩa.
-// Không block UI vì Bubble Tea chạy tea.Cmd trong goroutine.
+// SaveHistory memoizes in RAM, flushes to disk later (async — no UI blocking).
 func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) error {
 	if mangaID == "" || chapterID == "" {
 		return nil
@@ -93,7 +90,7 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		return err
 	}
 
-	// Giữ lại title/chapterNumber cũ nếu caller không cung cấp.
+	// Keep old title/number if caller forgot to tell us (happens more than you'd think).
 	if old, ok := historyCache[mangaID]; ok {
 		if mangaTitle == "" {
 			mangaTitle = old.MangaTitle
@@ -117,17 +114,15 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 	return nil
 }
 
-// SaveHistoryCmd trả về tea.Cmd để lưu lịch sử bất đồng bộ.
 func SaveHistoryCmd(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) tea.Cmd {
 	return func() tea.Msg {
 		return HistorySavedMsg{Err: SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber, pageIndex)}
 	}
 }
 
-// GetHistory lấy lịch sử đọc của một bộ truyện.
 func GetHistory(mangaID string) (*ReadHistory, bool) {
-	historyMu.RLock()
-	defer historyMu.RUnlock()
+	historyMu.Lock()
+	defer historyMu.Unlock()
 
 	if err := loadHistory(); err != nil {
 		return nil, false
@@ -138,7 +133,7 @@ func GetHistory(mangaID string) (*ReadHistory, bool) {
 		return nil, false
 	}
 
-	// Trả về bản sao để tránh caller sửa cache trực tiếp.
+	// Return a copy so callers can't poke the cache directly.
 	return &ReadHistory{
 		MangaID:       h.MangaID,
 		MangaTitle:    h.MangaTitle,
@@ -150,10 +145,10 @@ func GetHistory(mangaID string) (*ReadHistory, bool) {
 	}, true
 }
 
-// LoadAllHistory trả về toàn bộ lịch sử đọc, sắp xếp mới nhất lên đầu.
+// LoadAllHistory — sort newest first, because nobody cares about what they read last year.
 func LoadAllHistory() ([]ReadHistory, error) {
-	historyMu.RLock()
-	defer historyMu.RUnlock()
+	historyMu.Lock()
+	defer historyMu.Unlock()
 
 	if err := loadHistory(); err != nil {
 		return nil, err
@@ -179,7 +174,6 @@ func LoadAllHistory() ([]ReadHistory, error) {
 	return entries, nil
 }
 
-// FlushHistory ghi cache ra đĩa ngay lập tức.
 func FlushHistory() error {
 	historyMu.RLock()
 	snapshot := make([]ReadHistory, 0, len(historyCache))
@@ -204,7 +198,6 @@ func FlushHistory() error {
 	return nil
 }
 
-// FlushHistoryCmd trả về tea.Cmd để flush lịch sử bất đồng bộ.
 func FlushHistoryCmd() tea.Cmd {
 	return func() tea.Msg {
 		return HistorySavedMsg{Err: FlushHistory()}
@@ -228,13 +221,13 @@ func DeleteHistory(mangaID string) error {
 	return FlushHistory()
 }
 
-// DeleteHistoryCmd trả về tea.Cmd để xóa lịch sử bất đồng bộ.
 func DeleteHistoryCmd(mangaID string) tea.Cmd {
 	return func() tea.Msg {
 		return HistorySavedMsg{Err: DeleteHistory(mangaID)}
 	}
 }
 
+// Debounce disk writes: restart timer on every call, write 2s after the last update.
 func scheduleFlush() {
 	if flushTimer != nil {
 		flushTimer.Stop()

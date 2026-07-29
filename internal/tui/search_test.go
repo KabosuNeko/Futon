@@ -106,7 +106,7 @@ func TestSearchSlashCommands(t *testing.T) {
 	for _, tc := range cases {
 		m := testSearchModel()
 		m.input.SetValue(tc.input)
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("enter")})
+		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		rm := newM.(SearchModel)
 
 		if rm.showingFavorites != tc.wantFavorites {
@@ -115,8 +115,8 @@ func TestSearchSlashCommands(t *testing.T) {
 		if rm.showingHistory != tc.wantHistory {
 			t.Errorf("%q: showingHistory = %v, want %v", tc.input, rm.showingHistory, tc.wantHistory)
 		}
-		if rm.chapterLang != tc.wantLang {
-			t.Errorf("%q: chapterLang = %v, want %v", tc.input, rm.chapterLang, tc.wantLang)
+		if rm.chapterLanguage != tc.wantLang {
+			t.Errorf("%q: chapterLanguage = %v, want %v", tc.input, rm.chapterLanguage, tc.wantLang)
 		}
 		if tc.wantSystemMsg != "" && rm.systemMsg != tc.wantSystemMsg {
 			t.Errorf("%q: systemMsg = %q, want %q", tc.input, rm.systemMsg, tc.wantSystemMsg)

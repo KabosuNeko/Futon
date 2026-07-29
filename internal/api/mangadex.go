@@ -46,7 +46,7 @@ func mangadexGet(endpoint string) (*http.Response, error) {
 
 func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
 	endpoint := fmt.Sprintf(
-		"https://api.mangadex.org/manga?title=%s&limit=5&includes[]=cover_art",
+		"https://api.mangadex.org/manga?title=%s&limit=5",
 		url.QueryEscape(query),
 	)
 
@@ -69,6 +69,7 @@ func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
 }
 
 func (m *MangaDexProvider) FetchChapters(mangaID string) ([]models.Chapter, error) {
+	// MangaDex pagination: fetch up to 500 per page, loop until we have them all.
 	const limit = 500
 	var all []models.Chapter
 	offset := 0

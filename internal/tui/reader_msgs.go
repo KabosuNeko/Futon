@@ -30,6 +30,7 @@ func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel,
 	m.downloading = make(map[int]struct{})
 	m.currentIdx = 0
 
+	// Resolve starting page: -2 = last page, >=0 = specific, default = history bookmark.
 	switch {
 	case m.startPage == -2 && m.total > 0:
 		m.currentIdx = m.total - 1

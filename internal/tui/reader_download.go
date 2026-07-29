@@ -14,6 +14,7 @@ import (
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
+// MangaDex returns placeholder images unless you send this exact UA + no Referer.
 const mangaDexImageUserAgent = "Futon-App/1.0 (https://github.com/KabosuNeko/Futon)"
 
 const kittyClearSeq = "\x1b_Ga=d;\x1b\\"
@@ -31,12 +32,6 @@ var filenameReplacer = strings.NewReplacer(
 )
 
 func downloadImageBytes(url, referer, userAgent string) ([]byte, error) {
-	f, _ := os.OpenFile("debug_md.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if f != nil {
-		f.WriteString(url + "\n")
-		f.Close()
-	}
-
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -94,7 +89,7 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 			return PreloadCompleteMsg{ChapID: nextID}
 		}
 
-		preloadCount := 2
+		preloadCount := 2 // Preload 2 pages — enough for instant flip, light on bandwidth.
 		if len(urls) < preloadCount {
 			preloadCount = len(urls)
 		}
@@ -107,7 +102,7 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 		}
 
 		images := make([][]byte, 0, preloadCount)
-		for i := 0; i < preloadCount; i++ {
+		for i := 0; i < preloadCount && i < len(urls); i++ {
 			data, err := downloadImageBytes(urls[i], referer, userAgent)
 			if err != nil {
 				break
@@ -115,6 +110,9 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 			images = append(images, data)
 		}
 
+		if len(images) == 0 {
+			return PreloadCompleteMsg{ChapID: nextID}
+		}
 		return PreloadCompleteMsg{
 			ChapID: nextID,
 			URLs:   urls,
@@ -123,30 +121,16 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 	}
 }
 
-func nextChapterCmd(nextID, mangaID, mangaTitle string, allChapterIDs []string, chapterIndex int) tea.Cmd {
+func chapterNavCmd(chapterID, mangaID, mangaTitle string, allChapterIDs []string, chapterIndex, startPage int) tea.Cmd {
 	return func() tea.Msg {
 		return ViewChapterMsg{
 			MangaID:        mangaID,
 			MangaTitle:     mangaTitle,
-			ChapterID:      nextID,
+			ChapterID:      chapterID,
 			ChapterNumber:  "",
 			AllChapterIDs:  allChapterIDs,
-			ChapterIndex:   chapterIndex + 1,
-			StartPageIndex: 0,
-		}
-	}
-}
-
-func prevChapterCmd(prevID, mangaID, mangaTitle string, allChapterIDs []string, chapterIndex int) tea.Cmd {
-	return func() tea.Msg {
-		return ViewChapterMsg{
-			MangaID:        mangaID,
-			MangaTitle:     mangaTitle,
-			ChapterID:      prevID,
-			ChapterNumber:  "",
-			AllChapterIDs:  allChapterIDs,
-			ChapterIndex:   chapterIndex - 1,
-			StartPageIndex: -2,
+			ChapterIndex:   chapterIndex,
+			StartPageIndex: startPage,
 		}
 	}
 }
@@ -160,7 +144,7 @@ func clearGraphicsCmd() tea.Cmd {
 
 func clearScreenCmd() tea.Cmd {
 	return func() tea.Msg {
-		fmt.Print(kittyClearSeq)
+		clearGraphicsCmd()()
 		fmt.Print("\x1b[H\x1b[2J")
 		return clearDoneMsg{}
 	}
@@ -188,11 +172,12 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 		filename := fmt.Sprintf("%s_Ch%s_Pg%d.jpg", safeTitle, ch, pageNumber)
 		path := filepath.Join(dir, filename)
 
-		for i := 1; ; i++ {
+		// If filename exists, append suffix up to 999 before giving up.
+		for suffix := 1; suffix < 1000; suffix++ {
 			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 				break
 			}
-			filename = fmt.Sprintf("%s_Ch%s_Pg%d_%d.jpg", safeTitle, ch, pageNumber, i)
+			filename = fmt.Sprintf("%s_Ch%s_Pg%d_%d.jpg", safeTitle, ch, pageNumber, suffix)
 			path = filepath.Join(dir, filename)
 		}
 

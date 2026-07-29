@@ -67,6 +67,7 @@ func (m ReaderModel) View() string {
 	return b.String()
 }
 
+// Fall back to model dimensions if terminal query fails (e.g. non-TTY).
 func (m ReaderModel) centerText(text string) string {
 	w, h := m.width, m.height
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
@@ -78,6 +79,7 @@ func (m ReaderModel) centerText(text string) string {
 	return fmt.Sprintf("\x1b[%d;%dH%s", row, col, text)
 }
 
+// Convert image pixel size to terminal cell count — Kitty/Sixel geometry math.
 func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY, cellsW, cellsH int) {
 	ts, err := imgrender.GetTerminalSize()
 	if err != nil || ts.Cols <= 0 || ts.Rows <= 0 {

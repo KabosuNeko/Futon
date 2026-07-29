@@ -13,6 +13,7 @@ func (m ReaderModel) hasPreviousChapter() bool {
 	return m.chapterIndex > 0
 }
 
+// Sanity-check currentIdx — prevents out-of-bounds on corrupted state after chapter transitions.
 func (m *ReaderModel) clampCurrentIndex() {
 	if m.total <= 0 {
 		m.currentIdx = 0
@@ -29,8 +30,10 @@ func (m ReaderModel) validCurrentImage() bool {
 	return m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0
 }
 
+// Keep concurrent downloads sane — no need to DDOS the CDN for a manga reader.
 const maxConcurrentDownloads = 4
 
+// Fire up to maxConcurrentDownloads at a time, skip already-downloaded and inflight.
 func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 	var cmds []tea.Cmd
 	isMangaDex := m.provider != nil && m.provider.Name() == "MangaDex"
@@ -59,6 +62,7 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 	return cmds
 }
 
+// Priority: current page first, then forward pages, then backward (best UX).
 func (m ReaderModel) buildDownloadOrder(startIdx int) []int {
 	order := make([]int, 0, m.total)
 	order = append(order, startIdx)
@@ -91,6 +95,7 @@ func (m ReaderModel) nextRenderIndex() int {
 	return -1
 }
 
+// Copy preloaded data into active state — seamless chapter transition without re-fetch.
 func (m *ReaderModel) applyPreloadedChapter(nextID string) {
 	m.chapterID = nextID
 	m.chapterIndex++

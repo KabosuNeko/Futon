@@ -69,8 +69,6 @@ func NewAppModel(version string) AppModel {
 		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
 		api.NewTruyenQQProvider(),
-		api.NewFoxTruyenProvider(),
-		api.NewBaoTangTruyenProvider(),
 	}
 
 	return AppModel{
@@ -116,7 +114,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chapter = cm.(ChapterListModel)
 		rm, rc := m.reader.Update(msg)
 		m.reader = rm.(ReaderModel)
-		m.syncProvider()
 		return m, tea.Batch(sc, cc, rc)
 
 	case ViewMangaMsg:
@@ -175,7 +172,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var newModel tea.Model
 		newModel, cmd = m.search.Update(msg)
 		m.search = newModel.(SearchModel)
-		m.syncProvider()
 		return m, cmd
 	case stateChapters:
 		var cmd tea.Cmd
@@ -204,12 +200,6 @@ func (m *AppModel) findProvider(name string) api.MangaProvider {
 		return m.providers[0]
 	}
 	return nil
-}
-
-func (m *AppModel) syncProvider() {
-	if p := m.search.CurrentProvider(); p != nil {
-		m.currentProvider = p
-	}
 }
 
 func (m AppModel) View() string {
