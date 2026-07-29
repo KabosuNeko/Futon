@@ -50,9 +50,6 @@ func GlobalSearchCmd(providers []MangaProvider, query string) tea.Cmd {
 		if len(errs) > 0 {
 			combinedErr = fmt.Errorf("%s", strings.Join(errs, "; "))
 		}
-		if allResults == nil {
-			allResults = []models.Manga{}
-		}
 		return MangaSearchResultMsg{Manga: allResults, Err: combinedErr}
 	}
 }

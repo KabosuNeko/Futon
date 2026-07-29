@@ -164,16 +164,14 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 		if ch == "" {
 			ch = "unknown"
 		}
-		filename := fmt.Sprintf("%s_Ch%s_Pg%d.jpg", safeTitle, ch, pageNumber)
-		path := filepath.Join(dir, filename)
+		path := filepath.Join(dir, fmt.Sprintf("%s_Ch%s_Pg%d.jpg", safeTitle, ch, pageNumber))
 
 		// If filename exists, append suffix up to 999 before giving up.
 		for suffix := 1; suffix < 1000; suffix++ {
 			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 				break
 			}
-			filename = fmt.Sprintf("%s_Ch%s_Pg%d_%d.jpg", safeTitle, ch, pageNumber, suffix)
-			path = filepath.Join(dir, filename)
+			path = filepath.Join(dir, fmt.Sprintf("%s_Ch%s_Pg%d_%d.jpg", safeTitle, ch, pageNumber, suffix))
 		}
 
 		if err := os.WriteFile(path, data, 0o644); err != nil {

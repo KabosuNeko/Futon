@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/KabosuNeko/Futon/internal/tui/imgrender"
+import (
+	"slices"
+
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+)
 
 // Cap LRU to 20 rendered images — enough for smooth scrolling, won't OOM your laptop.
 const maxImageCache = 20
@@ -8,7 +12,7 @@ const maxImageCache = 20
 func (m *ReaderModel) setCached(idx int, img imgrender.RenderedImage) {
 	m.imageCache[idx] = img
 
-	m.cacheOrder = filterInt(m.cacheOrder, idx)
+	m.cacheOrder = slices.DeleteFunc(m.cacheOrder, func(v int) bool { return v == idx })
 	m.cacheOrder = append(m.cacheOrder, idx)
 
 	for len(m.cacheOrder) > maxImageCache {
@@ -23,17 +27,7 @@ func (m *ReaderModel) getCached(idx int) (imgrender.RenderedImage, bool) {
 	if !ok {
 		return imgrender.RenderedImage{}, false
 	}
-	m.cacheOrder = filterInt(m.cacheOrder, idx)
+	m.cacheOrder = slices.DeleteFunc(m.cacheOrder, func(v int) bool { return v == idx })
 	m.cacheOrder = append(m.cacheOrder, idx)
 	return img, true
-}
-
-func filterInt(slice []int, target int) []int {
-	result := make([]int, 0, len(slice))
-	for _, v := range slice {
-		if v != target {
-			result = append(result, v)
-		}
-	}
-	return result
 }
