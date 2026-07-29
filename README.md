@@ -6,25 +6,23 @@
 </p>
 <p><br/></p>
 
-Một **terminal manga reader** nhanh, gọn nhẹ viết bằng Go.
+**Terminal manga reader** — written in Go, renders manga directly in your terminal via **Kitty Graphics Protocol** or **Sixel**. No image viewer needed. Search từ nhiều sources, browse chapters, đọc với Vim-style keys.
 
-Futon render ảnh manga trực tiếp trong terminal của bạn qua **Kitty Graphics Protocol** hoặc **Sixel** — không cần phần mềm xem ảnh rời. Tìm kiếm truyện từ nhiều nguồn, duyệt chapter, và đọc với phím tắt kiểu Vim.
+## Highlights
 
-## Tính năng nổi bật
+- **Render in terminal** — Kitty or Sixel, auto-detect
+- **Multi-source** — OTruyen, MangaDex, TruyenQQ (tab to cycle, All mode searches everything)
+- **Favorites & History** — bookmark truyện yêu thích, resume từ trang đã đọc
+- **Save images** — `ctrl+d` to download current page
+- **Preload next chapter** — seamless chapter transition, zero waiting
+- **LRU image cache** — 20 rendered images cached, flip pages without re-render
+- **Quick jump** — type chapter number + enter
+- **Language filter** — `/lang vi` or `/lang en` for MangaDex
+- **Vim-style navigation** — arrow keys, h/l, number jump
 
-- **Render ảnh trong terminal** — Kitty Graphics Protocol hoặc Sixel
-- **Đa nguồn truyện** — OTruyen, MangaDex, TruyenQQ (chuyển bằng `tab`, chế độ All để tìm tất cả)
-- **Favorites & Lịch sử đọc** — đánh dấu truyện yêu thích, đọc tiếp từ trang đã dừng
-- **Tải ảnh** — lưu trang bằng `ctrl+d`
-- **Preload chapter kế tiếp** — chuyển chapter mượt mà, không chờ load
-- **LRU image cache** — lật trang nhanh như chớp
-- **Jump nhanh** — gõ số chapter rồi `enter`
-- **Lọc ngôn ngữ** — `/lang vi` hoặc `/lang en` cho MangaDex
-- **Phím tắt kiểu Vim** — phím mũi tên, nhảy số
+## Requirements
 
-## Yêu cầu
-
-Terminal hỗ trợ **Kitty Graphics Protocol** hoặc **Sixel**:
+A terminal that speaks **Kitty** or **Sixel**:
 
 | Terminal | Protocol |
 |----------|----------|
@@ -35,27 +33,25 @@ Terminal hỗ trợ **Kitty Graphics Protocol** hoặc **Sixel**:
 | [iTerm2](https://iterm2.com/) | Sixel |
 | [Konsole](https://konsole.kde.org/) | Sixel |
 | [mlterm](https://github.com/arakiken/mlterm) | Sixel |
-| [XTerm](https://invisible-island.net/xterm/) | Sixel (compile với `--enable-sixel`) |
+| [XTerm](https://invisible-island.net/xterm/) | Sixel (compile with `--enable-sixel`) |
 
-> **Lưu ý:** Kitty graphics nhanh và mượt hơn Sixel trên cùng một terminal. Nếu terminal bạn hỗ trợ cả hai, Futon sẽ ưu tiên dùng Kitty.
+Kitty protocol is faster. If your terminal supports both, Futon picks Kitty.
 
-## Hướng dẫn Cài đặt
+## Install
 
-### Tự động (khuyên dùng)
+### Auto (recommended)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | bash
 ```
 
-Script sẽ tự động phát hiện OS và architecture, tải bản release mới nhất từ GitHub Releases về và cài vào `/usr/local/bin/`.
-
-Để gỡ cài đặt:
+Uninstall:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | bash -s -- uninstall
 ```
 
-### Build từ source
+### From source
 
 ```bash
 go install github.com/KabosuNeko/Futon@latest
@@ -63,91 +59,91 @@ go install github.com/KabosuNeko/Futon@latest
 
 ### Binary
 
-Tải bản mới nhất từ [Releases](https://github.com/KabosuNeko/Futon/releases).
+Grab the latest from [Releases](https://github.com/KabosuNeko/Futon/releases).
 
-Hỗ trợ:
+Platforms:
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
 
-## Cách dùng
+## Usage
 
 ```bash
 futon
 ```
 
-### Hệ thống Phím tắt
+### Keybindings
 
-#### Màn hình tìm kiếm
+#### Search screen
 
-| Phím | Chức năng |
-|------|-----------|
-| `ctrl+c` | Thoát |
-| `tab` | Chuyển nguồn manga (All → OTruyen → MangaDex → ... → All) |
-| `enter` | Tìm kiếm / mở truyện đang chọn |
-| `lên` / `xuống` | Di chuyển danh sách |
-| `/fav` | Xem danh sách yêu thích |
-| `/his` | Xem lịch sử đọc |
-| `/lang vi\|en` | Chọn ngôn ngữ chapter (MangaDex) |
+| Key | Action |
+|-----|--------|
+| `ctrl+c` | Quit |
+| `tab` | Cycle source (All → OTruyen → MangaDex → ... → All) |
+| `enter` | Search / open selected manga |
+| `↑` / `↓` | Navigate list |
+| `/fav` | Show favorites |
+| `/his` | Show history |
+| `/lang vi\|en` | Set chapter language (MangaDex) |
 
-#### Favorites / Lịch sử
+#### Favorites / History
 
-| Phím | Chức năng |
-|------|-----------|
-| `enter` | Mở truyện |
-| `ctrl+d` | Xoá khỏi danh sách |
-| `esc` | Quay lại tìm kiếm |
+| Key | Action |
+|-----|--------|
+| `enter` | Open manga |
+| `ctrl+d` | Remove from list |
+| `esc` | Back to search |
 
-#### Danh sách chapter
+#### Chapter list
 
-| Phím | Chức năng |
-|------|-----------|
-| `lên` / `xuống` | Duyệt chapter |
-| `ctrl+f` | Thêm/xoá yêu thích |
-| `enter` | Mở chapter |
-| `[số] + enter` | Nhảy tới chapter |
-| `esc` | Quay lại tìm kiếm |
-| `ctrl+c` | Thoát |
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Browse chapters |
+| `ctrl+f` | Toggle favorite |
+| `enter` | Open chapter |
+| `[number]` + `enter` | Jump to chapter |
+| `esc` | Back to search |
+| `ctrl+c` | Quit |
 
 #### Reader
 
-| Phím | Chức năng |
-|------|-----------|
-| `→` / `l` | Trang tiếp |
-| `←` / `h` | Trang trước |
-| `ctrl+d` | Tải trang hiện tại |
-| `esc` | Về danh sách chapter |
-| `ctrl+c` | Thoát |
+| Key | Action |
+|-----|--------|
+| `→` / `l` | Next page |
+| `←` / `h` | Previous page |
+| `ctrl+d` | Save current page |
+| `esc` | Back to chapter list |
+| `ctrl+c` | Quit |
 
-## Dữ liệu
+## Data
 
-| Dữ liệu | Đường dẫn |
-|---------|-----------|
+| What | Where |
+|------|-------|
 | Favorites | `~/.config/futon/favorites.json` |
-| Lịch sử đọc | `~/.config/futon/history.json` |
-| Ảnh đã tải | `~/Downloads/Futon_Downloads/` |
+| Reading history | `~/.config/futon/history.json` |
+| Downloaded images | `~/Downloads/Futon_Downloads/` |
 
-## Kiến trúc
+## Architecture
 
 ```
 cmd/main.go            — entry point
 internal/
   api/                 — MangaProvider interface & HTTP clients
-    provider.go        — interface definition + shared tea.Msg types
-    source.go          — tea.Cmd wrappers (SearchCmd, GlobalSearchCmd, Fetch*Cmd)
+    provider.go        — interface + shared tea.Msg types
+    source.go          — tea.Cmd wrappers (Search, GlobalSearch, Fetch*)
     otruyen.go         — OTruyen provider
     mangadex.go        — MangaDex provider
     truyenqq.go        — TruyenQQ provider
-  models/              — shared data types (manga.go, chapter.go)
+  models/              — shared types (manga, chapter)
   storage/             — JSON persistence (favorites, history)
-  tui/                 — Bubble Tea screens (search, chapters, reader)
-    app.go             — router: search → chapters → reader
+  tui/                 — Bubble Tea screens
+    app.go             — state machine: search → chapters → reader
     search*.go         — search screen (model, keys, cmd, view)
-    chapter*.go        — chapter list screen (model, view)
-    reader*.go         — reader screen (model, keys, msgs, cache, navigation, view, download)
-    flash.go           — flash message helper
-    imgrender/         — Kitty / Sixel renderer selection
+    chapter*.go        — chapter list (model, view)
+    reader*.go         — reader (model, keys, msgs, cache, nav, view, download)
+    flash.go           — flash message utility
+    imgrender/         — Kitty / Sixel renderer
 ```
 
-## Giấy phép
+## License
 
 MIT
