@@ -5,10 +5,10 @@ import (
 	"time"
 	"unicode"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ChapterListModel struct {

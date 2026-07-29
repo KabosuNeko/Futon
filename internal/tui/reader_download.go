@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // MangaDex returns placeholder images unless you send this exact UA + no Referer.

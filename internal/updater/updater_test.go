@@ -132,5 +132,3 @@ func TestCheckForUpdate_invalidJSON(t *testing.T) {
 		t.Fatal("expected error on invalid JSON")
 	}
 }
-
-

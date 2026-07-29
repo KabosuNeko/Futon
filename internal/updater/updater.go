@@ -40,7 +40,7 @@ const (
 var apiURL = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/releases/latest"
 
 type releaseInfo struct {
-	TagName string      `json:"tag_name"`
+	TagName string         `json:"tag_name"`
 	Assets  []releaseAsset `json:"assets"`
 }
 
@@ -92,5 +92,3 @@ func CheckForUpdate(currentVersion string) (bool, string, string, error) {
 
 	return true, rel.TagName, downloadURL, nil
 }
-
-

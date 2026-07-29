@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/KabosuNeko/Futon/internal/models"
+	"github.com/PuerkitoBio/goquery"
 )
 
 type MangaSearchResultMsg struct {

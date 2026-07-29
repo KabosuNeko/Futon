@@ -3,10 +3,10 @@ package tui
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel, tea.Cmd) {

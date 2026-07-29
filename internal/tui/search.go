@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const searchUIOffset = 9
@@ -32,7 +32,7 @@ type SearchModel struct {
 	currentQuery     string
 	flashMsg         string
 
-	filterQuery    string
+	filterQuery     string
 	chapterLanguage string
 	systemMsg       string
 

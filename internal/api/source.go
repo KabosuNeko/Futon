@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/models"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func SearchCmd(p MangaProvider, query string) tea.Cmd {
