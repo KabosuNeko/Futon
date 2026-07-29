@@ -1,9 +1,9 @@
 package tui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type downloadProgressMsg struct {

@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/KabosuNeko/Futon/internal/storage"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
 type searchTriggerMsg struct {

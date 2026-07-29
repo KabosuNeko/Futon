@@ -3,8 +3,8 @@ package tui
 import (
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/storage"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const preloadTriggerOffset = 3

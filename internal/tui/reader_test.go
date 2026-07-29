@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRightKeyBlockedWhenNotReady(t *testing.T) {

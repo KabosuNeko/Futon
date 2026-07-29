@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestTypingUpdatesInput(t *testing.T) {

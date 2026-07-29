@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/KabosuNeko/Futon/internal/tui"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var Version = "dev"
