@@ -22,7 +22,7 @@ Một **terminal manga reader** viết bằng **Go** — render manga trực ti�
 - **Multi-source search** — OTruyen, MangaDex, TruyenQQ, FoxTruyen, BaoTangTruyen (chọn nguồn qua `/src`)
 - **Favorites & History** — Bookmark truyện, resume từ trang đã đọc
 - **Filter trong fav/his/src** — Gõ chữ để lọc danh sách real-time
-- **Save ảnh** — `ctrl+s` để download trang hiện tại
+- **Save ảnh** — `ctrl+d` để download trang hiện tại
 - **Preload chapter** — Chuyển chapter mượt, zero waiting
 - **LRU image cache** — 20 ảnh cached, flip page ko cần re-render
 - **Quick jump** — Gõ số chapter + enter
