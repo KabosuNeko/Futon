@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/updater"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -19,13 +20,14 @@ type ViewMangaMsg struct {
 type BackToSearchMsg struct{}
 
 type ViewChapterMsg struct {
-	MangaID        string
-	MangaTitle     string
-	ChapterID      string
-	ChapterNumber  string
-	AllChapterIDs  []string
-	ChapterIndex   int
-	StartPageIndex int
+	MangaID           string
+	MangaTitle        string
+	ChapterID         string
+	ChapterNumber     string
+	AllChapterIDs     []string
+	AllChapterNumbers []string
+	ChapterIndex      int
+	StartPageIndex    int
 }
 
 type BackToChaptersMsg struct{}
@@ -131,6 +133,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ViewChapterMsg:
 		m.state = stateReader
 		m.reader = NewReaderModel(msg.MangaID, msg.MangaTitle, msg.ChapterID, msg.ChapterNumber, msg.AllChapterIDs, msg.ChapterIndex, msg.StartPageIndex, m.currentProvider)
+		m.reader.allChapterNumbers = msg.AllChapterNumbers
 		return m, m.reader.Init()
 
 	case BackToChaptersMsg:
@@ -154,6 +157,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
+			if m.state == stateReader && m.reader.mangaID != "" && m.reader.chapterID != "" {
+				providerName := ""
+				if m.reader.provider != nil {
+					providerName = m.reader.provider.Name()
+				}
+				return m, tea.Sequence(
+					storage.SaveHistoryCmd(m.reader.mangaID, m.reader.mangaTitle, providerName, m.reader.chapterID, m.reader.chapterNumber, m.reader.currentIdx),
+					storage.FlushHistoryCmd(),
+					tea.Quit,
+				)
+			}
 			return m, tea.Quit
 		case "ctrl+u":
 			if m.updateAvailable && m.state == stateSearch {
@@ -211,7 +225,7 @@ func (m AppModel) View() string {
 
 	var updateBanner string
 	if m.updateAvailable && m.state == stateSearch {
-		updateBanner = fmt.Sprintf("[!] Đã có bản cập nhật %s. Nhấn 'U' để tự động cài đặt.", m.updateVersion)
+		updateBanner = fmt.Sprintf("[!] Đã có bản cập nhật %s. Nhấn Ctrl+u để tự động cài đặt.", m.updateVersion)
 	}
 
 	view := ""

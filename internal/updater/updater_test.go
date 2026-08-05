@@ -2,7 +2,6 @@ package updater
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -45,7 +44,7 @@ func TestCheckForUpdate_noNewVersion(t *testing.T) {
 func TestCheckForUpdate_hasUpdate(t *testing.T) {
 	tag := "v2.0.0"
 	ver := strings.TrimPrefix(tag, "v")
-	wanted := fmt.Sprintf("futon_%s_%s_%s.tar.gz", ver, runtime.GOOS, runtime.GOARCH)
+	wanted := assetFileName(ver, runtime.GOOS, runtime.GOARCH)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(releaseInfo{
 			TagName: tag,
@@ -114,6 +113,20 @@ func TestCheckForUpdate_httpError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "HTTP status: 404") {
 		t.Fatalf("expected 404 error, got: %v", err)
+	}
+}
+
+func TestAssetFileNameDarwin(t *testing.T) {
+	got := assetFileName("1.2.3", "darwin", "arm64")
+	if got != "futon_1.2.3_macOS_arm64.tar.gz" {
+		t.Fatalf("expected futon_1.2.3_macOS_arm64.tar.gz, got %s", got)
+	}
+}
+
+func TestAssetFileNameLinux(t *testing.T) {
+	got := assetFileName("1.2.3", "linux", "amd64")
+	if got != "futon_1.2.3_linux_amd64.tar.gz" {
+		t.Fatalf("expected futon_1.2.3_linux_amd64.tar.gz, got %s", got)
 	}
 }
 
