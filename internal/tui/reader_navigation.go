@@ -96,6 +96,9 @@ func (m ReaderModel) nextRenderIndex() int {
 func (m *ReaderModel) applyPreloadedChapter(nextID string) {
 	m.chapterID = nextID
 	m.chapterIndex++
+	if m.chapterIndex >= 0 && m.chapterIndex < len(m.allChapterNumbers) {
+		m.chapterNumber = m.allChapterNumbers[m.chapterIndex]
+	}
 	m.urls = m.preloadedURLs
 	m.total = len(m.preloadedURLs)
 	m.imageData = make([][]byte, m.total)

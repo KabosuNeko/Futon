@@ -106,18 +106,21 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.chapters) > 0 && m.cursor >= 0 && m.cursor < len(m.chapters) {
 				ch := m.chapters[m.cursor]
 				allIDs := make([]string, len(m.chapters))
+				allNumbers := make([]string, len(m.chapters))
 				for i, c := range m.chapters {
 					allIDs[i] = c.ID
+					allNumbers[i] = c.Number
 				}
 				return m, func() tea.Msg {
 					return ViewChapterMsg{
-						MangaID:        m.mangaID,
-						MangaTitle:     m.mangaTitle,
-						ChapterID:      ch.ID,
-						ChapterNumber:  ch.Number,
-						AllChapterIDs:  allIDs,
-						ChapterIndex:   m.cursor,
-						StartPageIndex: -1,
+						MangaID:           m.mangaID,
+						MangaTitle:        m.mangaTitle,
+						ChapterID:         ch.ID,
+						ChapterNumber:     ch.Number,
+						AllChapterIDs:     allIDs,
+						AllChapterNumbers: allNumbers,
+						ChapterIndex:      m.cursor,
+						StartPageIndex:    -1,
 					}
 				}
 			}

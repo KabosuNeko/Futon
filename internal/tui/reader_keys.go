@@ -24,7 +24,18 @@ func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
-		return m, tea.Quit
+		if m.mangaID == "" || m.chapterID == "" {
+			return m, tea.Quit
+		}
+		providerName := ""
+		if m.provider != nil {
+			providerName = m.provider.Name()
+		}
+		return m, tea.Sequence(
+			storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, providerName, m.chapterID, m.chapterNumber, m.currentIdx),
+			storage.FlushHistoryCmd(),
+			tea.Quit,
+		)
 
 	case "esc":
 		return m, tea.Sequence(
@@ -81,7 +92,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			return m, tea.Sequence(
 				saveCmd,
 				clearScreenCmd(),
-				chapterNavCmd(nextID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.chapterIndex+1, 0),
+				chapterNavCmd(nextID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.allChapterNumbers, m.chapterIndex+1, 0),
 			)
 		}
 		return m, nil
@@ -108,7 +119,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			return m, tea.Sequence(
 				saveCmd,
 				clearScreenCmd(),
-				chapterNavCmd(prevID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.chapterIndex-1, -2),
+				chapterNavCmd(prevID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.allChapterNumbers, m.chapterIndex-1, -2),
 			)
 		}
 		return m, nil

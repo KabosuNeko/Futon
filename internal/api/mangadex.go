@@ -13,6 +13,13 @@ type MangaDexProvider struct {
 	lang string
 }
 
+// mangadexBaseURL is overridable in tests (see mangadex_test.go).
+var mangadexBaseURL = "https://api.mangadex.org"
+
+// mangadexSearchPageLimit is the number of results fetched per search request.
+// MangaDex API caps this at 100 per request; pagination walks the rest via offset.
+const mangadexSearchPageLimit = 100
+
 func NewMangaDexProvider() *MangaDexProvider {
 	return &MangaDexProvider{lang: "vi"}
 }
@@ -45,27 +52,41 @@ func mangadexGet(endpoint string) (*http.Response, error) {
 }
 
 func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
-	endpoint := fmt.Sprintf(
-		"https://api.mangadex.org/manga?title=%s&limit=5",
-		url.QueryEscape(query),
-	)
+	var all []models.Manga
+	offset := 0
 
-	resp, err := mangadexGet(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	for {
+		endpoint := fmt.Sprintf(
+			"%s/manga?title=%s&limit=%d&offset=%d",
+			mangadexBaseURL, url.QueryEscape(query), mangadexSearchPageLimit, offset,
+		)
 
-	var result models.MangaSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
+		resp, err := mangadexGet(endpoint)
+		if err != nil {
+			return nil, err
+		}
+
+		var result models.MangaSearchResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("parse JSON: %w", err)
+		}
+		resp.Body.Close()
+
+		for _, data := range result.Data {
+			all = append(all, data.ToManga())
+		}
+
+		if len(result.Data) < mangadexSearchPageLimit {
+			break
+		}
+		if result.Total > 0 && len(all) >= result.Total {
+			break
+		}
+		offset += mangadexSearchPageLimit
 	}
 
-	mangas := make([]models.Manga, len(result.Data))
-	for i, data := range result.Data {
-		mangas[i] = data.ToManga()
-	}
-	return mangas, nil
+	return all, nil
 }
 
 func (m *MangaDexProvider) FetchChapters(mangaID string) ([]models.Chapter, error) {
