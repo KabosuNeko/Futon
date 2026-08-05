@@ -2,6 +2,15 @@
 
 Compact guidance for working in this repository.
 
+## Documentation
+
+Read only what the task needs; do not load docs speculatively.
+
+- `SPEC.md` — product requirements, scope boundaries, keybindings, Definition of Done. Change behavior → update SPEC first (spec-first).
+- `ROADMAP.md` — phases, tech debt, backlog. Tech-debt items are prioritized (P1 first).
+- `TASKS.md` — current work status: in-progress, pending backlog (T-XXX), and what shipped.
+- `README.md` — user-facing usage, install, keybindings, terminal compatibility.
+
 ## Project
 
 Futon is a terminal manga reader. It searches multiple manga sources, lists chapters, and renders pages inline using Kitty graphics or Sixel.

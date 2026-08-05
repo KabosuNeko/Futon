@@ -47,6 +47,38 @@ URL="https://github.com/$REPO/releases/download/v${VERSION}/$FILENAME"
 echo "Downloading $URL ..."
 curl -L -o "$FILENAME" "$URL"
 
+# ---- Verify checksum ----
+CHECKSUM_URL="https://github.com/$REPO/releases/download/v${VERSION}/checksums.txt"
+echo "Downloading checksums from $CHECKSUM_URL ..."
+if ! curl -sfL -o checksums.txt "$CHECKSUM_URL"; then
+  echo "Failed to download checksums.txt. Cannot verify archive integrity. Aborting."
+  rm -f "$FILENAME"
+  exit 1
+fi
+
+expected=$(awk -v f="$FILENAME" '$2 == f {print $1}' checksums.txt | head -1)
+if [ -z "$expected" ]; then
+  echo "No checksum found for $FILENAME in checksums.txt. Cannot verify archive integrity. Aborting."
+  rm -f "$FILENAME" checksums.txt
+  exit 1
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual=$(sha256sum "$FILENAME" | awk '{print $1}')
+else
+  actual=$(shasum -a 256 "$FILENAME" | awk '{print $1}')
+fi
+
+if [ "$actual" != "$expected" ]; then
+  echo "Checksum mismatch! Aborting."
+  echo "Expected: $expected"
+  echo "Actual:   $actual"
+  rm -f "$FILENAME" checksums.txt
+  exit 1
+fi
+
+echo "Checksum verified."
+
 # ---- Extract ----
 echo "Extracting $FILENAME ..."
 tar -xzf "$FILENAME"
@@ -57,7 +89,7 @@ chmod +x futon
 sudo mv futon /usr/local/bin/
 
 # ---- Cleanup ----
-rm -f "$FILENAME"
+rm -f "$FILENAME" checksums.txt
 
 echo ""
 echo "Futon $VERSION installed successfully!"

@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+// assetFileName builds the GoReleaser asset name for a given version and
+// platform. GoReleaser names macOS assets with "macOS" while runtime.GOOS
+// reports "darwin", so map it explicitly.
+func assetFileName(version, goos, goarch string) string {
+	if goos == "darwin" {
+		goos = "macOS"
+	}
+	return fmt.Sprintf("futon_%s_%s_%s.tar.gz", version, goos, goarch)
+}
+
 // Treat non-numeric components as 0 — good enough for semver comparison.
 func versLE(a, b string) bool {
 	ap := strings.Split(a, ".")
@@ -78,7 +88,7 @@ func CheckForUpdate(currentVersion string) (bool, string, string, error) {
 		return false, "", "", nil
 	}
 
-	wanted := fmt.Sprintf("futon_%s_%s_%s.tar.gz", latest, runtime.GOOS, runtime.GOARCH)
+	wanted := assetFileName(latest, runtime.GOOS, runtime.GOARCH)
 	var downloadURL string
 	for _, a := range rel.Assets {
 		if a.Name == wanted {
