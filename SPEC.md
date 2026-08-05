@@ -48,7 +48,7 @@ Futon là ứng dụng TUI (terminal user interface) cho phép người dùng:
 - **FR-S7**: Kết quả tìm kiếm cũ bị bỏ qua nếu query đã thay đổi (guard chống stale response).
 
 #### Giới hạn theo provider
-- **MangaDex**: search trả **tối đa 5 kết quả** (hard limit `limit=5`). Title ưu tiên `en` → `ja-ro` → ngôn ngữ bất kỳ, fallback "Không rõ tiêu đề".
+- **MangaDex**: search **phân trang** — mỗi request `limit=100`, loop theo offset tới khi đủ `total` (theo mẫu `FetchChapters`); không còn giới hạn 5 kết quả. Title ưu tiên `en` → `ja-ro` → ngôn ngữ bất kỳ, fallback "Không rõ tiêu đề".
 - **OTruyen**: trả kết quả không có ảnh bìa (CoverURL rỗng).
 - **TruyenQQ / FoxTruyen / BaoTangTruyen**: scrape HTML, cần browser UA (Chrome 127) do chặn bot.
 

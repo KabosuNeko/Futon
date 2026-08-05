@@ -8,7 +8,8 @@ type Manga struct {
 }
 
 type MangaSearchResponse struct {
-	Data []MangaData `json:"data"`
+	Data  []MangaData `json:"data"`
+	Total int         `json:"total"`
 }
 
 type MangaData struct {

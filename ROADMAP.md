@@ -71,7 +71,9 @@ Dọn các điểm yếu đã biết trước khi thêm tính năng mới. Mục
 
 Những cải thiện trải nghiệm không thay đổi kiến trúc nền.
 
-- [ ] **MangaDex search tăng limit** (`limit=5` → configurable/paginate) — search chỉ trả 5 kết quả đang quá ít.
+- [x] **MangaDex search tăng limit** (`limit=5` → configurable/paginate) — search chỉ trả 5 kết quả đang quá ít.
+  - *Giải pháp*: `Search()` paginate offset loop — mỗi request `limit=100`, loop tới khi đủ `total` (theo mẫu `FetchChapters`); thêm `Total` vào `MangaSearchResponse`; `mangadexBaseURL` thành package var để test bằng httptest. 4 test pagination (multi-page, single-page, stop-at-total, HTTP error).
+  - **Reference**: `internal/api/mangadex.go`, `internal/api/mangadex_test.go`, `internal/models/manga.go`.
 - [ ] **Cover images trong search** — hiện search không hiển thị ảnh bìa (OTruyen/MangaDex CoverURL rỗng).
 - [ ] **Retry / timeout** cho provider — interface hiện không có; đỡ lỗi mạng nhất thời.
 - [ ] **Chỉ báo loading cho từng provider** — biết nguồn nào đang chờ / đã lỗi trong multi-source search.
