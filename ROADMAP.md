@@ -1,105 +1,105 @@
 # ROADMAP — Futon
 
-Lộ trình phát triển theo giai đoạn. `TASKS.md` chứa chi tiết việc hiện tại; `SPEC.md` là đặc tả chuẩn.
+Development roadmap by phase. `TASKS.md` holds the details of current work; `SPEC.md` is the canonical spec.
 
 Legend: `[x]` = done, `[~]` = in progress, `[ ]` = backlog.
 
 ---
 
-## Phase 0 — MVP stable (HOÀN THÀNH)
+## Phase 0 — MVP stable (COMPLETE)
 
-Phiên bản nền tảng: đọc manga trong terminal, multi-source search, favorites/history, tự cập nhật.
+Foundation: read manga in the terminal, multi-source search, favorites/history, self-update.
 
-- [x] **Render ảnh trong terminal** — Kitty (native) + Sixel (fallback), auto-detect (`FUTON_RENDERER` override).
-- [x] **Multi-source search** — 5 provider (OTruyen, MangaDex, TruyenQQ, FoxTruyen, BaoTangTruyen) chạy song song, title chuẩn hoá `(source)`.
-- [x] **Flow điều hướng** — search → chapter list → reader, điều hướng giữa chapter liên tục trong reader.
-- [x] **Favorites** — thêm/xoá/lưu `userdata.json`, `ctrl+f`.
-- [x] **Reading history** — resume đúng chapter/trang, debounce flush 2s, `/his`.
-- [x] **`/src` provider checklist** — toggle, persist, lọc real-time.
-- [x] **`/lang vi|en`** — filter ngôn ngữ chapter MangaDex.
-- [x] **LRU image cache (20 ảnh)** + **preload chapter** — chuyển chapter zero-waiting.
-- [x] **Save ảnh** — `ctrl+d` → `~/Downloads/Futon_Downloads/`, xử lý trùng tên.
-- [x] **Self-update** — check GitHub releases, cài qua `install.sh`.
-- [x] **Release infra** — GoReleaser (linux/darwin × amd64/arm64), tag `v*`, `install.sh`, checksums.
+- [x] **In-terminal image rendering** — Kitty (native) + Sixel (fallback), auto-detect (`FUTON_RENDERER` override).
+- [x] **Multi-source search** — 5 providers (OTruyen, MangaDex, TruyenQQ, FoxTruyen, BaoTangTruyen) running concurrently, titles normalized as `(source)`.
+- [x] **Navigation flow** — search → chapter list → reader, continuous chapter switching within the reader.
+- [x] **Favorites** — add/remove/persist to `userdata.json`, `ctrl+f`.
+- [x] **Reading history** — resume at the right chapter/page, 2s debounced flush, `/his`.
+- [x] **`/src` provider checklist** — toggle, persist, real-time filtering.
+- [x] **`/lang vi|en`** — MangaDex chapter language filter.
+- [x] **LRU image cache (20 images)** + **chapter preload** — zero-waiting chapter switching.
+- [x] **Save image** — `ctrl+d` → `~/Downloads/Futon_Downloads/`, duplicate-name handling.
+- [x] **Self-update** — checks GitHub releases, installs via `install.sh`.
+- [x] **Release infra** — GoReleaser (linux/darwin × amd64/arm64), `v*` tags, `install.sh`, checksums.
 
-**Kết quả**: bản stable đầu tiên đã phát hành; auto-update hoạt động.
+**Result**: first stable release shipped; auto-update works.
 
 ---
 
-## Phase 1 — Stability & Tech debt (HOÀN THÀNH)
+## Phase 1 — Stability & Tech debt (COMPLETE)
 
-Dọn các điểm yếu đã biết trước khi thêm tính năng mới. Mục tiêu: không còn hành vi sai/sụp đổ trên bề mặt.
+Clean up known weaknesses before adding new features. Goal: no more visible misbehavior or crashes on the surface.
 
-- [x] **Tech debt #1 — Updater hỏng trên macOS** (P1)
-  - *Nguyên nhân*: GoReleaser đặt tên archive `futon_<ver>_macOS_arm64.tar.gz` nhưng `updater.go` tìm asset với `runtime.GOOS` = `darwin` → gõ nhầm tên file trên macOS.
-  - *Giải pháp*: thêm helper `assetFileName(version, goos, goarch)` map `darwin`→`macOS`; dùng trong `CheckForUpdate`.
+- [x] **Tech debt #1 — Updater broken on macOS** (P1)
+  - *Cause*: GoReleaser names the archive `futon_<ver>_macOS_arm64.tar.gz` but `updater.go` looks up assets with `runtime.GOOS` = `darwin` → wrong filename on macOS.
+  - *Fix*: added `assetFileName(version, goos, goarch)` helper mapping `darwin`→`macOS`; used in `CheckForUpdate`.
   - *Test*: `TestAssetFileNameDarwin`, `TestAssetFileNameLinux`.
   - **Reference**: `internal/updater/updater.go`, `.goreleaser.yaml`.
 
-- [x] **Tech debt #2 — Banner update sai phím** (P2)
-  - `"[!] Đã có bản cập nhật..."` ghi "Nhấn 'U'" nhưng key thực là `ctrl+u`.
-  - *Giải pháp*: đổi banner → "Nhấn Ctrl+u"; test `TestUpdateBannerSaysCtrlU`; `SPEC.md` phần 9 đã cập nhật.
+- [x] **Tech debt #2 — Update banner shows wrong key** (P2)
+  - `"[!] Đã có bản cập nhật..."` said "Nhấn 'U'" but the real key is `ctrl+u`.
+  - *Fix*: banner changed to "Nhấn Ctrl+u"; test `TestUpdateBannerSaysCtrlU`; `SPEC.md` section 9 updated.
   - **Reference**: `internal/tui/app.go`.
 
-- [x] **Tech debt #3 — Mất history khi thoát nhanh** (P1)
-  - `ctrl+c` ở reader chỉ `tea.Quit`, không flush; nếu thoát trước debounce 2s, vị trí trang cuối mất.
-  - *Giải pháp*: `ctrl+c` ở cả router `app.go` lẫn `reader_keys.go` giờ chạy `SaveHistoryCmd` + `FlushHistoryCmd` trước `tea.Quit` (guard khi chưa có manga/chapter).
-  - *Test*: `TestCtrlCInReaderFlushesHistory`, `TestReaderKeysCtrlCFlushesHistory` (package tui).
+- [x] **Tech debt #3 — History lost on quick exit** (P1)
+  - `ctrl+c` in the reader only did `tea.Quit`, no flush; exiting before the 2s debounce lost the last page position.
+  - *Fix*: `ctrl+c` in both the router `app.go` and `reader_keys.go` now runs `SaveHistoryCmd` + `FlushHistoryCmd` before `tea.Quit` (guarded when no manga/chapter is loaded).
+  - *Test*: `TestCtrlCInReaderFlushesHistory`, `TestReaderKeysCtrlCFlushesHistory` (tui package).
   - **Reference**: `internal/storage/history.go`, `internal/tui/app.go`, `reader_keys.go`.
 
-- [x] **Tech debt #4 — Thiếu test `migrateOldData`** (P2)
-  - Migration 2 file cũ → `userdata.json` là logic nhạy cảm nhất nhưng không có regression test.
-  - *Giải pháp*: `userdata_test.go` với 4 test — merge + xoá file cũ, skip khi userdata đã tồn tại, không file nào, corrupt favorites bị bỏ qua.
+- [x] **Tech debt #4 — Missing `migrateOldData` tests** (P2)
+  - Migrating the 2 old files → `userdata.json` is the most sensitive logic but had no regression tests.
+  - *Fix*: `userdata_test.go` with 4 tests — merge + delete old files, skip when userdata already exists, no files at all, corrupt favorites ignored.
   - **Reference**: `internal/storage/userdata.go`.
 
-- [x] **Tech debt #5 — `chapterNumber` stale sau chuyển chapter trong reader** (P2)
-  - Chuyển chapter bằng preload / `chapterNavCmd` không cập nhật `chapterNumber` → ảnh save bằng `ctrl+d` sau đó bị nhãn chapter sai/cũ, history lưu số trống.
-  - *Giải pháp*: `ViewChapterMsg` mang thêm `AllChapterNumbers`; reader lưu `allChapterNumbers`; `chapterNavCmd` và `applyPreloadedChapter` set đúng `chapterNumber` theo index (nil-safe).
-  - *Test*: `chapter_number_test.go` — 6 test (cmd set number, out-of-range, nil, preload apply, giữ số cũ khi nil, router forward).
+- [x] **Tech debt #5 — `chapterNumber` stale after chapter switch in reader** (P2)
+  - Switching chapters via preload / `chapterNavCmd` did not update `chapterNumber` → `ctrl+d` image saves afterward had wrong/stale chapter labels, and history saved an empty number.
+  - *Fix*: `ViewChapterMsg` now carries `AllChapterNumbers`; the reader stores `allChapterNumbers`; `chapterNavCmd` and `applyPreloadedChapter` set the correct `chapterNumber` by index (nil-safe).
+  - *Test*: `chapter_number_test.go` — 6 tests (cmd sets number, out-of-range, nil, preload apply, keeps old number on nil, router forwarding).
   - **Reference**: `internal/tui/app.go`, `reader_download.go`, `reader_navigation.go`, `reader_keys.go`, `chapter.go`.
 
-- [x] **Tech debt #6 — Self-update không verify** (P2, bảo mật)
-  - Cài qua `curl install.sh | bash` + `sudo`, không check checksum, không rollback.
-  - *Giải pháp*: `install.sh` tải `checksums.txt`, verify sha256 (`sha256sum`/`shasum` fallback) trước khi giải nén; abort nếu thiếu/lệch; dọn `checksums.txt` khi cleanup. `bash -n` pass.
+- [x] **Tech debt #6 — Self-update does not verify** (P2, security)
+  - Installs via `curl install.sh | bash` + `sudo`, no checksum check, no rollback.
+  - *Fix*: `install.sh` downloads `checksums.txt`, verifies sha256 (`sha256sum`/`shasum` fallback) before extracting; aborts if missing/mismatched; cleans up `checksums.txt` on cleanup. `bash -n` passes.
   - **Reference**: `install.sh`.
 
-**Kết quả**: toàn bộ 6 tech debt Phase 1 đã đóng. `go build ./...`, `go test ./...`, `go test -race ./...` đều xanh (storage 11 test, tui 21 test, updater 8 test).
+**Result**: all 6 Phase 1 tech debts closed. `go build ./...`, `go test ./...`, `go test -race ./...` all green (storage 11 tests, tui 21 tests, updater 8 tests).
 
 ---
 
-## Phase 2 — UX & tính năng (KẾ TIẾP)
+## Phase 2 — UX & features (NEXT)
 
-Những cải thiện trải nghiệm không thay đổi kiến trúc nền.
+Experience improvements that do not change the underlying architecture.
 
-- [x] **MangaDex search tăng limit** (`limit=5` → configurable/paginate) — search chỉ trả 5 kết quả đang quá ít.
-  - *Giải pháp*: `Search()` paginate offset loop — mỗi request `limit=100`, loop tới khi đủ `total` (theo mẫu `FetchChapters`); thêm `Total` vào `MangaSearchResponse`; `mangadexBaseURL` thành package var để test bằng httptest. 4 test pagination (multi-page, single-page, stop-at-total, HTTP error).
+- [x] **MangaDex search limit increase** (`limit=5` → configurable/paginate) — 5 results was too few.
+  - *Fix*: `Search()` paginates with an offset loop — each request `limit=100`, looping until `total` is reached (following the `FetchChapters` pattern); added `Total` to `MangaSearchResponse`; `mangadexBaseURL` became a package var for httptest testing. 4 pagination tests (multi-page, single-page, stop-at-total, HTTP error).
   - **Reference**: `internal/api/mangadex.go`, `internal/api/mangadex_test.go`, `internal/models/manga.go`.
-- [ ] **Cover images trong search** — hiện search không hiển thị ảnh bìa (OTruyen/MangaDex CoverURL rỗng).
-- [ ] **Retry / timeout** cho provider — interface hiện không có; đỡ lỗi mạng nhất thời.
-- [ ] **Chỉ báo loading cho từng provider** — biết nguồn nào đang chờ / đã lỗi trong multi-source search.
-- [ ] **`/lang` áp cho provider khác** — hiện chỉ MangaDex; các site HTML có thể map ngôn ngữ.
-- [ ] **Cải thiện quick jump** — hiện chỉ match chính xác `Number`; hỗ trợ fuzzy/prefix.
+- [ ] **Cover images in search** — search currently shows no cover art (OTruyen/MangaDex CoverURL empty).
+- [ ] **Retry / timeout for providers** — not present in the current interface; would absorb transient network errors.
+- [ ] **Per-provider loading indicator** — know which source is pending / has failed during multi-source search.
+- [ ] **`/lang` applied to other providers** — currently MangaDex only; HTML sites could map languages.
+- [ ] **Better quick jump** — currently exact `Number` match only; add fuzzy/prefix support.
 
 ---
 
-## Phase 3 — Tầm nhìn dài hạn (Backlog / IDEAS)
+## Phase 3 — Long-term vision (Backlog / IDEAS)
 
-Chưa cam kết thời gian; khám phá hoặc chờ nhu cầu thực tế.
+No committed timeline; to be explored or waiting for real demand.
 
-- [ ] **Offline mode / download cả chapter** — tải trước toàn bộ ảnh để đọc không mạng.
-- [ ] **Extension/source plugin** — cho phép thêm nguồn không cần sửa code.
-- [ ] **Themes / custom styling** — cấu hình màu sắc kitty/sixel.
-- [ ] **Truyện yêu thích auto-check chapter mới** — badge "có chapter mới".
-- [ ] **Config theo tuỳ chọn** — file config cho debounce time, cache size, download dir.
-- [ ] **iTerm/kitty playback tối ưu** — giảm băng thông escape sequence cho màn hình lớn.
+- [ ] **Offline mode / whole-chapter download** — pre-download all images to read without a network.
+- [ ] **Extension/source plugin** — add sources without touching code.
+- [ ] **Themes / custom styling** — configurable kitty/sixel colors.
+- [ ] **Auto-check favorites for new chapters** — "new chapter" badge.
+- [ ] **User configuration** — config file for debounce time, cache size, download dir.
+- [ ] **iTerm/kitty playback optimization** — reduce escape-sequence bandwidth for large screens.
 
 ---
 
-## Nguyên tắc quản lý quá trình
+## Process management principles
 
-1. **Không bao giờ phá Phase 0** — change nào phải giữ regression tests xanh.
-2. **Mỗi tính năng = 1 task** — vào `TASKS.md` trước khi code (chú thích reference file).
-3. **Spec-first** — thay đổi hành vi user-facing phải cập nhật `SPEC.md` trước khi merge.
-4. **Fix bug tối thiểu** — không refactor khi đang sửa bug (tránh dính scope creep).
-5. **Ưu tiên mượt mà** — trải nghiệm reader (preload, cache, zero-wait) là giá trị cốt lõi.
-6. **Bằng chứng** — mỗi task đóng với build + test + (nếu đụng UI) tự chạy kiểm tra hình ảnh.
+1. **Never break Phase 0** — any change must keep regression tests green.
+2. **Each feature = 1 task** — goes into `TASKS.md` before coding (with file references).
+3. **Spec-first** — user-facing behavior changes must update `SPEC.md` before merge.
+4. **Minimal bug fixes** — no refactoring while fixing a bug (avoid scope creep).
+5. **Smoothness first** — the reading experience (preload, cache, zero-wait) is core value.
+6. **Evidence** — every task closes with build + test + (if UI-touching) a manual visual check.
