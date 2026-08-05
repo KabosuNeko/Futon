@@ -21,7 +21,8 @@ func newMangaDexTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Ser
 	return srv
 }
 
-func mangaJSON(items int, total int) []byte {
+func mangaJSON(t *testing.T, items int, total int) []byte {
+	t.Helper()
 	resp := models.MangaSearchResponse{Total: total}
 	for i := 0; i < items; i++ {
 		resp.Data = append(resp.Data, models.MangaData{
@@ -31,7 +32,10 @@ func mangaJSON(items int, total int) []byte {
 			},
 		})
 	}
-	b, _ := json.Marshal(resp)
+	b, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("mangaJSON marshal: %v", err)
+	}
 	return b
 }
 
@@ -55,7 +59,7 @@ func TestMangaDexSearchPaginates(t *testing.T) {
 			items = 25
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(mangaJSON(items, 125))
+		w.Write(mangaJSON(t, items, 125))
 	})
 
 	m := NewMangaDexProvider()
@@ -76,7 +80,7 @@ func TestMangaDexSearchPaginates(t *testing.T) {
 func TestMangaDexSearchSinglePage(t *testing.T) {
 	newMangaDexTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(mangaJSON(3, 3))
+		w.Write(mangaJSON(t, 3, 3))
 	})
 
 	m := NewMangaDexProvider()
@@ -101,7 +105,7 @@ func TestMangaDexSearchStopsAtTotal(t *testing.T) {
 			t.Fatalf("expected 1 request, got %d", requests)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(mangaJSON(100, 100))
+		w.Write(mangaJSON(t, 100, 100))
 	})
 
 	m := NewMangaDexProvider()
