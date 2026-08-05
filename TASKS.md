@@ -29,7 +29,7 @@ _Phase 1 tech debt đã xử lý xong — dự án ở trạng thái stable. Xem
 
 | ID | Task | Ref | Trạng thái |
 |----|------|-----|------------|
-| T-201 | MangaDex search: tăng limit 5 → configurable/paginate | `internal/api/mangadex.go` | [ ] |
+| T-201 | MangaDex search: tăng limit 5 → configurable/paginate | `internal/api/mangadex.go` | [x] |
 | T-202 | Hiển thị cover images trong search | `internal/tui/search_view.go`, providers | [ ] |
 | T-203 | Retry/timeout cho provider calls | `internal/api/provider.go`, `source.go` | [ ] |
 | T-204 | Chỉ báo loading/error theo từng provider trong search | `internal/api/source.go` (GlobalSearchMsg), `internal/tui/search.go` | [ ] |
@@ -38,6 +38,10 @@ _Phase 1 tech debt đã xử lý xong — dự án ở trạng thái stable. Xem
 ---
 
 ## Đã hoàn thành (Done)
+
+### Phase 2 — UX & tính năng
+
+- [x] T-201: MangaDex search phân trang — `Search()` loop theo offset, mỗi request `limit=100`, dừng khi đủ `total`; thêm `Total` vào `MangaSearchResponse`; `mangadexBaseURL` thành package var để test httptest (`internal/api/mangadex_test.go`, 4 test).
 
 ### Phase 1 — Stability & Tech debt (mới hoàn thành)
 
