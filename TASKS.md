@@ -1,87 +1,87 @@
 # TASKS — Futon
 
-Trạng thái công việc hiện tại. Cập nhật file này khi bắt đầu/hoàn thành một task.
+Current work status. Update this file when starting/completing a task.
 Legend: `[x]` = done, `[~]` = in progress, `[ ]` = pending/backlog.
-Định nghĩa "done" chuẩn: `SPEC.md` §9 — build sạch, test pass (kể cả `-race`), regression test nếu đụng TUI/storage, cập nhật doc nếu đổi hành vi user-facing.
+Standard definition of "done": `SPEC.md` §9 — clean build, tests pass (including `-race`), regression test when TUI/storage is touched, docs updated if user-facing behavior changes.
 
 ---
 
-## Đang làm (In Progress)
+## In Progress
 
-_Phase 1 tech debt đã xử lý xong — dự án ở trạng thái stable. Xem backlog Phase 2 phía dưới._
+_Phase 1 tech debt is fully resolved — the project is in a stable state. See the Phase 2 backlog below._
 
 ---
 
-## Task backlog (theo thứ tự ưu tiên)
+## Task backlog (by priority)
 
 ### Phase 1 — Stability & Tech debt
 
-| ID | Task | Ref | Ưu tiên | Trạng thái |
-|----|------|-----|---------|------------|
-| T-101 | Fix updater sai asset name trên macOS (`darwin` vs `macOS`) | `internal/updater/updater.go`, `.goreleaser.yaml` | P1 | [x] |
-| T-102 | Flush history khi `ctrl+c` thoát reader (chống mất trang cuối) | `internal/storage/history.go`, `internal/tui/app.go`, `reader_keys.go` | P1 | [x] |
-| T-103 | Sửa banner update "Nhấn 'U'" → đúng phím `ctrl+u` | `internal/tui/app.go` | P2 | [x] |
-| T-104 | Thêm regression test cho `migrateOldData` (migration 1 lần) | `internal/storage/userdata.go` | P2 | [x] |
-| T-105 | Cập nhật `chapterNumber` khi chuyển chapter trong reader (preload + `chapterNavCmd`) | `internal/tui/reader_navigation.go`, `reader_download.go` | P2 | [x] |
-| T-106 | Verify checksum trước khi cài self-update (tuỳ chọn) | `install.sh` | P2 | [x] |
+| ID | Task | Ref | Priority | Status |
+|----|------|-----|----------|--------|
+| T-101 | Fix updater wrong asset name on macOS (`darwin` vs `macOS`) | `internal/updater/updater.go`, `.goreleaser.yaml` | P1 | [x] |
+| T-102 | Flush history when exiting the reader with `ctrl+c` (prevent lost last page) | `internal/storage/history.go`, `internal/tui/app.go`, `reader_keys.go` | P1 | [x] |
+| T-103 | Fix update banner "Nhấn 'U'" → correct key `ctrl+u` | `internal/tui/app.go` | P2 | [x] |
+| T-104 | Add regression tests for `migrateOldData` (one-time migration) | `internal/storage/userdata.go` | P2 | [x] |
+| T-105 | Update `chapterNumber` when switching chapters in the reader (preload + `chapterNavCmd`) | `internal/tui/reader_navigation.go`, `reader_download.go` | P2 | [x] |
+| T-106 | Verify checksum before installing self-update (optional) | `install.sh` | P2 | [x] |
 
-### Phase 2 — UX & tính năng
+### Phase 2 — UX & features
 
-| ID | Task | Ref | Trạng thái |
-|----|------|-----|------------|
-| T-201 | MangaDex search: tăng limit 5 → configurable/paginate | `internal/api/mangadex.go` | [x] |
-| T-202 | Hiển thị cover images trong search | `internal/tui/search_view.go`, providers | [ ] |
-| T-203 | Retry/timeout cho provider calls | `internal/api/provider.go`, `source.go` | [ ] |
-| T-204 | Chỉ báo loading/error theo từng provider trong search | `internal/api/source.go` (GlobalSearchMsg), `internal/tui/search.go` | [ ] |
-| T-205 | Quick jump: hỗ trợ prefix/fuzzy thay vì match chính xác | `internal/tui/chapter.go` | [ ] |
+| ID | Task | Ref | Status |
+|----|------|-----|--------|
+| T-201 | MangaDex search: raise limit 5 → configurable/paginate | `internal/api/mangadex.go` | [x] |
+| T-202 | Show cover images in search | `internal/tui/search_view.go`, providers | [ ] |
+| T-203 | Retry/timeout for provider calls | `internal/api/provider.go`, `source.go` | [ ] |
+| T-204 | Per-provider loading/error indicator in search | `internal/api/source.go` (GlobalSearchMsg), `internal/tui/search.go` | [ ] |
+| T-205 | Quick jump: prefix/fuzzy instead of exact match | `internal/tui/chapter.go` | [ ] |
 
 ---
 
-## Đã hoàn thành (Done)
+## Completed
 
-### Phase 2 — UX & tính năng
+### Phase 2 — UX & features
 
-- [x] T-201: MangaDex search phân trang — `Search()` loop theo offset, mỗi request `limit=100`, dừng khi đủ `total`; thêm `Total` vào `MangaSearchResponse`; `mangadexBaseURL` thành package var để test httptest (`internal/api/mangadex_test.go`, 4 test).
+- [x] T-201: MangaDex search pagination — `Search()` loops by offset, each request `limit=100`, stops when `total` is reached; added `Total` to `MangaSearchResponse`; `mangadexBaseURL` became a package var for httptest testing (`internal/api/mangadex_test.go`, 4 tests).
 
-### Phase 1 — Stability & Tech debt (mới hoàn thành)
+### Phase 1 — Stability & Tech debt (recently completed)
 
-- [x] T-101: `assetFileName` helper map `darwin`→`macOS` cho updater; thêm test darwin/linux.
-- [x] T-102: `ctrl+c` khi đang ở reader giờ flush history (save + flush) trước khi quit — không mất trang cuối; fix ở cả `app.go` router và `reader_keys.go`; thêm test `quit_flush_test.go`.
-- [x] T-103: banner update hiển thị "Nhấn Ctrl+u" thay vì "Nhấn 'U'" (đúng phím thật).
-- [x] T-104: regression test `migrateOldData` — merge, skip khi userdata đã tồn tại, corrupt favorites, không file (`userdata_test.go`, 4 test).
-- [x] T-105: `chapterNumber` được cập nhật khi chuyển chapter — `ViewChapterMsg` mang `AllChapterNumbers`, `chapterNavCmd` + `applyPreloadedChapter` set đúng số chapter; thêm test `chapter_number_test.go`.
-- [x] T-106: `install.sh` verify sha256 checksum trước khi giải nén (tải `checksums.txt`, so khớp `sha256sum`/`shasum`, abort nếu lệch hoặc thiếu).
+- [x] T-101: `assetFileName` helper maps `darwin`→`macOS` for the updater; added darwin/linux tests.
+- [x] T-102: `ctrl+c` in the reader now flushes history (save + flush) before quitting — no lost last page; fixed in both `app.go` router and `reader_keys.go`; added test `quit_flush_test.go`.
+- [x] T-103: update banner shows "Nhấn Ctrl+u" instead of "Nhấn 'U'" (the real key).
+- [x] T-104: regression tests for `migrateOldData` — merge, skip when userdata exists, corrupt favorites, no files (`userdata_test.go`, 4 tests).
+- [x] T-105: `chapterNumber` updated when switching chapters — `ViewChapterMsg` carries `AllChapterNumbers`, `chapterNavCmd` + `applyPreloadedChapter` set the correct chapter number; added test `chapter_number_test.go`.
+- [x] T-106: `install.sh` verifies sha256 checksum before extracting (downloads `checksums.txt`, matches with `sha256sum`/`shasum`, aborts on mismatch or missing file).
 
 ### Phase 0 — MVP
 
-Lịch sử rút gọn theo git log (các nhóm chức năng đã ship):
+Condensed history per git log (feature groups already shipped):
 
-- [x] Scaffold dự án, module path, GoReleaser config.
-- [x] `h`/`l` keybinding reader + install script + version flag + self-update cơ chế.
-- [x] Fix infinite render loop trong reader; đơn giản hoá guard clauses, gộp navigation logic trùng.
-- [x] Bỏ phím `q`; chuyển `d` → `ctrl+d` (tránh conflict với input search); cập nhật footer hints.
-- [x] Reuse `FlushHistory` trong `DeleteHistory` (bỏ duplicate flush logic).
-- [x] Updater: validate HTTP status, download temp file, resolve asset URL từ API, semver compare.
-- [x] **Bản stable đầu tiên phát hành** — auto update từ các bản sau.
-- [x] Thêm nguồn **TruyenQQ** (rewrite cho truyenqqko.com, domain fallback probe).
-- [x] Thêm nguồn **FoxTruyen**, **BaoTangTruyen**.
-- [x] Thêm trường `Provider` vào `Manga` model + `GlobalSearchCmd` (search all).
-- [x] Chế độ search All + GlobalSearch trong TUI; truyền `ProviderName` qua các screens.
-- [x] Fix: màn hình search all bị tràn; `j`/`k` không gõ được trong tìm kiếm.
-- [x] Fix: MangaDex gửi Placeholder thay vì ảnh (UA + bỏ Referer).
-- [x] Hỗ trợ `st-graphics` (kitty protocol), chừa 1 dòng footer.
+- [x] Project scaffold, module path, GoReleaser config.
+- [x] `h`/`l` reader keybindings + install script + version flag + self-update mechanism.
+- [x] Fixed infinite render loop in the reader; simplified guard clauses, merged duplicate navigation logic.
+- [x] Removed the `q` key; moved `d` → `ctrl+d` (avoid conflict with search input); updated footer hints.
+- [x] Reuse `FlushHistory` in `DeleteHistory` (removed duplicate flush logic).
+- [x] Updater: validate HTTP status, download temp file, resolve asset URL from API, semver compare.
+- [x] **First stable release** — auto-updates from subsequent releases.
+- [x] Added **TruyenQQ** source (rewritten for truyenqqko.com, domain fallback probe).
+- [x] Added **FoxTruyen**, **BaoTangTruyen** sources.
+- [x] Added `Provider` field to the `Manga` model + `GlobalSearchCmd` (search all).
+- [x] Search-all mode + GlobalSearch in the TUI; `ProviderName` passed across screens.
+- [x] Fix: search-all screen overflow; `j`/`k` untypeable during search.
+- [x] Fix: MangaDex sent Placeholder instead of images (UA + removed Referer).
+- [x] `st-graphics` support (kitty protocol), 1 footer row reserved.
 - [x] Renderer interface cleanup, debounce, flush logging, bounds guard, lang handler, UA const.
-- [x] `/src` provider checklist, merge `userdata.json`, filter fav/his/src real-time.
-- [x] Remap trigger update `U` → `ctrl+u` (để gõ được chữ U hoa trong search).
-- [x] Bump Go 1.25 → 1.26, update deps, upgrade UA Chrome 127, `go fmt`.
-- [x] Cleanup: bỏ comments thừa (slop), thêm comments quan trọng.
-- [x] Dependabot + update GitHub Actions.
+- [x] `/src` provider checklist, merged `userdata.json`, real-time fav/his/src filtering.
+- [x] Remapped update trigger `U` → `ctrl+u` (so uppercase U is typeable in search).
+- [x] Bumped Go 1.25 → 1.26, updated deps, upgraded UA Chrome 127, `go fmt`.
+- [x] Cleanup: removed redundant comments (slop), added important comments.
+- [x] Dependabot + GitHub Actions updates.
 
 ---
 
-## Chú thích vận hành
+## Operational notes
 
-- **Trước khi bắt đầu task mới**: đọc `SPEC.md` phần liên quan + `AGENTS.md`, tạo branch riêng.
-- **Trước khi đóng task**: chạy `go build ./...`, `go test ./...`, `go test -race ./...`; nếu đụng UI, tự chạy thử render.
-- **Nếu phát hiện hành vi sai mới**: thêm vào bảng Phase 1 ở trên trước (đừng sửa "trong lúc làm việc khác").
-- **Nếu SPEC cũ**: cập nhật SPEC trước, code sau (spec-first).
+- **Before starting a new task**: read the relevant `SPEC.md` section + `AGENTS.md`, create a dedicated branch.
+- **Before closing a task**: run `go build ./...`, `go test ./...`, `go test -race ./...`; if UI-touching, manually test rendering.
+- **If new misbehavior is found**: add it to the Phase 1 table above first (do not fix "while working on something else").
+- **If the SPEC is outdated**: update the SPEC first, then code (spec-first).
