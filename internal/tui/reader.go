@@ -34,35 +34,36 @@ type imageSavedMsg struct {
 }
 
 type ReaderModel struct {
-	mangaID          string
-	mangaTitle       string
-	chapterNumber    string
-	chapterID        string
-	allChapterIDs    []string
-	chapterIndex     int
-	provider         api.MangaProvider
-	urls             []string
-	imageData        [][]byte
-	imageCache       map[int]imgrender.RenderedImage
-	cacheOrder       []int
-	currentIdx       int
-	startPage        int
-	downloadOrder    []int
-	downloadPos      int
-	downloading      map[int]struct{}
-	renderer         imgrender.Renderer
-	downloaded       int
-	total            int
-	step             readerStep
-	isLoading        bool
-	isPreloadingNext bool
-	preloadedChapID  string
-	preloadedURLs    []string
-	preloadedImages  [][]byte
-	flashMsg         string
-	err              error
-	width            int
-	height           int
+	mangaID           string
+	mangaTitle        string
+	chapterNumber     string
+	chapterID         string
+	allChapterIDs     []string
+	allChapterNumbers []string
+	chapterIndex      int
+	provider          api.MangaProvider
+	urls              []string
+	imageData         [][]byte
+	imageCache        map[int]imgrender.RenderedImage
+	cacheOrder        []int
+	currentIdx        int
+	startPage         int
+	downloadOrder     []int
+	downloadPos       int
+	downloading       map[int]struct{}
+	renderer          imgrender.Renderer
+	downloaded        int
+	total             int
+	step              readerStep
+	isLoading         bool
+	isPreloadingNext  bool
+	preloadedChapID   string
+	preloadedURLs     []string
+	preloadedImages   [][]byte
+	flashMsg          string
+	err               error
+	width             int
+	height            int
 }
 
 type readerStep int

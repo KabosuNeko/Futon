@@ -118,16 +118,21 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 	}
 }
 
-func chapterNavCmd(chapterID, mangaID, mangaTitle string, allChapterIDs []string, chapterIndex, startPage int) tea.Cmd {
+func chapterNavCmd(chapterID, mangaID, mangaTitle string, allChapterIDs, allChapterNumbers []string, chapterIndex, startPage int) tea.Cmd {
+	chapterNumber := ""
+	if chapterIndex >= 0 && chapterIndex < len(allChapterNumbers) {
+		chapterNumber = allChapterNumbers[chapterIndex]
+	}
 	return func() tea.Msg {
 		return ViewChapterMsg{
-			MangaID:        mangaID,
-			MangaTitle:     mangaTitle,
-			ChapterID:      chapterID,
-			ChapterNumber:  "",
-			AllChapterIDs:  allChapterIDs,
-			ChapterIndex:   chapterIndex,
-			StartPageIndex: startPage,
+			MangaID:           mangaID,
+			MangaTitle:        mangaTitle,
+			ChapterID:         chapterID,
+			ChapterNumber:     chapterNumber,
+			AllChapterIDs:     allChapterIDs,
+			AllChapterNumbers: allChapterNumbers,
+			ChapterIndex:      chapterIndex,
+			StartPageIndex:    startPage,
 		}
 	}
 }

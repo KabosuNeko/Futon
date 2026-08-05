@@ -24,3 +24,6 @@ vendor/
 
 # Local test downloads
 Downloads/
+
+# Local tooling
+.omo/
