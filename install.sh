@@ -86,6 +86,8 @@ tar -xzf "$FILENAME"
 # ---- Install ----
 echo "Installing futon to /usr/local/bin/ ..."
 chmod +x futon
+# /usr/local/bin may not exist on macOS (Apple Silicon), create it first
+sudo mkdir -p /usr/local/bin
 sudo mv futon /usr/local/bin/
 
 # ---- Cleanup ----
