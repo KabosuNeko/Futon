@@ -7,6 +7,7 @@ import (
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -123,3 +124,81 @@ func TestSearchSlashCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchViewSplitLayoutAndPreview(t *testing.T) {
+	m := testSearchModel()
+	m.width = 100
+	m.height = 24
+	m.results = []models.Manga{
+		{
+			ID:       "m1",
+			Title:    "One Piece",
+			CoverURL: "https://example.com/onepiece.jpg",
+			Provider: "MangaDex",
+			Author:   "Eiichiro Oda",
+			Year:     "1997",
+			Status:   "ongoing",
+			Genres:   []string{"Action", "Adventure", "Comedy"},
+		},
+		{ID: "m2", Title: "Bleach", CoverURL: "https://example.com/bleach.jpg", Provider: "OTruyen"},
+	}
+	m.currentQuery = "shonen"
+	m.cursor = 0
+
+	view := m.View()
+	if !strings.Contains(view, "Chi tiết manga") {
+		t.Errorf("expected preview pane header in split view")
+	}
+	if !strings.Contains(view, "One Piece") {
+		t.Errorf("expected focused manga title in preview pane")
+	}
+	if !strings.Contains(view, "MangaDex") {
+		t.Errorf("expected provider badge in preview pane")
+	}
+	if !strings.Contains(view, "Eiichiro Oda") {
+		t.Errorf("expected author in preview pane")
+	}
+	if !strings.Contains(view, "1997") {
+		t.Errorf("expected year in preview pane")
+	}
+	if !strings.Contains(view, "Đang ra") {
+		t.Errorf("expected status in preview pane")
+	}
+	if !strings.Contains(view, "[Action]") {
+		t.Errorf("expected genre badge in preview pane")
+	}
+}
+
+func TestCoverDebounceAndRenderMsg(t *testing.T) {
+	m := testSearchModel()
+	m.results = []models.Manga{
+		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "OTruyen"},
+	}
+	m.cursor = 0
+
+	// Trigger coverRenderedMsg
+	rendered := imgrender.RenderedImage{
+		EscapeSequence: "\x1b_Gtest\x1b\\",
+		WidthPx:        100,
+		HeightPx:       150,
+	}
+	msg := coverRenderedMsg{
+		mangaID:  "m1",
+		coverURL: "https://example.com/cover.jpg",
+		rendered: rendered,
+	}
+
+	newM, _ := m.Update(msg)
+	rm := newM.(SearchModel)
+
+	if rm.currentCover == nil {
+		t.Fatalf("expected currentCover to be set")
+	}
+	if rm.currentCover.EscapeSequence != "\x1b_Gtest\x1b\\" {
+		t.Errorf("unexpected EscapeSequence: %s", rm.currentCover.EscapeSequence)
+	}
+	if _, cached := rm.coverCache["https://example.com/cover.jpg"]; !cached {
+		t.Errorf("expected cover to be in coverCache")
+	}
+}
+

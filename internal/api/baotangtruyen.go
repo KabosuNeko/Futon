@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/PuerkitoBio/goquery"
@@ -23,7 +24,7 @@ type BaoTangTruyenProvider struct {
 func NewBaoTangTruyenProvider() *BaoTangTruyenProvider {
 	return &BaoTangTruyenProvider{
 		baseURL:    strings.TrimRight(baotangtruyenBaseURL, "/"),
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: providerTimeout},
 	}
 }
 
@@ -32,23 +33,42 @@ func (p *BaoTangTruyenProvider) Name() string {
 }
 
 func (p *BaoTangTruyenProvider) baotangtruyenGet(endpoint string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("tạo request: %w", err)
-	}
-	req.Header.Set("User-Agent", baotangtruyenBrowserUA)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+	client := ensureClient(p.httpClient)
+	var lastErr error
+	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("tạo request: %w", err)
+		}
+		req.Header.Set("User-Agent", baotangtruyenBrowserUA)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
 
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("gọi HTTP: %w", err)
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("gọi HTTP: %w", err)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+		return resp, nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return resp, nil
+	return nil, lastErr
 }
 
 func (p *BaoTangTruyenProvider) resolveURL(path string) string {

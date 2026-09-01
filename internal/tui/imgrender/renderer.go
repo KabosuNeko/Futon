@@ -13,6 +13,7 @@ type RenderedImage struct {
 
 type Renderer interface {
 	Render(imgData []byte) (RenderedImage, error)
+	RenderInBox(imgData []byte, cols, rows int) (RenderedImage, error)
 }
 
 func New() Renderer {

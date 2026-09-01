@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 )
@@ -33,22 +34,40 @@ func (m *MangaDexProvider) SetLang(lang string) {
 }
 
 func mangadexGet(endpoint string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("tạo request: %w", err)
-	}
-	req.Header.Set("User-Agent", defaultUserAgent)
+	client := ensureClient(http.DefaultClient)
+	var lastErr error
+	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("tạo request: %w", err)
+		}
+		req.Header.Set("User-Agent", defaultUserAgent)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("gọi API: %w", err)
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("gọi API: %w", err)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
+		}
+		return resp, nil
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
-	}
-	return resp, nil
+	return nil, lastErr
 }
 
 func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
@@ -57,7 +76,7 @@ func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
 
 	for {
 		endpoint := fmt.Sprintf(
-			"%s/manga?title=%s&limit=%d&offset=%d",
+			"%s/manga?title=%s&limit=%d&offset=%d&includes[]=cover_art&includes[]=author&includes[]=artist",
 			mangadexBaseURL, url.QueryEscape(query), mangadexSearchPageLimit, offset,
 		)
 

@@ -73,12 +73,13 @@ Experience improvements that do not change the underlying architecture.
 
 - [x] **MangaDex search limit increase** (`limit=5` → configurable/paginate) — 5 results was too few.
   - *Fix*: `Search()` paginates with an offset loop — each request `limit=100`, looping until `total` is reached (following the `FetchChapters` pattern); added `Total` to `MangaSearchResponse`; `mangadexBaseURL` became a package var for httptest testing. 4 pagination tests (multi-page, single-page, stop-at-total, HTTP error).
-  - **Reference**: `internal/api/mangadex.go`, `internal/api/mangadex_test.go`, `internal/models/manga.go`.
-- [ ] **Cover images in search** — search currently shows no cover art (OTruyen/MangaDex CoverURL empty).
-- [ ] **Retry / timeout for providers** — not present in the current interface; would absorb transient network errors.
-- [ ] **Per-provider loading indicator** — know which source is pending / has failed during multi-source search.
+- [x] **Cover images & modern split UI in search** — full cover art support across all 5 providers + split-pane layout.
+  - *Fix*: MangaDex eager loads cover art (`includes[]=cover_art` -> `256.jpg` CDN), OTruyen maps `thumb_url` via `APP_DOMAIN_CDN_IMAGE`, TruyenQQ/FoxTruyen/BaoTangTruyen support with Referer header; `FetchCoverBytes` helper in `provider.go`; `RenderInBox` scaling in `imgrender`; modern split-pane UI with preview pane in `search_view.go`, 150ms debounced cover loading, and LRU cover cache in `search.go`.
+  - **Reference**: `internal/api/`, `internal/tui/search_view.go`, `internal/tui/search.go`, `internal/tui/imgrender/`.
+- [x] **Retry / timeout for providers** — 10s timeout + 2 retries on network/5xx with incremental backoff (`provider.go`, `source.go`, all providers).
+- [x] **Per-provider loading indicator** — searching shows provider names, partial failures show warning with counts (`source.go`, `search.go`, `search_view.go`).
 - [ ] **`/lang` applied to other providers** — currently MangaDex only; HTML sites could map languages.
-- [ ] **Better quick jump** — currently exact `Number` match only; add fuzzy/prefix support.
+- [x] **Better quick jump** — fuzzy matching: exact → prefix → substring → title fallback (`chapter_view.go`).
 
 ---
 

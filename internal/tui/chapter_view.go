@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
@@ -21,7 +22,7 @@ func (m ChapterListModel) View() string {
 
 	headerStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("205")).
+		BorderForeground(lipgloss.Color("6")).
 		Padding(0, 2).
 		Bold(true)
 
@@ -34,26 +35,27 @@ func (m ChapterListModel) View() string {
 	var body string
 	if m.err != nil {
 		errStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
+			Foreground(lipgloss.Color("1")).
 			MarginTop(1)
 		body = lipgloss.JoinVertical(lipgloss.Center, body,
 			errStyle.Render(fmt.Sprintf("Lỗi: %v", m.err)))
 	} else if m.loading {
 		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")).
+			Foreground(lipgloss.Color("3")).
 			MarginTop(1)
 		body = lipgloss.JoinVertical(lipgloss.Center, body,
 			loadingStyle.Render("Đang tải danh sách chapter..."))
 	} else if len(m.chapters) == 0 {
 		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
+			Foreground(lipgloss.Color("8")).
 			MarginTop(1)
 		body = lipgloss.JoinVertical(lipgloss.Center, body,
 			emptyStyle.Render("Không có chapter nào."))
 	} else {
 		normalStyle := lipgloss.NewStyle().MarginTop(0)
 		selectedStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("51")).
+			Foreground(lipgloss.Color("6")).
+			Bold(true).
 			MarginTop(0)
 
 		visible := m.visibleItems()
@@ -84,7 +86,7 @@ func (m ChapterListModel) View() string {
 	}
 
 	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+		Foreground(lipgloss.Color("8"))
 
 	var hint string
 	if m.inputBuffer != "" {
@@ -100,15 +102,41 @@ func (m ChapterListModel) View() string {
 		return placed
 	}
 	flashStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")).
+		Foreground(lipgloss.Color("3")).
 		Bold(true)
 	flash := flashStyle.Render(m.flashMsg)
 	return placed + "\n" + flash
 }
 
 func (m *ChapterListModel) jumpToChapter(number string) bool {
+	q := strings.TrimSpace(number)
+	if q == "" {
+		return false
+	}
 	for i, ch := range m.chapters {
-		if ch.Number == number {
+		if ch.Number == q {
+			m.cursor = i
+			m.adjustViewport()
+			return true
+		}
+	}
+	for i, ch := range m.chapters {
+		if strings.HasPrefix(ch.Number, q) {
+			m.cursor = i
+			m.adjustViewport()
+			return true
+		}
+	}
+	for i, ch := range m.chapters {
+		if strings.Contains(ch.Number, q) {
+			m.cursor = i
+			m.adjustViewport()
+			return true
+		}
+	}
+	lowerQ := strings.ToLower(q)
+	for i, ch := range m.chapters {
+		if ch.Number == "" && strings.Contains(strings.ToLower(ch.Title), lowerQ) {
 			m.cursor = i
 			m.adjustViewport()
 			return true
