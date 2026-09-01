@@ -26,7 +26,7 @@ type TruyenQQProvider struct {
 
 func NewTruyenQQProvider() *TruyenQQProvider {
 	p := &TruyenQQProvider{
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: providerTimeout},
 		baseURL:    truyenqqPrimaryURL,
 	}
 	_ = p.tryDomain(truyenqqPrimaryURL) ||

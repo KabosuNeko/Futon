@@ -8,6 +8,7 @@ import (
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -32,6 +33,10 @@ type SearchModel struct {
 	currentQuery     string
 	flashMsg         string
 
+	searchingProviders []string
+	providerCounts     map[string]int
+	providerErrors     map[string]string
+
 	filterQuery     string
 	chapterLanguage string
 	systemMsg       string
@@ -40,6 +45,12 @@ type SearchModel struct {
 	providerToggles []bool
 	showingSources  bool
 	sourceCursor    int
+
+	renderer       imgrender.Renderer
+	coverCache     map[string]imgrender.RenderedImage
+	currentCover   *imgrender.RenderedImage
+	currentCoverID string
+	coverLoading   bool
 }
 
 func NewSearchModel(providers []api.MangaProvider) SearchModel {
@@ -58,6 +69,8 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		chapterLanguage: "vi",
 		providers:       providers,
 		providerToggles: toggles,
+		renderer:        imgrender.New(),
+		coverCache:      make(map[string]imgrender.RenderedImage),
 	}
 }
 
@@ -208,23 +221,70 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.isSearching = true
+			m.err = nil
+			m.searchingProviders = m.activeProviderNames()
+			m.providerCounts = nil
+			m.providerErrors = nil
 			return m, tea.Batch(cmd, api.GlobalSearchCmd(active, msg.query))
 		}
 		return m, nil
 
 	case api.MangaSearchResultMsg:
 		m.isSearching = false
-		if msg.Err != nil {
-			m.err = msg.Err
+		m.searchingProviders = nil
+		m.providerCounts = msg.ProviderCounts
+		m.providerErrors = msg.ProviderErrors
+		if len(strings.TrimSpace(m.currentQuery)) < 3 {
 			return m, nil
 		}
-		if len(strings.TrimSpace(m.currentQuery)) < 3 {
+		if len(msg.Manga) == 0 && msg.Err != nil {
+			m.results = nil
+			m.err = msg.Err
+			m.currentCover = nil
+			m.currentCoverID = ""
+			m.coverLoading = false
 			return m, nil
 		}
 		m.results = msg.Manga
 		m.cursor = 0
 		m.viewportStart = 0
-		m.err = nil
+		if len(msg.Manga) > 0 && msg.Err != nil {
+			m.err = nil
+		} else {
+			m.err = msg.Err
+		}
+		coverCmd := m.updateFocusedCover()
+		return m, coverCmd
+
+	case coverDebounceMsg:
+		focused, ok := m.focusedManga()
+		if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+			boxW, boxH := m.previewBoxSize()
+			return m, fetchAndRenderCoverCmd(m.renderer, msg.mangaID, msg.coverURL, focused.Provider, boxW, boxH)
+		}
+		return m, nil
+
+	case coverRenderedMsg:
+		if msg.err == nil {
+			if m.coverCache == nil {
+				m.coverCache = make(map[string]imgrender.RenderedImage)
+			}
+			if len(m.coverCache) >= 50 {
+				m.coverCache = make(map[string]imgrender.RenderedImage)
+			}
+			m.coverCache[msg.coverURL] = msg.rendered
+			focused, ok := m.focusedManga()
+			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+				m.currentCover = &msg.rendered
+				m.coverLoading = false
+			}
+		} else {
+			focused, ok := m.focusedManga()
+			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+				m.currentCover = nil
+				m.coverLoading = false
+			}
+		}
 		return m, nil
 
 	case clearFlashMsg:
@@ -241,6 +301,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.adjustViewport()
+		coverCmd := m.updateFocusedCover()
+		return m, coverCmd
 	}
 
 	oldVal := m.input.Value()
@@ -268,12 +330,14 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewportStart = 0
 			m.isSearching = false
 			m.err = nil
+			m.providerCounts = nil
+			m.providerErrors = nil
+			m.searchingProviders = nil
 			return m, cmd
 		}
 
 		m.currentQuery = trimmed
 		if len(trimmed) >= 3 {
-			// 300ms debounce — fast enough to feel responsive, slow enough to not DDoS APIs.
 			return m, tea.Batch(cmd, debounceSearch(trimmed, 300*time.Millisecond))
 		}
 		m.results = nil
@@ -281,6 +345,9 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewportStart = 0
 		m.isSearching = false
 		m.err = nil
+		m.providerCounts = nil
+		m.providerErrors = nil
+		m.searchingProviders = nil
 	}
 
 	return m, cmd
@@ -288,7 +355,14 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m SearchModel) listVisibleItems() int {
 	h := m.height
-	visible := h - searchUIOffset
+	boxH := h - 8
+	if boxH > 22 {
+		boxH = 22
+	}
+	if boxH < 6 {
+		boxH = 6
+	}
+	visible := boxH - 4
 	if visible < 1 {
 		visible = 1
 	}
@@ -320,3 +394,123 @@ func (m *SearchModel) adjustViewport() {
 		m.viewportStart = total - 1
 	}
 }
+
+func (m SearchModel) focusedManga() (manga models.Manga, ok bool) {
+	if m.showingSources {
+		return models.Manga{}, false
+	}
+	if m.showingFavorites {
+		indices := m.filteredFavIndices()
+		if len(indices) > 0 && m.cursor < len(indices) {
+			fav := m.favorites[indices[m.cursor]]
+			return models.Manga{
+				ID:       fav.MangaID,
+				Title:    fav.Title,
+				Provider: fav.Provider,
+			}, true
+		}
+		return models.Manga{}, false
+	}
+	if m.showingHistory {
+		indices := m.filteredHistoryIndices()
+		if len(indices) > 0 && m.cursor < len(indices) {
+			h := m.history[indices[m.cursor]]
+			t := h.MangaTitle
+			if t == "" {
+				t = h.MangaID
+			}
+			return models.Manga{
+				ID:       h.MangaID,
+				Title:    t,
+				Provider: h.Provider,
+			}, true
+		}
+		return models.Manga{}, false
+	}
+	if len(m.results) > 0 && m.cursor < len(m.results) {
+		res := m.results[m.cursor]
+		return res, true
+	}
+	return models.Manga{}, false
+}
+
+func (m *SearchModel) updateFocusedCover() tea.Cmd {
+	focused, ok := m.focusedManga()
+	if !ok || focused.CoverURL == "" {
+		m.currentCover = nil
+		m.currentCoverID = ""
+		m.coverLoading = false
+		return nil
+	}
+	if m.currentCoverID == focused.ID && (m.currentCover != nil || m.coverLoading) {
+		return nil
+	}
+	m.currentCoverID = focused.ID
+	if img, cached := m.coverCache[focused.CoverURL]; cached {
+		m.currentCover = &img
+		m.coverLoading = false
+		return nil
+	}
+	m.currentCover = nil
+	m.coverLoading = true
+	return debounceCover(focused.ID, focused.CoverURL, focused.Provider, 150*time.Millisecond)
+}
+
+func (m SearchModel) previewPaneWidth() int {
+	if m.width < 80 {
+		return 0
+	}
+	w := 42
+	if m.width >= 120 {
+		w = 50
+	}
+	if m.width >= 150 {
+		w = 56
+	}
+	if w > m.width-50 {
+		w = m.width - 50
+	}
+	return w
+}
+
+func (m SearchModel) listPaneWidth() int {
+	if m.width < 80 {
+		return m.width - 4
+	}
+	w := 62
+	if m.width >= 120 {
+		w = 72
+	}
+	if m.width >= 150 {
+		w = 80
+	}
+	maxW := m.width - m.previewPaneWidth() - 8
+	if w > maxW {
+		w = maxW
+	}
+	if w < 36 {
+		w = 36
+	}
+	return w
+}
+
+func (m SearchModel) previewBoxSize() (cols, rows int) {
+	if m.width < 80 {
+		return 0, 0
+	}
+	previewW := m.previewPaneWidth()
+	cols = previewW - 8
+	boxH := m.listVisibleItems() + 4
+	rows = boxH - 11
+	if cols < 12 {
+		cols = 12
+	}
+	if rows < 4 {
+		rows = 4
+	}
+	if rows > 14 {
+		rows = 14
+	}
+	return cols, rows
+}
+

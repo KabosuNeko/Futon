@@ -30,10 +30,10 @@ _Phase 1 tech debt is fully resolved — the project is in a stable state. See t
 | ID | Task | Ref | Status |
 |----|------|-----|--------|
 | T-201 | MangaDex search: raise limit 5 → configurable/paginate | `internal/api/mangadex.go` | [x] |
-| T-202 | Show cover images in search | `internal/tui/search_view.go`, providers | [ ] |
-| T-203 | Retry/timeout for provider calls | `internal/api/provider.go`, `source.go` | [ ] |
-| T-204 | Per-provider loading/error indicator in search | `internal/api/source.go` (GlobalSearchMsg), `internal/tui/search.go` | [ ] |
-| T-205 | Quick jump: prefix/fuzzy instead of exact match | `internal/tui/chapter.go` | [ ] |
+| T-202 | Show cover images in search & modern split UI | `internal/tui/search_view.go`, `search.go`, `imgrender`, providers | [x] |
+| T-203 | Retry/timeout for provider calls | `internal/api/provider.go`, `source.go`, `*truyen.go` | [x] |
+| T-204 | Per-provider loading/error indicator in search | `internal/api/source.go` (GlobalSearchMsg), `internal/tui/search.go`, `search_view.go` | [x] |
+| T-205 | Quick jump: prefix/fuzzy instead of exact match | `internal/tui/chapter_view.go` | [x] |
 
 ---
 
@@ -42,6 +42,10 @@ _Phase 1 tech debt is fully resolved — the project is in a stable state. See t
 ### Phase 2 — UX & features
 
 - [x] T-201: MangaDex search pagination — `Search()` loops by offset, each request `limit=100`, stops when `total` is reached; added `Total` to `MangaSearchResponse`; `mangadexBaseURL` became a package var for httptest testing (`internal/api/mangadex_test.go`, 4 tests).
+- [x] T-202: Cover images & modern split UI — support cover URL parsing for MangaDex & OTruyen (all 5 sources now have CoverURL), `FetchCoverBytes` helper with provider-tailored referer/user-agent, `RenderInBox` scaling in `imgrender`, modern split-pane UI with preview pane in `search_view.go`, 150ms debounced cover loading, and LRU cover cache in `search.go`.
+- [x] T-203: Provider retry/timeout — 10s timeout + 2 retries on network/5xx with 500ms incremental backoff; `ensureClient` helper; applied to `httpGet` + all `*Get` helpers and `New*` constructors (`provider.go`, `mangadex.go`, `otruyen.go`, `truyenqq.go`, `baotangtruyen.go`, `foxtruyen.go`).
+- [x] T-204: Per-provider loading/error indicator — searching shows provider names ("Đang tìm trên X, Y..."); `GlobalSearchCmd` returns `ProviderCounts`/`ProviderErrors`; partial success shows results + warning line ("X lỗi - hiển thị N kết quả từ M/K nguồn"); full failure shows combined error.
+- [x] T-205: Quick jump fuzzy — `jumpToChapter` now matches exact → prefix → substring on `Number`, then title fallback for title-only chapters (`chapter_view.go`).
 
 ### Phase 1 — Stability & Tech debt (recently completed)
 

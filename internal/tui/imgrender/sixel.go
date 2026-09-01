@@ -9,7 +9,11 @@ import (
 type sixelRenderer struct{}
 
 func (s sixelRenderer) Render(imgData []byte) (RenderedImage, error) {
-	img, err := decodeAndScale(imgData)
+	return s.RenderInBox(imgData, 0, 0)
+}
+
+func (s sixelRenderer) RenderInBox(imgData []byte, cols, rows int) (RenderedImage, error) {
+	img, err := decodeAndScaleInBox(imgData, cols, rows)
 	if err != nil {
 		return RenderedImage{}, err
 	}

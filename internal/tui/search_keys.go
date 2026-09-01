@@ -44,9 +44,12 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			if m.sourceCursor > 0 {
 				m.sourceCursor--
 			}
+			return m, nil, true
 		} else if m.cursor > 0 {
 			m.cursor--
 			m.adjustViewport()
+			coverCmd := m.updateFocusedCover()
+			return m, coverCmd, true
 		}
 		return m, nil, true
 
@@ -56,18 +59,26 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			if m.sourceCursor < len(indices)-1 {
 				m.sourceCursor++
 			}
-		} else {
-			switch {
-			case m.showingFavorites && m.cursor < len(m.filteredFavIndices())-1:
-				m.cursor++
-				m.adjustViewport()
-			case m.showingHistory && m.cursor < len(m.filteredHistoryIndices())-1:
-				m.cursor++
-				m.adjustViewport()
-			case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
-				m.cursor++
-				m.adjustViewport()
-			}
+			return m, nil, true
+		}
+		moved := false
+		switch {
+		case m.showingFavorites && m.cursor < len(m.filteredFavIndices())-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		case m.showingHistory && m.cursor < len(m.filteredHistoryIndices())-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		}
+		if moved {
+			coverCmd := m.updateFocusedCover()
+			return m, coverCmd, true
 		}
 		return m, nil, true
 

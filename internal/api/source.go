@@ -22,25 +22,27 @@ func GlobalSearchCmd(providers []MangaProvider, query string) tea.Cmd {
 		var wg sync.WaitGroup
 		allResults := make([]models.Manga, 0)
 		var errs []string
+		counts := make(map[string]int)
+		perr := make(map[string]string)
 
 		for _, p := range providers {
 			wg.Add(1)
 			go func(provider MangaProvider) {
 				defer wg.Done()
 				results, err := provider.Search(query)
+				mu.Lock()
+				defer mu.Unlock()
 				if err != nil {
-					mu.Lock()
 					errs = append(errs, fmt.Sprintf("%s: %v", provider.Name(), err))
-					mu.Unlock()
+					perr[provider.Name()] = err.Error()
+					counts[provider.Name()] = 0
 					return
 				}
-				mu.Lock()
 				for i := range results {
-					results[i].Title = fmt.Sprintf("%s (%s)", results[i].Title, strings.ToLower(provider.Name()))
 					results[i].Provider = provider.Name()
 				}
+				counts[provider.Name()] = len(results)
 				allResults = append(allResults, results...)
-				mu.Unlock()
 			}(p)
 		}
 
@@ -50,7 +52,7 @@ func GlobalSearchCmd(providers []MangaProvider, query string) tea.Cmd {
 		if len(errs) > 0 {
 			combinedErr = fmt.Errorf("%s", strings.Join(errs, "; "))
 		}
-		return MangaSearchResultMsg{Manga: allResults, Err: combinedErr}
+		return MangaSearchResultMsg{Manga: allResults, Err: combinedErr, ProviderCounts: counts, ProviderErrors: perr}
 	}
 }
 

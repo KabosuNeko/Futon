@@ -19,7 +19,11 @@ var (
 type kittyRenderer struct{}
 
 func (r kittyRenderer) Render(imgData []byte) (RenderedImage, error) {
-	img, err := decodeAndScale(imgData)
+	return r.RenderInBox(imgData, 0, 0)
+}
+
+func (r kittyRenderer) RenderInBox(imgData []byte, cols, rows int) (RenderedImage, error) {
+	img, err := decodeAndScaleInBox(imgData, cols, rows)
 	if err != nil {
 		return RenderedImage{}, err
 	}
@@ -62,11 +66,11 @@ func (r kittyRenderer) chunkedPayload(w, h int, b64 string) string {
 }
 
 func (r kittyRenderer) chunk(w, h int, data, m string) string {
-	return kittyStart + "a=T,f=100,s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ",m=" + m + ";" + data + kittyST
+	return kittyStart + "a=T,f=100,i=1,C=1,s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ",m=" + m + ";" + data + kittyST
 }
 
 func (r kittyRenderer) continuationChunk(data, m string) string {
-	return kittyStart + "m=" + m + ";" + data + kittyST
+	return kittyStart + "i=1,m=" + m + ";" + data + kittyST
 }
 
 func splitChunks(s string, chunkSize int) []string {
