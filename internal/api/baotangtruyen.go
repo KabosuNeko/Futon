@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/PuerkitoBio/goquery"
@@ -23,7 +24,7 @@ type BaoTangTruyenProvider struct {
 func NewBaoTangTruyenProvider() *BaoTangTruyenProvider {
 	return &BaoTangTruyenProvider{
 		baseURL:    strings.TrimRight(baotangtruyenBaseURL, "/"),
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: providerTimeout},
 	}
 }
 
@@ -32,23 +33,42 @@ func (p *BaoTangTruyenProvider) Name() string {
 }
 
 func (p *BaoTangTruyenProvider) baotangtruyenGet(endpoint string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("tạo request: %w", err)
-	}
-	req.Header.Set("User-Agent", baotangtruyenBrowserUA)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+	client := ensureClient(p.httpClient)
+	var lastErr error
+	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("tạo request: %w", err)
+		}
+		req.Header.Set("User-Agent", baotangtruyenBrowserUA)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
 
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("gọi HTTP: %w", err)
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("gọi HTTP: %w", err)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+		return resp, nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return resp, nil
+	return nil, lastErr
 }
 
 func (p *BaoTangTruyenProvider) resolveURL(path string) string {
@@ -103,6 +123,135 @@ func (p *BaoTangTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 
 	if mangas == nil {
 		mangas = []models.Manga{}
+	}
+	return mangas, nil
+}
+
+func (p *BaoTangTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
+	if page < 1 {
+		page = 1
+	}
+	endpoint := p.baseURL + fmt.Sprintf("/truyen-moi?page=%d", page)
+
+	resp, err := p.baotangtruyenGet(endpoint)
+	if err != nil {
+		resp, err = p.baotangtruyenGet(p.baseURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	var mangas []models.Manga
+	doc.Find("div.items > div.row > div.item, .list-stories .item, .items .item").Each(func(i int, s *goquery.Selection) {
+		linkEl := s.Find("figcaption h3 a, h3 a, a.title").First()
+		if linkEl.Length() == 0 {
+			linkEl = s.Find("a").First()
+		}
+		href, exists := linkEl.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		title := strings.TrimSpace(linkEl.Text())
+		if title == "" {
+			title = strings.TrimSpace(s.Find(".title").Text())
+		}
+		if title == "" {
+			return
+		}
+
+		cover := ""
+		s.Find(".image a img, img").Each(func(_ int, img *goquery.Selection) {
+			if v, ok := foxImgAttr(img); ok && cover == "" {
+				cover = v
+			}
+		})
+
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    title,
+			CoverURL: cover,
+		})
+	})
+
+	if len(mangas) == 0 {
+		return p.Search("")
+	}
+	return mangas, nil
+}
+
+func (p *BaoTangTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+
+	var endpoint string
+	if opts.Genre > 0 {
+		genres := []string{"", "action", "adventure", "comedy", "drama", "fantasy", "isekai", "romance", "shounen", "manhwa"}
+		if opts.Genre < len(genres) {
+			endpoint = p.baseURL + fmt.Sprintf("/the-loai/%s?page=%d", genres[opts.Genre], page)
+		}
+	} else if opts.Status == 2 {
+		endpoint = p.baseURL + fmt.Sprintf("/truyen-hoan-thanh?page=%d", page)
+	} else if opts.Sort == 1 || opts.Sort == 2 {
+		endpoint = p.baseURL + fmt.Sprintf("/truyen-hot?page=%d", page)
+	} else {
+		return p.FetchLatest(page)
+	}
+
+	resp, err := p.baotangtruyenGet(endpoint)
+	if err != nil {
+		return p.FetchLatest(page)
+	}
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	var mangas []models.Manga
+	doc.Find("div.items > div.row > div.item, .list-stories .item, .items .item").Each(func(i int, s *goquery.Selection) {
+		linkEl := s.Find("figcaption h3 a, h3 a, a.title").First()
+		if linkEl.Length() == 0 {
+			linkEl = s.Find("a").First()
+		}
+		href, exists := linkEl.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		title := strings.TrimSpace(linkEl.Text())
+		if title == "" {
+			title = strings.TrimSpace(s.Find(".title").Text())
+		}
+		if title == "" {
+			return
+		}
+
+		cover := ""
+		s.Find(".image a img, img").Each(func(_ int, img *goquery.Selection) {
+			if v, ok := foxImgAttr(img); ok && cover == "" {
+				cover = v
+			}
+		})
+
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    title,
+			CoverURL: cover,
+		})
+	})
+
+	if len(mangas) == 0 {
+		return p.FetchLatest(page)
 	}
 	return mangas, nil
 }

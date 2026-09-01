@@ -4,7 +4,7 @@ Terminal manga reader written in **Go** + **Bubble Tea**, rendering images direc
 
 > This document defines Futon's product requirements and scope boundaries.
 > Any behavior change must be reflected here before merge.
-> See also: `AGENTS.md` (architecture), `ROADMAP.md` (roadmap), `TASKS.md` (current work).
+> See also: `AGENTS.md` (architecture).
 
 ---
 
@@ -33,7 +33,6 @@ Futon is a TUI (terminal user interface) application that lets users:
 - Manual bulk page downloads (only 1 page per `ctrl+d`).
 - User accounts, cloud sync, follow/notifications.
 - Comments, ratings, in-app reviews.
-- Rate limiting / retry / backoff for providers (does not exist in the current interface).
 
 ## 4. Functional Requirements
 
@@ -42,10 +41,12 @@ Futon is a TUI (terminal user interface) application that lets users:
 - **FR-S1**: Typing ≥ 3 characters on the search screen triggers a search after a **300ms debounce**; fewer than 3 characters does not trigger a search.
 - **FR-S2**: Search runs **concurrently across all enabled providers** (1 goroutine per provider, waits via WaitGroup).
 - **FR-S3**: Each source's results carry a `Provider` and the title is rewritten to `"Title (sourcename)"` (lowercase source name).
-- **FR-S4**: If one provider fails, results from the other providers are still returned (partial success); errors are joined into a single message with `"; "`.
+- **FR-S4**: If one provider fails, results from the other providers are still returned (partial success); errors are joined into a single message with `"; "` and a per-provider warning line shows which sources failed while still displaying successful results.
 - **FR-S5**: If **no source is enabled**, every search action shows the error "Chọn ít nhất một nguồn trong /src".
 - **FR-S6**: Input starting with `/` resets previous results and does not search (reserved for slash commands).
 - **FR-S7**: Stale search results are discarded if the query has changed (stale-response guard).
+- **FR-S8**: While searching, the status line shows the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ..."); after completion a subtle warning lists any failed providers with counts.
+- **FR-S9**: Provider HTTP calls have a **10s timeout** and retry up to **2 times** on network errors or 5xx responses with incremental backoff.
 
 #### Per-provider limits
 - **MangaDex**: search is **paginated** — each request uses `limit=100`, looping by offset until `total` is reached (following the `FetchChapters` pattern); no longer capped at 5 results. Title priority `en` → `ja-ro` → any language, fallback "Không rõ tiêu đề".
@@ -80,7 +81,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 ### 4.5 Chapter list
 
 - **FR-L1**: Shows the manga's chapter list ordered from chapter 1 (HTML sources reverse newest-first back to ascending).
-- **FR-L2**: **Quick jump** — type a number + `enter` to jump to that chapter (matched by `Number`); no match → flash "Không tìm thấy chapter X".
+- **FR-L2**: **Quick jump** — type a number + `enter` to jump to that chapter; matching is fuzzy in priority: exact `Number` → prefix `Number` → substring `Number` → title contains query; no match → flash "Không tìm thấy chapter X".
 - **FR-L3**: `esc` while typing a number clears the input buffer; `esc` with no input returns to search.
 - **FR-L4**: HTML providers returning chapters **without a Number** fall back to displaying the Title.
 - **FR-L5**: MangaDex chapter feed is filtered by the configured language (`/lang`), auto-paginated 500 chapters per request.
@@ -91,7 +92,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 - **FR-R2**: **Continuous chapter switching**: on the last page, `→` goes to the next chapter; on the first page, `←` goes to the previous chapter — no need to return to the list.
 - **FR-R3**: Chapter preload: reaching page `total-3` automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
 - **FR-R4**: LRU image cache of **20 rendered images** (key = page index), evicts the oldest page; reset when entering a new chapter. Pre-renders at most 3 pages ahead that are not yet cached.
-- **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon_Downloads/`, filename `{Title}_Ch{ChapterNumber}_Pg{page}.jpg`, sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
+- **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon/`, filename `{Title}_Ch{ChapterNumber}_Pg{page}.jpg`, sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
 - **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind.
 - **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`).
 - **FR-R8**: Terminal resize → re-render the current page.
@@ -143,7 +144,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 |---|---|---|
 | Favorites + source toggles | `~/.config/futon/userdata.json` | JSON: `sources[]`, `favorites[]` |
 | Reading history | `~/.config/futon/history.json` | JSON: map by MangaID |
-| Downloaded images | `~/Downloads/Futon_Downloads/` | JPG |
+| Downloaded images | `~/Downloads/Futon/` | JPG |
 
 - **Migration**: on first run after upgrade, if `userdata.json` does not exist, old `favorites.json` + `sources.json` are auto-merged into `userdata.json` and the 2 old files are deleted (one-time).
 - Source toggles are stored by **provider name**; all enabled by default.
@@ -156,7 +157,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 
 ## 8. Architecture Constraints
 
-- `internal/api`: `MangaProvider` interface (`Name`, `Search`, `FetchChapters`, `FetchPages`) + `tea.Cmd` wrappers. **No** context/retry/rate-limit at the interface.
+- `internal/api`: `MangaProvider` interface (`Name`, `Search`, `FetchChapters`, `FetchPages`) + `tea.Cmd` wrappers. Provider HTTP clients have 10s timeout and 2-retry backoff on transient failures.
 - `internal/tui`: Bubble Tea, `AppModel` router (search → chapters → reader), navigation messages `ViewMangaMsg` / `ViewChapterMsg` / `BackToSearchMsg` / `BackToChaptersMsg`.
 - `internal/storage`: all persistence goes through `userdata.go` (merged) or `history.go` (debounced).
 - Manga ID is an **opaque string** — slug (OTruyen), UUID (MangaDex), URL (HTML providers) — its format must not be assumed.

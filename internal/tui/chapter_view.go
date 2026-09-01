@@ -2,10 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 const chapterUIOffset = 4
@@ -19,96 +21,221 @@ func (m ChapterListModel) View() string {
 		return "Loading..."
 	}
 
-	headerStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("205")).
-		Padding(0, 2).
+	boxW := min(76, max(36, w-8))
+	visible := m.visibleItems()
+	boxH := visible + 4
+
+	titleText := m.mangaTitle
+	if titleText == "" {
+		titleText = "Danh sách Chapter"
+	}
+	cleanedTitle := titleText
+	if m.provider != nil {
+		cleanedTitle = cleanTitle(titleText, m.provider.Name())
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("2"))
+
+	var headerParts []string
+	headerParts = append(headerParts, titleStyle.Render("󰈙 "+cleanedTitle))
+	if m.provider != nil && m.provider.Name() != "" {
+		headerParts = append(headerParts, providerBadge(m.provider.Name()))
+	}
+	headerLine := strings.Join(headerParts, "  ")
+
+	var subHeader string
+	if m.inputBuffer != "" {
+		jumpStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("3")).
+			Padding(0, 1).
+			Foreground(lipgloss.Color("3")).
+			Bold(true)
+		subHeader = jumpStyle.Render(fmt.Sprintf("󰅂 Nhảy đến Chapter: %s█", m.inputBuffer))
+	}
+
+	headerElements := []string{headerLine}
+	if subHeader != "" {
+		headerElements = append(headerElements, subHeader)
+	}
+	headerNode := lipgloss.JoinVertical(lipgloss.Center, headerElements...)
+
+	cardHeaderStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("6"))
+
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("6")).
 		Bold(true)
 
-	headerText := m.mangaTitle
-	if headerText == "" {
-		headerText = "Danh sách Chapter"
-	}
-	header := headerStyle.Render(headerText)
+	normalStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("7"))
 
-	var body string
+	historyBadgeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("3")).
+		Italic(true)
+
+	var contentLines []string
+	contentLines = append(contentLines, cardHeaderStyle.Render(fmt.Sprintf("󰋑 Danh sách chapter (%d)", len(m.chapters))))
+	contentLines = append(contentLines, dividerStyle.Render(strings.Repeat("─", max(1, boxW-4))))
+
 	if m.err != nil {
 		errStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			MarginTop(1)
-		body = lipgloss.JoinVertical(lipgloss.Center, body,
-			errStyle.Render(fmt.Sprintf("Lỗi: %v", m.err)))
+			Foreground(lipgloss.Color("1")).
+			Bold(true)
+		contentLines = append(contentLines, errStyle.Render(fmt.Sprintf("󰅚 Lỗi: %v", m.err)))
 	} else if m.loading {
 		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")).
-			MarginTop(1)
-		body = lipgloss.JoinVertical(lipgloss.Center, body,
-			loadingStyle.Render("Đang tải danh sách chapter..."))
+			Foreground(lipgloss.Color("3")).
+			Italic(true)
+		contentLines = append(contentLines, loadingStyle.Render(" Đang tải danh sách chapter..."))
 	} else if len(m.chapters) == 0 {
 		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			MarginTop(1)
-		body = lipgloss.JoinVertical(lipgloss.Center, body,
-			emptyStyle.Render("Không có chapter nào."))
+			Foreground(lipgloss.Color("8")).
+			Italic(true)
+		contentLines = append(contentLines, emptyStyle.Render("󰅚 Không có chapter nào."))
 	} else {
-		normalStyle := lipgloss.NewStyle().MarginTop(0)
-		selectedStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("51")).
-			MarginTop(0)
+		history, hasHistory := storage.GetHistory(m.mangaID)
 
-		visible := m.visibleItems()
 		viewportEnd := m.viewportStart + visible
 		if viewportEnd > len(m.chapters) {
 			viewportEnd = len(m.chapters)
 		}
 
-		var lines []string
+		maxLineW := boxW - 4
 		for i := m.viewportStart; i < viewportEnd; i++ {
 			ch := m.chapters[i]
+			isCursor := i == m.cursor
+			isHistory := hasHistory && ch.ID == history.ChapterID
+
 			prefix := "  "
-			style := normalStyle
-			if i == m.cursor {
+			if isCursor {
 				prefix = "> "
-				style = selectedStyle
 			}
 
 			title := ch.Title
 			if title == "" {
 				title = "Không tiêu đề"
 			}
-			lines = append(lines,
-				style.Render(fmt.Sprintf("%sCh. %s - %s", prefix, ch.Number, title)),
-			)
+
+			chLabel := fmt.Sprintf("%sCh. %s - %s", prefix, ch.Number, title)
+			if isHistory {
+				badge := " [Đang đọc]"
+				availW := maxLineW - runewidth.StringWidth(badge)
+				if availW < 10 {
+					availW = 10
+				}
+				truncated := runewidth.Truncate(chLabel, availW, "...")
+				if isCursor {
+					contentLines = append(contentLines, selectedStyle.Render(truncated)+historyBadgeStyle.Render(badge))
+				} else {
+					contentLines = append(contentLines, normalStyle.Render(truncated)+historyBadgeStyle.Render(badge))
+				}
+			} else {
+				truncated := runewidth.Truncate(chLabel, maxLineW, "...")
+				if isCursor {
+					contentLines = append(contentLines, selectedStyle.Render(truncated))
+				} else {
+					contentLines = append(contentLines, normalStyle.Render(truncated))
+				}
+			}
 		}
-		body = lipgloss.JoinVertical(lipgloss.Left, lines...)
 	}
 
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+	innerW := max(1, boxW-4)
+	var paddedLines []string
+	for _, line := range contentLines {
+		lw := runewidth.StringWidth(line)
+		pad := innerW - lw
+		if pad > 0 {
+			line = line + strings.Repeat(" ", pad)
+		}
+		paddedLines = append(paddedLines, line)
+	}
+	for len(paddedLines) < boxH-2 {
+		paddedLines = append(paddedLines, strings.Repeat(" ", innerW))
+	}
 
-	var hint string
+	cardContent := lipgloss.JoinVertical(lipgloss.Left, paddedLines...)
+
+	cardBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("8")).
+		Padding(0, 1).
+		Width(boxW).
+		Height(boxH).
+		Render(cardContent)
+
+	var footer string
 	if m.inputBuffer != "" {
-		hint = fmt.Sprintf("Chuyển đến Chapter: %s█", m.inputBuffer)
+		footer = "[enter] Nhảy đến chapter  [esc] Hủy  [^c] Thoát"
 	} else {
-		hint = "↑/↓: chọn  |  esc: quay lại  |  ctrl+c: thoát  |  ctrl+f: yêu thích  |  gõ số + Enter: nhảy chapter"
+		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất chap  [ctrl+a] Xuất cả bộ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Center, header, body, hintStyle.Render(hint))
-	placed := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
+	footerNode := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render(footer)
 
-	if m.flashMsg == "" {
-		return placed
+	var elements []string
+	elements = append(elements, headerNode)
+	elements = append(elements, cardBox)
+	elements = append(elements, footerNode)
+
+	content := lipgloss.JoinVertical(lipgloss.Center, elements...)
+
+	contentH := lipgloss.Height(content)
+	topPad := max(0, (h-contentH)/2)
+
+	placed := lipgloss.PlaceHorizontal(w, lipgloss.Center, content)
+	if topPad > 0 {
+		placed = strings.Repeat("\n", topPad) + placed
 	}
-	flashStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226")).
-		Bold(true)
-	flash := flashStyle.Render(m.flashMsg)
-	return placed + "\n" + flash
+
+	if m.flashMsg != "" {
+		flashStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("3")).
+			Bold(true)
+		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
+	}
+
+	return placed
 }
 
 func (m *ChapterListModel) jumpToChapter(number string) bool {
+	q := strings.TrimSpace(number)
+	if q == "" {
+		return false
+	}
 	for i, ch := range m.chapters {
-		if ch.Number == number {
+		if ch.Number == q {
+			m.cursor = i
+			m.adjustViewport()
+			return true
+		}
+	}
+	for i, ch := range m.chapters {
+		if strings.HasPrefix(ch.Number, q) {
+			m.cursor = i
+			m.adjustViewport()
+			return true
+		}
+	}
+	for i, ch := range m.chapters {
+		if strings.Contains(ch.Number, q) {
+			m.cursor = i
+			m.adjustViewport()
+			return true
+		}
+	}
+	lowerQ := strings.ToLower(q)
+	for i, ch := range m.chapters {
+		if ch.Number == "" && strings.Contains(strings.ToLower(ch.Title), lowerQ) {
 			m.cursor = i
 			m.adjustViewport()
 			return true
@@ -139,9 +266,15 @@ func (m ChapterListModel) visibleItems() int {
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Rows > 0 {
 		h = ts.Rows
 	}
-	visible := h - chapterUIOffset
-	if visible < 1 {
-		visible = 1
+	visible := h - 10
+	if m.inputBuffer != "" {
+		visible -= 3
+	}
+	if visible < 4 {
+		visible = 4
+	}
+	if visible > 18 {
+		visible = 18
 	}
 	return visible
 }

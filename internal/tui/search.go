@@ -8,11 +8,16 @@ import (
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
+	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 const searchUIOffset = 9
+
+var filterStatusOptions = []string{"Tất cả", "Đang tiến hành", "Đã hoàn thành"}
+var filterSortOptions = []string{"Mới cập nhật", "Độ phổ biến", "Đánh giá cao", "Tên (A-Z)"}
+var filterGenreOptions = []string{"Tất cả", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Isekai", "Romance", "Shounen", "Webtoons / Manhwa"}
 
 type SearchModel struct {
 	input            textinput.Model
@@ -23,6 +28,12 @@ type SearchModel struct {
 	history          []storage.ReadHistory
 	showingFavorites bool
 	showingHistory   bool
+	showingFeed      bool
+	showingFilters   bool
+	filterStatus     int
+	filterSort       int
+	filterGenre      int
+	filterCursor     int
 	cursor           int
 	viewportStart    int
 	isSearching      bool
@@ -32,6 +43,10 @@ type SearchModel struct {
 	currentQuery     string
 	flashMsg         string
 
+	searchingProviders []string
+	providerCounts     map[string]int
+	providerErrors     map[string]string
+
 	filterQuery     string
 	chapterLanguage string
 	systemMsg       string
@@ -40,6 +55,12 @@ type SearchModel struct {
 	providerToggles []bool
 	showingSources  bool
 	sourceCursor    int
+
+	renderer       imgrender.Renderer
+	coverCache     map[string]imgrender.RenderedImage
+	currentCover   *imgrender.RenderedImage
+	currentCoverID string
+	coverLoading   bool
 }
 
 func NewSearchModel(providers []api.MangaProvider) SearchModel {
@@ -58,6 +79,10 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		chapterLanguage: "vi",
 		providers:       providers,
 		providerToggles: toggles,
+		showingFeed:     true,
+		isSearching:     false,
+		renderer:        imgrender.New(),
+		coverCache:      make(map[string]imgrender.RenderedImage),
 	}
 }
 
@@ -166,13 +191,118 @@ func (m SearchModel) filteredProviderIndices() []int {
 }
 
 func (m SearchModel) Init() tea.Cmd {
-	return textinput.Blink
+	active := m.activeProviders()
+	if len(active) == 0 {
+		active = m.providers
+	}
+	return tea.Batch(
+		textinput.Blink,
+		api.GlobalLatestCmd(active, 1),
+	)
+}
+
+func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, bool) {
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		if m.showingFilters {
+			if m.filterCursor > 0 {
+				m.filterCursor--
+			}
+			return m, nil, true
+		}
+		if m.showingSources {
+			if m.sourceCursor > 0 {
+				m.sourceCursor--
+			}
+			return m, nil, true
+		}
+		if m.cursor > 0 {
+			m.cursor--
+			m.adjustViewport()
+			return m, m.updateFocusedCover(), true
+		}
+		return m, nil, true
+
+	case tea.MouseButtonWheelDown:
+		if m.showingFilters {
+			if m.filterCursor < 4 {
+				m.filterCursor++
+			}
+			return m, nil, true
+		}
+		if m.showingSources {
+			indices := m.filteredProviderIndices()
+			if m.sourceCursor < len(indices)-1 {
+				m.sourceCursor++
+			}
+			return m, nil, true
+		}
+		moved := false
+		switch {
+		case m.showingFavorites && m.cursor < len(m.filteredFavIndices())-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		case m.showingHistory && m.cursor < len(m.filteredHistoryIndices())-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		}
+		if moved {
+			return m, m.updateFocusedCover(), true
+		}
+		return m, nil, true
+
+	case tea.MouseButtonLeft:
+		if msg.Action != tea.MouseActionPress {
+			return m, nil, false
+		}
+		// Clicked on result list item
+		listLen := len(m.results)
+		if m.showingFavorites {
+			listLen = len(m.filteredFavIndices())
+		} else if m.showingHistory {
+			listLen = len(m.filteredHistoryIndices())
+		} else if m.showingSources {
+			listLen = len(m.filteredProviderIndices())
+		}
+
+		itemIdx := m.viewportStart + (msg.Y - searchUIOffset)
+		if itemIdx >= 0 && itemIdx < listLen {
+			if m.showingSources {
+				m.sourceCursor = itemIdx
+				indices := m.filteredProviderIndices()
+				if m.sourceCursor < len(indices) {
+					m.providerToggles[indices[m.sourceCursor]] = !m.providerToggles[indices[m.sourceCursor]]
+					_ = storage.SaveSources(m.activeProviderNames())
+				}
+				return m, nil, true
+			}
+
+			if itemIdx == m.cursor {
+				return m.selectCurrentItem()
+			}
+			m.cursor = itemIdx
+			m.adjustViewport()
+			return m, m.updateFocusedCover(), true
+		}
+	}
+	return m, nil, false
 }
 
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		if newM, cmd, handled := m.handleMouseMsg(msg); handled {
+			return newM, cmd
+		}
+
 	case tea.KeyMsg:
 		if newM, cmd, handled := m.handleKeyMsg(msg); handled {
 			return newM, cmd
@@ -208,23 +338,65 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.isSearching = true
+			m.err = nil
+			m.searchingProviders = m.activeProviderNames()
+			m.providerCounts = nil
+			m.providerErrors = nil
 			return m, tea.Batch(cmd, api.GlobalSearchCmd(active, msg.query))
 		}
 		return m, nil
 
 	case api.MangaSearchResultMsg:
 		m.isSearching = false
-		if msg.Err != nil {
-			m.err = msg.Err
+		m.searchingProviders = nil
+		m.providerCounts = msg.ProviderCounts
+		m.providerErrors = msg.ProviderErrors
+		if !m.showingFeed && len(strings.TrimSpace(m.currentQuery)) < 3 {
 			return m, nil
 		}
-		if len(strings.TrimSpace(m.currentQuery)) < 3 {
+		if len(msg.Manga) == 0 && msg.Err != nil {
+			m.results = nil
+			m.err = msg.Err
+			m.currentCover = nil
+			m.currentCoverID = ""
+			m.coverLoading = false
 			return m, nil
 		}
 		m.results = msg.Manga
 		m.cursor = 0
 		m.viewportStart = 0
 		m.err = nil
+		return m, m.updateFocusedCover()
+
+	case coverDebounceMsg:
+		focused, ok := m.focusedManga()
+		if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+			boxW, boxH := m.previewBoxSize()
+			return m, fetchAndRenderCoverCmd(m.renderer, msg.mangaID, msg.coverURL, focused.Provider, boxW, boxH)
+		}
+		return m, nil
+
+	case coverRenderedMsg:
+		if msg.err == nil {
+			if m.coverCache == nil {
+				m.coverCache = make(map[string]imgrender.RenderedImage)
+			}
+			if len(m.coverCache) >= 50 {
+				m.coverCache = make(map[string]imgrender.RenderedImage)
+			}
+			m.coverCache[msg.coverURL] = msg.rendered
+			focused, ok := m.focusedManga()
+			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+				m.currentCover = &msg.rendered
+				m.coverLoading = false
+			}
+		} else {
+			focused, ok := m.focusedManga()
+			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+				m.currentCover = nil
+				m.coverLoading = false
+			}
+		}
 		return m, nil
 
 	case clearFlashMsg:
@@ -241,6 +413,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.adjustViewport()
+		coverCmd := m.updateFocusedCover()
+		return m, coverCmd
 	}
 
 	oldVal := m.input.Value()
@@ -268,12 +442,14 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewportStart = 0
 			m.isSearching = false
 			m.err = nil
+			m.providerCounts = nil
+			m.providerErrors = nil
+			m.searchingProviders = nil
 			return m, cmd
 		}
 
 		m.currentQuery = trimmed
 		if len(trimmed) >= 3 {
-			// 300ms debounce — fast enough to feel responsive, slow enough to not DDoS APIs.
 			return m, tea.Batch(cmd, debounceSearch(trimmed, 300*time.Millisecond))
 		}
 		m.results = nil
@@ -281,6 +457,9 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewportStart = 0
 		m.isSearching = false
 		m.err = nil
+		m.providerCounts = nil
+		m.providerErrors = nil
+		m.searchingProviders = nil
 	}
 
 	return m, cmd
@@ -288,7 +467,14 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m SearchModel) listVisibleItems() int {
 	h := m.height
-	visible := h - searchUIOffset
+	boxH := h - 8
+	if boxH > 22 {
+		boxH = 22
+	}
+	if boxH < 6 {
+		boxH = 6
+	}
+	visible := boxH - 4
 	if visible < 1 {
 		visible = 1
 	}
@@ -320,3 +506,123 @@ func (m *SearchModel) adjustViewport() {
 		m.viewportStart = total - 1
 	}
 }
+
+func (m SearchModel) focusedManga() (manga models.Manga, ok bool) {
+	if m.showingSources {
+		return models.Manga{}, false
+	}
+	if m.showingFavorites {
+		indices := m.filteredFavIndices()
+		if len(indices) > 0 && m.cursor < len(indices) {
+			fav := m.favorites[indices[m.cursor]]
+			return models.Manga{
+				ID:       fav.MangaID,
+				Title:    fav.Title,
+				Provider: fav.Provider,
+			}, true
+		}
+		return models.Manga{}, false
+	}
+	if m.showingHistory {
+		indices := m.filteredHistoryIndices()
+		if len(indices) > 0 && m.cursor < len(indices) {
+			h := m.history[indices[m.cursor]]
+			t := h.MangaTitle
+			if t == "" {
+				t = h.MangaID
+			}
+			return models.Manga{
+				ID:       h.MangaID,
+				Title:    t,
+				Provider: h.Provider,
+			}, true
+		}
+		return models.Manga{}, false
+	}
+	if len(m.results) > 0 && m.cursor < len(m.results) {
+		res := m.results[m.cursor]
+		return res, true
+	}
+	return models.Manga{}, false
+}
+
+func (m *SearchModel) updateFocusedCover() tea.Cmd {
+	focused, ok := m.focusedManga()
+	if !ok || focused.CoverURL == "" {
+		m.currentCover = nil
+		m.currentCoverID = ""
+		m.coverLoading = false
+		return nil
+	}
+	if m.currentCoverID == focused.ID && (m.currentCover != nil || m.coverLoading) {
+		return nil
+	}
+	m.currentCoverID = focused.ID
+	if img, cached := m.coverCache[focused.CoverURL]; cached {
+		m.currentCover = &img
+		m.coverLoading = false
+		return nil
+	}
+	m.currentCover = nil
+	m.coverLoading = true
+	return debounceCover(focused.ID, focused.CoverURL, focused.Provider, 150*time.Millisecond)
+}
+
+func (m SearchModel) previewPaneWidth() int {
+	if m.width < 80 {
+		return 0
+	}
+	w := 42
+	if m.width >= 120 {
+		w = 50
+	}
+	if m.width >= 150 {
+		w = 56
+	}
+	if w > m.width-50 {
+		w = m.width - 50
+	}
+	return w
+}
+
+func (m SearchModel) listPaneWidth() int {
+	if m.width < 80 {
+		return m.width - 4
+	}
+	w := 62
+	if m.width >= 120 {
+		w = 72
+	}
+	if m.width >= 150 {
+		w = 80
+	}
+	maxW := m.width - m.previewPaneWidth() - 8
+	if w > maxW {
+		w = maxW
+	}
+	if w < 36 {
+		w = 36
+	}
+	return w
+}
+
+func (m SearchModel) previewBoxSize() (cols, rows int) {
+	if m.width < 80 {
+		return 0, 0
+	}
+	previewW := m.previewPaneWidth()
+	cols = previewW - 8
+	boxH := m.listVisibleItems() + 4
+	rows = boxH - 11
+	if cols < 12 {
+		cols = 12
+	}
+	if rows < 4 {
+		rows = 4
+	}
+	if rows > 14 {
+		rows = 14
+	}
+	return cols, rows
+}
+

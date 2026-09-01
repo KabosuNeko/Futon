@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 )
@@ -24,21 +25,40 @@ func (o *OTruyenProvider) Name() string {
 }
 
 func otruyenGet(endpoint string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("tạo request: %w", err)
-	}
-	req.Header.Set("User-Agent", defaultUserAgent)
+	client := ensureClient(http.DefaultClient)
+	var lastErr error
+	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("tạo request: %w", err)
+		}
+		req.Header.Set("User-Agent", defaultUserAgent)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("gọi API: %w", err)
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("gọi API: %w", err)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
+			if attempt < providerMaxRetries {
+				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, lastErr
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
+		}
+		return resp, nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
-	}
-	return resp, nil
+	return nil, lastErr
 }
 
 func (o *OTruyenProvider) Search(query string) ([]models.Manga, error) {
@@ -52,16 +72,93 @@ func (o *OTruyenProvider) Search(query string) ([]models.Manga, error) {
 
 	var result struct {
 		Data struct {
-			Items []otruyenMangaItem `json:"items"`
+			AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
+			Items             []otruyenMangaItem `json:"items"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
 
+	cdnDomain := result.Data.AppDomainCDNImage
 	mangas := make([]models.Manga, 0, len(result.Data.Items))
 	for _, item := range result.Data.Items {
-		mangas = append(mangas, item.toManga())
+		mangas = append(mangas, item.toManga(cdnDomain))
+	}
+	return mangas, nil
+}
+
+func (o *OTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
+	if page < 1 {
+		page = 1
+	}
+	endpoint := fmt.Sprintf("%s/danh-sach/truyen-moi?page=%d", otruyenBaseURL, page)
+
+	resp, err := otruyenGet(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data struct {
+			AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
+			Items             []otruyenMangaItem `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+
+	cdnDomain := result.Data.AppDomainCDNImage
+	mangas := make([]models.Manga, 0, len(result.Data.Items))
+	for _, item := range result.Data.Items {
+		mangas = append(mangas, item.toManga(cdnDomain))
+	}
+	return mangas, nil
+}
+
+func (o *OTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+	var endpoint string
+	if opts.Genre > 0 {
+		genres := []string{"", "action", "adventure", "comedy", "drama", "fantasy", "isekai", "romance", "shounen", "manhwa"}
+		if opts.Genre < len(genres) {
+			endpoint = fmt.Sprintf("%s/the-loai/%s?page=%d", otruyenBaseURL, genres[opts.Genre], page)
+		}
+	} else if opts.Status == 1 {
+		endpoint = fmt.Sprintf("%s/danh-sach/dang-phat-hanh?page=%d", otruyenBaseURL, page)
+	} else if opts.Status == 2 {
+		endpoint = fmt.Sprintf("%s/danh-sach/hoan-thanh?page=%d", otruyenBaseURL, page)
+	} else if opts.Sort == 1 || opts.Sort == 2 {
+		endpoint = fmt.Sprintf("%s/danh-sach/dang-phat-hanh?page=%d", otruyenBaseURL, page)
+	} else {
+		endpoint = fmt.Sprintf("%s/danh-sach/truyen-moi?page=%d", otruyenBaseURL, page)
+	}
+
+	resp, err := otruyenGet(endpoint)
+	if err != nil {
+		return o.FetchLatest(page)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data struct {
+			AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
+			Items             []otruyenMangaItem `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+
+	cdnDomain := result.Data.AppDomainCDNImage
+	mangas := make([]models.Manga, 0, len(result.Data.Items))
+	for _, item := range result.Data.Items {
+		mangas = append(mangas, item.toManga(cdnDomain))
 	}
 	return mangas, nil
 }
@@ -132,15 +229,52 @@ func (o *OTruyenProvider) FetchPages(chapterEndpoint string) ([]string, error) {
 	return urls, nil
 }
 
-type otruyenMangaItem struct {
+type otruyenCategory struct {
 	Name string `json:"name"`
-	Slug string `json:"slug"`
 }
 
-func (item otruyenMangaItem) toManga() models.Manga {
+type otruyenMangaItem struct {
+	Name     string            `json:"name"`
+	Slug     string            `json:"slug"`
+	ThumbURL string            `json:"thumb_url"`
+	Author   []string          `json:"author"`
+	Category []otruyenCategory `json:"category"`
+	Status   string            `json:"status"`
+}
+
+func (item otruyenMangaItem) toManga(cdnDomain string) models.Manga {
+	var coverURL string
+	if item.ThumbURL != "" {
+		if strings.HasPrefix(item.ThumbURL, "http://") || strings.HasPrefix(item.ThumbURL, "https://") {
+			coverURL = item.ThumbURL
+		} else {
+			if cdnDomain == "" {
+				cdnDomain = "https://img.otruyenapi.com"
+			}
+			cdnDomain = strings.TrimRight(cdnDomain, "/")
+			coverURL = fmt.Sprintf("%s/uploads/comics/%s", cdnDomain, item.ThumbURL)
+		}
+	}
+
+	var author string
+	if len(item.Author) > 0 {
+		author = strings.Join(item.Author, ", ")
+	}
+
+	var genres []string
+	for _, cat := range item.Category {
+		if cat.Name != "" {
+			genres = append(genres, cat.Name)
+		}
+	}
+
 	return models.Manga{
-		ID:    item.Slug,
-		Title: item.Name,
+		ID:       item.Slug,
+		Title:    item.Name,
+		CoverURL: coverURL,
+		Author:   author,
+		Status:   item.Status,
+		Genres:   genres,
 	}
 }
 

@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	tea "github.com/charmbracelet/bubbletea"
@@ -102,6 +105,8 @@ func (m ReaderModel) Init() tea.Cmd {
 
 func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		return m.handleMouseMsg(msg)
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	case api.ChapterImagesMsg:
@@ -118,6 +123,13 @@ func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePreloadTransitionReady(msg)
 	case imageSavedMsg:
 		return m.handleImageSaved(msg)
+	case cbzExportedMsg:
+		if msg.err != nil {
+			m.flashMsg = fmt.Sprintf("Lỗi xuất CBZ: %v", msg.err)
+		} else {
+			m.flashMsg = fmt.Sprintf("Đã xuất CBZ: %s", msg.path)
+		}
+		return m, clearFlashAfter(3 * time.Second)
 	case clearFlashMsg:
 		m.flashMsg = ""
 		return m, nil
