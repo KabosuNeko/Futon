@@ -12,7 +12,7 @@ Một **terminal manga reader** viết bằng **Go** — render manga trực ti�
 
 <p><br/></p>
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/d913a46c-7cb8-4738-ba55-6a046e0e0633" alt="Futon Preview" />
+  <img src="https://github.com/user-attachments/assets/da70481c-36f1-4516-84f2-e647a2668a75" alt="Futon Preview" />
 </p>
 <p><br/></p>
 
