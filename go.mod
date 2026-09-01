@@ -10,7 +10,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.28
 	github.com/mattn/go-sixel v0.0.12
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
-	golang.org/x/image v0.44.0
+	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.47.0
 )
 
