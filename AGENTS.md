@@ -7,8 +7,6 @@ Compact guidance for working in this repository.
 Read only what the task needs; do not load docs speculatively.
 
 - `SPEC.md` — product requirements, scope boundaries, keybindings, Definition of Done. Change behavior → update SPEC first (spec-first).
-- `ROADMAP.md` — phases, tech debt, backlog. Tech-debt items are prioritized (P1 first).
-- `TASKS.md` — current work status: in-progress, pending backlog (T-XXX), and what shipped.
 - `README.md` — user-facing usage, install, keybindings, terminal compatibility.
 
 ## Project
@@ -82,7 +80,7 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 
 - Favorites + source toggles: `~/.config/futon/userdata.json`
 - Reading history (last chapter + page per manga): `~/.config/futon/history.json`
-- Downloaded images: `~/Downloads/Futon_Downloads/`
+- Downloaded images: `~/Downloads/Futon/`
 - Old `favorites.json` and `sources.json` are auto-migrated to `userdata.json` on first launch.
 
 ## Image Rendering

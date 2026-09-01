@@ -52,7 +52,7 @@ func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Imag
 		targetCols = ts.Cols
 	}
 	if targetRows <= 0 {
-		targetRows = ts.Rows - 1
+		targetRows = ts.Rows - 2
 	}
 
 	maxPxW := targetCols * cellW

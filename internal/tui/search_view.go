@@ -21,8 +21,31 @@ func (m SearchModel) View() string {
 
 	header := boxStyle.Render(m.input.View())
 
+	tabFeed := "[󰑓 Mới cập nhật]"
+	tabFav := "[ Yêu thích]"
+	tabHis := "[ Lịch sử]"
+	tabSrc := "[󰖟 Nguồn]"
+	tabFlt := "[󰈲 Bộ lọc]"
+
+	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+
+	var tabs []string
+	if m.showingFilters {
+		tabs = []string{inactiveTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), activeTabStyle.Render(tabFlt)}
+	} else if m.showingSources {
+		tabs = []string{inactiveTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), activeTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
+	} else if m.showingFavorites {
+		tabs = []string{inactiveTabStyle.Render(tabFeed), activeTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
+	} else if m.showingHistory {
+		tabs = []string{inactiveTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), activeTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
+	} else {
+		tabs = []string{activeTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
+	}
+	tabBar := strings.Join(tabs, " ")
+
 	var headerParts []string
-	headerParts = append(headerParts, header)
+	headerParts = append(headerParts, header, tabBar)
 
 	if m.systemMsg != "" {
 		sysStyle := lipgloss.NewStyle().
@@ -42,7 +65,7 @@ func (m SearchModel) View() string {
 			total = len(failed) + 1
 		}
 		ok := total - len(failed)
-		wmsg := fmt.Sprintf("⚠️ %s lỗi (%d/%d nguồn)", strings.Join(failed, ", "), ok, total)
+		wmsg := fmt.Sprintf("󰀦 %s lỗi (%d/%d nguồn)", strings.Join(failed, ", "), ok, total)
 		headerParts = append(headerParts, warnStyle.Render(wmsg))
 	}
 
@@ -57,21 +80,25 @@ func (m SearchModel) View() string {
 
 	var listContent string
 
-	if m.err != nil {
+	if m.showingFilters {
+		listContent = m.renderFilterModal()
+	} else if m.err != nil {
 		errStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("1")).
 			MarginTop(1)
-		listContent = errStyle.Render(fmt.Sprintf("❌ Lỗi: %v", m.err))
+		listContent = errStyle.Render(fmt.Sprintf("󰅚 Lỗi: %v", m.err))
 	} else if m.isSearching {
-		msg := "🔍 Đang tìm kiếm..."
-		if len(m.searchingProviders) > 0 {
-			msg = fmt.Sprintf("🔍 Đang tìm trên %s...", strings.Join(m.searchingProviders, ", "))
+		msg := " Đang tìm kiếm..."
+		if m.showingFeed {
+			msg = "󰑓 Đang nạp danh sách truyện mới..."
+		} else if len(m.searchingProviders) > 0 {
+			msg = fmt.Sprintf(" Đang tìm trên %s...", strings.Join(m.searchingProviders, ", "))
 		}
 		listContent = statusStyle.Render(msg)
 	} else if m.loadingFavorites {
-		listContent = statusStyle.Render("⭐ Đang tải danh sách yêu thích...")
+		listContent = statusStyle.Render(" Đang tải danh sách yêu thích...")
 	} else if m.loadingHistory {
-		listContent = statusStyle.Render("🕒 Đang tải lịch sử đọc...")
+		listContent = statusStyle.Render(" Đang tải lịch sử đọc...")
 	} else if m.showingSources {
 		listContent = m.renderSources("")
 	} else if m.showingFavorites {
@@ -84,7 +111,7 @@ func (m SearchModel) View() string {
 		listContent = m.renderSearchResults("")
 	}
 
-	hasItems := (len(m.results) > 0 && !m.showingFavorites && !m.showingHistory && !m.showingSources) ||
+	hasItems := (len(m.results) > 0 && !m.showingFavorites && !m.showingHistory && !m.showingSources && !m.showingFilters) ||
 		(m.showingFavorites && len(m.filteredFavIndices()) > 0) ||
 		(m.showingHistory && len(m.filteredHistoryIndices()) > 0)
 
@@ -196,7 +223,7 @@ func (m SearchModel) renderPreviewPane() string {
 		Foreground(lipgloss.Color("6"))
 
 	var contentLines []string
-	contentLines = append(contentLines, headerStyle.Render("📖 Chi tiết manga"))
+	contentLines = append(contentLines, headerStyle.Render("󰋼 Chi tiết manga"))
 	contentLines = append(contentLines, dividerStyle.Render(strings.Repeat("─", max(1, w-4))))
 
 	cleanedTitle := cleanTitle(focused.Title, focused.Provider)
@@ -298,9 +325,9 @@ func (m SearchModel) renderPreviewPane() string {
 			contentLines = append(contentLines, rowPlaceholder)
 		}
 	} else if focused.CoverURL == "" {
-		contentLines = append(contentLines, metaLabelStyle.Render("🖼️ (Không có ảnh bìa)"))
+		contentLines = append(contentLines, metaLabelStyle.Render("󰋩 (Không có ảnh bìa)"))
 	} else {
-		contentLines = append(contentLines, metaLabelStyle.Render("🖼️ (Chưa tải ảnh bìa)"))
+		contentLines = append(contentLines, metaLabelStyle.Render("󰋩 (Chưa tải ảnh bìa)"))
 	}
 
 	innerW := max(1, w-4)
@@ -476,15 +503,15 @@ func (m SearchModel) renderSources(content string) string {
 	for i, idx := range indices {
 		check := "[ ]"
 		if m.providerToggles[idx] {
-			check = "[X]"
+			check = "[󰄲]"
 		}
 		items[i] = fmt.Sprintf("%s %s", check, m.providers[idx].Name())
 	}
 	var title string
 	if m.filterQuery != "" {
-		title = fmt.Sprintf("🏷️ Nguồn (lọc: %s):", m.filterQuery)
+		title = fmt.Sprintf("󰖟 Nguồn (lọc: %s):", m.filterQuery)
 	} else {
-		title = "🏷️ Chọn nguồn:"
+		title = "󰖟 Chọn nguồn:"
 	}
 	res := m.renderList(title, "Không tìm thấy nguồn nào.", items, m.sourceCursor)
 	if content != "" {
@@ -518,6 +545,67 @@ func cleanTitle(title, provider string) string {
 	return title
 }
 
+func (m SearchModel) renderFilterModal() string {
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("4")).
+		Padding(1, 2)
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("4")).
+		Bold(true)
+
+	activeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("2")).
+		Bold(true)
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
+	cursorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("6")).
+		Bold(true)
+
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("󰈲 BỘ LỌC TÌM KIẾM"))
+	b.WriteString("\n\n")
+
+	if m.filterCursor == 0 {
+		b.WriteString(cursorStyle.Render("► ") + activeStyle.Render(fmt.Sprintf("Trạng thái:  < %s >", filterStatusOptions[m.filterStatus])))
+	} else {
+		b.WriteString(fmt.Sprintf("   Trạng thái:  < %s >", filterStatusOptions[m.filterStatus]))
+	}
+	b.WriteString("\n")
+
+	if m.filterCursor == 1 {
+		b.WriteString(cursorStyle.Render("► ") + activeStyle.Render(fmt.Sprintf("Sắp xếp:     < %s >", filterSortOptions[m.filterSort])))
+	} else {
+		b.WriteString(fmt.Sprintf("   Sắp xếp:     < %s >", filterSortOptions[m.filterSort]))
+	}
+	b.WriteString("\n")
+
+	if m.filterCursor == 2 {
+		b.WriteString(cursorStyle.Render("► ") + activeStyle.Render(fmt.Sprintf("Thể loại:    < %s >", filterGenreOptions[m.filterGenre])))
+	} else {
+		b.WriteString(fmt.Sprintf("   Thể loại:    < %s >", filterGenreOptions[m.filterGenre]))
+	}
+	b.WriteString("\n\n")
+
+	btnApply := "[ Áp dụng (Enter) ]"
+	btnReset := "[ Đặt lại (Reset) ]"
+	if m.filterCursor == 3 {
+		btnApply = activeStyle.Render("[ Áp dụng (Enter) ]")
+	}
+	if m.filterCursor == 4 {
+		btnReset = activeStyle.Render("[ Đặt lại (Reset) ]")
+	}
+	b.WriteString(fmt.Sprintf("  %s    %s\n\n", btnApply, btnReset))
+
+	b.WriteString(dimStyle.Render("[←/→] Đổi giá trị   [↑/↓] Chọn dòng   [esc] Đóng"))
+
+	return boxStyle.Render(b.String())
+}
+
 func (m SearchModel) renderSearchResults(content string) string {
 	items := make([]string, len(m.results))
 	for i, manga := range m.results {
@@ -529,6 +617,9 @@ func (m SearchModel) renderSearchResults(content string) string {
 		}
 	}
 	title := fmt.Sprintf("Kết quả cho \"%s\" (%d/%d):", m.currentQuery, m.cursor+1, len(m.results))
+	if m.showingFeed && len(m.currentQuery) == 0 {
+		title = fmt.Sprintf("󰑓 Truyện Mới Cập Nhật (%d/%d):", m.cursor+1, len(m.results))
+	}
 	res := m.renderList(title, "", items, m.cursor)
 	if content != "" {
 		return lipgloss.JoinVertical(lipgloss.Center, content, res)
@@ -554,9 +645,9 @@ func (m SearchModel) renderFavorites(content string) string {
 	} else {
 		emptyMsg = "Chưa có truyện yêu thích nào."
 	}
-	title := fmt.Sprintf("Truyện Yêu Thích (%d):", len(indices))
+	title := fmt.Sprintf(" Truyện Yêu Thích (%d):", len(indices))
 	if len(indices) > 0 {
-		title = fmt.Sprintf("Truyện Yêu Thích (%d/%d):", m.cursor+1, len(indices))
+		title = fmt.Sprintf(" Truyện Yêu Thích (%d/%d):", m.cursor+1, len(indices))
 	}
 	res := m.renderList(title, emptyMsg, items, m.cursor)
 	if content != "" {
@@ -589,9 +680,9 @@ func (m SearchModel) renderHistory(content string) string {
 	} else {
 		emptyMsg = "Chưa có lịch sử đọc nào."
 	}
-	title := fmt.Sprintf("Lịch Sử Đọc (%d):", len(indices))
+	title := fmt.Sprintf(" Lịch Sử Đọc (%d):", len(indices))
 	if len(indices) > 0 {
-		title = fmt.Sprintf("Lịch Sử Đọc (%d/%d):", m.cursor+1, len(indices))
+		title = fmt.Sprintf(" Lịch Sử Đọc (%d/%d):", m.cursor+1, len(indices))
 	}
 	res := m.renderList(title, emptyMsg, items, m.cursor)
 	if content != "" {
@@ -612,9 +703,17 @@ func (m SearchModel) renderFooter() string {
 	}
 
 	switch {
+	case m.showingFilters:
+		return lipgloss.JoinHorizontal(lipgloss.Center,
+			pill("←/→", "Đổi giá trị"),
+			pill("↑/↓", "Chọn dòng"),
+			pill("enter", "Áp dụng"),
+			pill("esc", "Đóng"),
+			pill("^c", "Thoát"),
+		)
 	case m.showingSources:
 		return lipgloss.JoinHorizontal(lipgloss.Center,
-			pill("space", "Chọn/Bỏ"),
+			pill("space", "Bật/Tắt"),
 			pill("↑/↓", "Di chuyển"),
 			pill("esc", "Quay lại"),
 			pill("^c", "Thoát"),
@@ -623,6 +722,7 @@ func (m SearchModel) renderFooter() string {
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
+			pill("tab", "Chuyển tab"),
 			pill("^d", "Xóa"),
 			pill("esc", "Quay lại"),
 			pill("^c", "Thoát"),
@@ -631,24 +731,18 @@ func (m SearchModel) renderFooter() string {
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
+			pill("tab", "Chuyển tab"),
 			pill("^d", "Xóa"),
 			pill("esc", "Quay lại"),
 			pill("^c", "Thoát"),
 		)
-	case len(m.results) > 0:
+	default:
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
-			pill("esc", "Xóa tìm kiếm"),
+			pill("tab", "Chuyển tab"),
+			pill("/f", "Bộ lọc"),
 			pill("/src", "Nguồn"),
-			pill("^c", "Thoát"),
-		)
-	default:
-		return lipgloss.JoinHorizontal(lipgloss.Center,
-			pill("/fav", "Yêu thích"),
-			pill("/his", "Lịch sử"),
-			pill("/src", "Nguồn"),
-			pill("/lang", "Ngôn ngữ"),
 			pill("^c", "Thoát"),
 		)
 	}

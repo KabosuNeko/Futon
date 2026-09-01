@@ -114,8 +114,11 @@ func TestReaderViewRendersFooterInStepRead(t *testing.T) {
 	if !strings.Contains(view, "Trang 2/3") {
 		t.Errorf("expected footer with page info, got:\n%s", view)
 	}
-	if !strings.Contains(view, "ctrl+d: tải ảnh") {
+	if !strings.Contains(view, "[ctrl+d] Lưu ảnh") {
 		t.Errorf("expected reader footer hint, got:\n%s", view)
+	}
+	if !strings.Contains(view, "[ctrl+e] Xuất CBZ") {
+		t.Errorf("expected reader footer cbz hint, got:\n%s", view)
 	}
 }
 

@@ -4,7 +4,7 @@ Terminal manga reader written in **Go** + **Bubble Tea**, rendering images direc
 
 > This document defines Futon's product requirements and scope boundaries.
 > Any behavior change must be reflected here before merge.
-> See also: `AGENTS.md` (architecture), `ROADMAP.md` (roadmap), `TASKS.md` (current work).
+> See also: `AGENTS.md` (architecture).
 
 ---
 
@@ -92,7 +92,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 - **FR-R2**: **Continuous chapter switching**: on the last page, `→` goes to the next chapter; on the first page, `←` goes to the previous chapter — no need to return to the list.
 - **FR-R3**: Chapter preload: reaching page `total-3` automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
 - **FR-R4**: LRU image cache of **20 rendered images** (key = page index), evicts the oldest page; reset when entering a new chapter. Pre-renders at most 3 pages ahead that are not yet cached.
-- **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon_Downloads/`, filename `{Title}_Ch{ChapterNumber}_Pg{page}.jpg`, sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
+- **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon/`, filename `{Title}_Ch{ChapterNumber}_Pg{page}.jpg`, sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
 - **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind.
 - **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`).
 - **FR-R8**: Terminal resize → re-render the current page.
@@ -144,7 +144,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 |---|---|---|
 | Favorites + source toggles | `~/.config/futon/userdata.json` | JSON: `sources[]`, `favorites[]` |
 | Reading history | `~/.config/futon/history.json` | JSON: map by MangaID |
-| Downloaded images | `~/Downloads/Futon_Downloads/` | JPG |
+| Downloaded images | `~/Downloads/Futon/` | JPG |
 
 - **Migration**: on first run after upgrade, if `userdata.json` does not exist, old `favorites.json` + `sources.json` are auto-merged into `userdata.json` and the 2 old files are deleted (one-time).
 - Source toggles are stored by **provider name**; all enabled by default.

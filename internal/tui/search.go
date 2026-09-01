@@ -15,6 +15,10 @@ import (
 
 const searchUIOffset = 9
 
+var filterStatusOptions = []string{"Tất cả", "Đang tiến hành", "Đã hoàn thành"}
+var filterSortOptions = []string{"Mới cập nhật", "Độ phổ biến", "Đánh giá cao", "Tên (A-Z)"}
+var filterGenreOptions = []string{"Tất cả", "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Isekai", "Romance", "Shounen", "Webtoons / Manhwa"}
+
 type SearchModel struct {
 	input            textinput.Model
 	width            int
@@ -24,6 +28,12 @@ type SearchModel struct {
 	history          []storage.ReadHistory
 	showingFavorites bool
 	showingHistory   bool
+	showingFeed      bool
+	showingFilters   bool
+	filterStatus     int
+	filterSort       int
+	filterGenre      int
+	filterCursor     int
 	cursor           int
 	viewportStart    int
 	isSearching      bool
@@ -69,6 +79,8 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		chapterLanguage: "vi",
 		providers:       providers,
 		providerToggles: toggles,
+		showingFeed:     true,
+		isSearching:     false,
 		renderer:        imgrender.New(),
 		coverCache:      make(map[string]imgrender.RenderedImage),
 	}
@@ -179,13 +191,118 @@ func (m SearchModel) filteredProviderIndices() []int {
 }
 
 func (m SearchModel) Init() tea.Cmd {
-	return textinput.Blink
+	active := m.activeProviders()
+	if len(active) == 0 {
+		active = m.providers
+	}
+	return tea.Batch(
+		textinput.Blink,
+		api.GlobalLatestCmd(active, 1),
+	)
+}
+
+func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, bool) {
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		if m.showingFilters {
+			if m.filterCursor > 0 {
+				m.filterCursor--
+			}
+			return m, nil, true
+		}
+		if m.showingSources {
+			if m.sourceCursor > 0 {
+				m.sourceCursor--
+			}
+			return m, nil, true
+		}
+		if m.cursor > 0 {
+			m.cursor--
+			m.adjustViewport()
+			return m, m.updateFocusedCover(), true
+		}
+		return m, nil, true
+
+	case tea.MouseButtonWheelDown:
+		if m.showingFilters {
+			if m.filterCursor < 4 {
+				m.filterCursor++
+			}
+			return m, nil, true
+		}
+		if m.showingSources {
+			indices := m.filteredProviderIndices()
+			if m.sourceCursor < len(indices)-1 {
+				m.sourceCursor++
+			}
+			return m, nil, true
+		}
+		moved := false
+		switch {
+		case m.showingFavorites && m.cursor < len(m.filteredFavIndices())-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		case m.showingHistory && m.cursor < len(m.filteredHistoryIndices())-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
+			m.cursor++
+			m.adjustViewport()
+			moved = true
+		}
+		if moved {
+			return m, m.updateFocusedCover(), true
+		}
+		return m, nil, true
+
+	case tea.MouseButtonLeft:
+		if msg.Action != tea.MouseActionPress {
+			return m, nil, false
+		}
+		// Clicked on result list item
+		listLen := len(m.results)
+		if m.showingFavorites {
+			listLen = len(m.filteredFavIndices())
+		} else if m.showingHistory {
+			listLen = len(m.filteredHistoryIndices())
+		} else if m.showingSources {
+			listLen = len(m.filteredProviderIndices())
+		}
+
+		itemIdx := m.viewportStart + (msg.Y - searchUIOffset)
+		if itemIdx >= 0 && itemIdx < listLen {
+			if m.showingSources {
+				m.sourceCursor = itemIdx
+				indices := m.filteredProviderIndices()
+				if m.sourceCursor < len(indices) {
+					m.providerToggles[indices[m.sourceCursor]] = !m.providerToggles[indices[m.sourceCursor]]
+					_ = storage.SaveSources(m.activeProviderNames())
+				}
+				return m, nil, true
+			}
+
+			if itemIdx == m.cursor {
+				return m.selectCurrentItem()
+			}
+			m.cursor = itemIdx
+			m.adjustViewport()
+			return m, m.updateFocusedCover(), true
+		}
+	}
+	return m, nil, false
 }
 
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		if newM, cmd, handled := m.handleMouseMsg(msg); handled {
+			return newM, cmd
+		}
+
 	case tea.KeyMsg:
 		if newM, cmd, handled := m.handleKeyMsg(msg); handled {
 			return newM, cmd
@@ -234,7 +351,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.searchingProviders = nil
 		m.providerCounts = msg.ProviderCounts
 		m.providerErrors = msg.ProviderErrors
-		if len(strings.TrimSpace(m.currentQuery)) < 3 {
+		if !m.showingFeed && len(strings.TrimSpace(m.currentQuery)) < 3 {
 			return m, nil
 		}
 		if len(msg.Manga) == 0 && msg.Err != nil {
@@ -248,13 +365,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.results = msg.Manga
 		m.cursor = 0
 		m.viewportStart = 0
-		if len(msg.Manga) > 0 && msg.Err != nil {
-			m.err = nil
-		} else {
-			m.err = msg.Err
-		}
-		coverCmd := m.updateFocusedCover()
-		return m, coverCmd
+		m.err = nil
+		return m, m.updateFocusedCover()
 
 	case coverDebounceMsg:
 		focused, ok := m.focusedManga()

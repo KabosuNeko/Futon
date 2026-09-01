@@ -10,14 +10,82 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
+	if m.showingFavorites {
+		indices := m.filteredFavIndices()
+		if len(indices) > 0 && m.cursor < len(indices) {
+			fav := m.favorites[indices[m.cursor]]
+			m.showingFavorites = false
+			m.favorites = nil
+			m.cursor = 0
+			m.viewportStart = 0
+			m.filterQuery = ""
+			m.input.SetValue("")
+			m.input.Placeholder = "Nhập tên manga cần tìm..."
+			providerName := fav.Provider
+			if providerName == "" && len(m.providers) > 0 {
+				providerName = m.providers[0].Name()
+			}
+			return m, func() tea.Msg {
+				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: providerName}
+			}, true
+		}
+		return m, nil, true
+	}
+
+	if m.showingHistory {
+		indices := m.filteredHistoryIndices()
+		if len(indices) > 0 && m.cursor < len(indices) {
+			h := m.history[indices[m.cursor]]
+			m.showingHistory = false
+			m.history = nil
+			m.cursor = 0
+			m.viewportStart = 0
+			m.filterQuery = ""
+			m.input.SetValue("")
+			m.input.Placeholder = "Nhập tên manga cần tìm..."
+			title := h.MangaTitle
+			if title == "" {
+				title = h.MangaID
+			}
+			providerName := h.Provider
+			if providerName == "" && len(m.providers) > 0 {
+				providerName = m.providers[0].Name()
+			}
+			return m, func() tea.Msg {
+				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: providerName}
+			}, true
+		}
+		return m, nil, true
+	}
+
+	if len(m.results) > 0 && m.cursor < len(m.results) {
+		manga := m.results[m.cursor]
+		providerName := manga.Provider
+		if providerName == "" {
+			active := m.activeProviders()
+			if len(active) > 0 {
+				providerName = active[0].Name()
+			}
+		}
+		return m, func() tea.Msg {
+			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: providerName}
+		}, true
+	}
+
+	return m, nil, false
+}
+
 func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit, true
 
-	// ESC is the universal "get me out of here" button.
-	// Fav, history, sources — doesn't matter. ESC undoes your life choices.
 	case "esc":
+		if m.showingFilters {
+			m.showingFilters = false
+			return m, nil, true
+		}
 		if m.showingSources {
 			m.showingSources = false
 			m.sourceCursor = 0
@@ -29,6 +97,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		if m.showingHistory || m.showingFavorites {
 			m.showingHistory = false
 			m.showingFavorites = false
+			m.showingFeed = true
 			m.history = nil
 			m.favorites = nil
 			m.cursor = 0
@@ -36,10 +105,94 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.filterQuery = ""
 			m.input.SetValue("")
 			m.input.Placeholder = "Nhập tên manga cần tìm..."
+			active := m.activeProviders()
+			if len(active) == 0 {
+				active = m.providers
+			}
+			return m, api.GlobalLatestCmd(active, 1), true
+		}
+
+	case "tab":
+		m.filterQuery = ""
+		m.input.SetValue("")
+		m.cursor = 0
+		m.viewportStart = 0
+		if m.showingFeed && !m.showingFavorites && !m.showingHistory && !m.showingSources && !m.showingFilters {
+			// Switch to Favorites
+			m.showingFeed = false
+			m.showingFavorites = true
+			m.loadingFavorites = true
+			m.input.Placeholder = "Lọc truyện yêu thích..."
+			return m, loadFavoritesCmd(), true
+		} else if m.showingFavorites {
+			// Switch to History
+			m.showingFavorites = false
+			m.showingHistory = true
+			m.loadingHistory = true
+			m.input.Placeholder = "Lọc lịch sử đọc..."
+			return m, loadHistoryCmd(), true
+		} else if m.showingHistory {
+			// Switch to Sources
+			m.showingHistory = false
+			m.showingSources = true
+			m.sourceCursor = 0
+			m.input.Placeholder = "Lọc nguồn..."
+			return m, nil, true
+		} else if m.showingSources {
+			// Switch to Filters
+			m.showingSources = false
+			m.showingFilters = true
+			m.filterCursor = 0
+			return m, nil, true
+		} else {
+			// Switch to Feed
+			m.showingFilters = false
+			m.showingSources = false
+			m.showingFavorites = false
+			m.showingHistory = false
+			m.showingFeed = true
+			m.isSearching = true
+			m.input.Placeholder = "Nhập tên manga cần tìm..."
+			active := m.activeProviders()
+			if len(active) == 0 {
+				active = m.providers
+			}
+			return m, api.GlobalLatestCmd(active, 1), true
+		}
+
+	case "left":
+		if m.showingFilters {
+			switch m.filterCursor {
+			case 0:
+				m.filterStatus = (m.filterStatus - 1 + len(filterStatusOptions)) % len(filterStatusOptions)
+			case 1:
+				m.filterSort = (m.filterSort - 1 + len(filterSortOptions)) % len(filterSortOptions)
+			case 2:
+				m.filterGenre = (m.filterGenre - 1 + len(filterGenreOptions)) % len(filterGenreOptions)
+			}
+			return m, nil, true
+		}
+
+	case "right":
+		if m.showingFilters {
+			switch m.filterCursor {
+			case 0:
+				m.filterStatus = (m.filterStatus + 1) % len(filterStatusOptions)
+			case 1:
+				m.filterSort = (m.filterSort + 1) % len(filterSortOptions)
+			case 2:
+				m.filterGenre = (m.filterGenre + 1) % len(filterGenreOptions)
+			}
 			return m, nil, true
 		}
 
 	case "up":
+		if m.showingFilters {
+			if m.filterCursor > 0 {
+				m.filterCursor--
+			}
+			return m, nil, true
+		}
 		if m.showingSources {
 			if m.sourceCursor > 0 {
 				m.sourceCursor--
@@ -54,6 +207,12 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		return m, nil, true
 
 	case "down":
+		if m.showingFilters {
+			if m.filterCursor < 4 {
+				m.filterCursor++
+			}
+			return m, nil, true
+		}
 		if m.showingSources {
 			indices := m.filteredProviderIndices()
 			if m.sourceCursor < len(indices)-1 {
@@ -129,6 +288,31 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		return m, nil, true
 
 	case "enter":
+		if m.showingFilters {
+			if m.filterCursor == 4 {
+				// Reset
+				m.filterStatus = 0
+				m.filterSort = 0
+				m.filterGenre = 0
+			}
+			m.showingFilters = false
+			m.isSearching = true
+			m.results = nil
+			m.cursor = 0
+			m.viewportStart = 0
+			active := m.activeProviders()
+			if len(active) == 0 {
+				active = m.providers
+			}
+			opts := api.FilterOptions{
+				Status: m.filterStatus,
+				Sort:   m.filterSort,
+				Genre:  m.filterGenre,
+				Page:   1,
+			}
+			return m, api.GlobalFilterCmd(active, opts), true
+		}
+
 		val := strings.TrimSpace(m.input.Value())
 
 		if val == "/src" {
@@ -136,6 +320,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.sourceCursor = 0
 			m.showingFavorites = false
 			m.showingHistory = false
+			m.showingFilters = false
 			m.results = nil
 			m.favorites = nil
 			m.history = nil
@@ -148,10 +333,38 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			return m, nil, true
 		}
 
+		if val == "/filter" || val == "/f" {
+			m.showingFilters = true
+			m.filterCursor = 0
+			m.input.SetValue("")
+			return m, nil, true
+		}
+
+		if val == "/feed" {
+			m.showingFavorites = false
+			m.showingHistory = false
+			m.showingSources = false
+			m.showingFilters = false
+			m.showingFeed = true
+			m.results = nil
+			m.cursor = 0
+			m.viewportStart = 0
+			m.isSearching = true
+			m.input.SetValue("")
+			m.input.Placeholder = "Nhập tên manga cần tìm..."
+			active := m.activeProviders()
+			if len(active) == 0 {
+				active = m.providers
+			}
+			return m, api.GlobalLatestCmd(active, 1), true
+		}
+
 		if val == "/fav" {
 			m.showingFavorites = true
 			m.loadingFavorites = true
 			m.showingSources = false
+			m.showingFilters = false
+			m.showingFeed = false
 			m.results = nil
 			m.currentQuery = ""
 			m.cursor = 0
@@ -184,6 +397,8 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.showingHistory = true
 			m.loadingHistory = true
 			m.showingSources = false
+			m.showingFilters = false
+			m.showingFeed = false
 			m.results = nil
 			m.favorites = nil
 			m.showingFavorites = false
@@ -196,64 +411,8 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			return m, loadHistoryCmd(), true
 		}
 
-		if m.showingFavorites {
-			indices := m.filteredFavIndices()
-			if len(indices) > 0 && m.cursor < len(indices) {
-				fav := m.favorites[indices[m.cursor]]
-				m.showingFavorites = false
-				m.favorites = nil
-				m.cursor = 0
-				m.viewportStart = 0
-				m.filterQuery = ""
-				m.input.SetValue("")
-				m.input.Placeholder = "Nhập tên manga cần tìm..."
-				providerName := fav.Provider
-				if providerName == "" && len(m.providers) > 0 {
-					providerName = m.providers[0].Name()
-				}
-				return m, func() tea.Msg {
-					return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: providerName}
-				}, true
-			}
-		}
-
-		if m.showingHistory {
-			indices := m.filteredHistoryIndices()
-			if len(indices) > 0 && m.cursor < len(indices) {
-				h := m.history[indices[m.cursor]]
-				m.showingHistory = false
-				m.history = nil
-				m.cursor = 0
-				m.viewportStart = 0
-				m.filterQuery = ""
-				m.input.SetValue("")
-				m.input.Placeholder = "Nhập tên manga cần tìm..."
-				title := h.MangaTitle
-				if title == "" {
-					title = h.MangaID
-				}
-				providerName := h.Provider
-				if providerName == "" && len(m.providers) > 0 {
-					providerName = m.providers[0].Name()
-				}
-				return m, func() tea.Msg {
-					return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: providerName}
-				}, true
-			}
-		}
-
-		if len(m.results) > 0 && m.cursor < len(m.results) {
-			manga := m.results[m.cursor]
-			providerName := manga.Provider
-			if providerName == "" {
-				active := m.activeProviders()
-				if len(active) > 0 {
-					providerName = active[0].Name()
-				}
-			}
-			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: providerName}
-			}, true
+		if newM, cmd, handled := m.selectCurrentItem(); handled {
+			return newM, cmd, true
 		}
 
 		if val == "" {
@@ -261,6 +420,8 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		}
 		m.showingFavorites = false
 		m.showingSources = false
+		m.showingFilters = false
+		m.showingFeed = false
 		m.currentQuery = val
 		m.results = nil
 		m.cursor = 0
