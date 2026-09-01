@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/KabosuNeko/Futon/internal/models"
 )
 
 func TestChapterNavCmdSetsChapterNumber(t *testing.T) {
@@ -96,5 +99,27 @@ func TestAppModelForwardsAllChapterNumbers(t *testing.T) {
 	}
 	if len(app.reader.allChapterNumbers) != 2 || app.reader.allChapterNumbers[1] != "102" {
 		t.Errorf("unexpected allChapterNumbers: %v", app.reader.allChapterNumbers)
+	}
+}
+
+func TestChapterListViewCardAndFooter(t *testing.T) {
+	m := NewChapterListModel("m1", "One Piece", nil)
+	m.width = 80
+	m.height = 24
+	m.chapters = []models.Chapter{
+		{ID: "c1", Number: "1", Title: "Romance Dawn"},
+		{ID: "c2", Number: "2", Title: "They Call Him Straw Hat"},
+	}
+	m.loading = false
+
+	view := m.View()
+	if !strings.Contains(view, "Danh sách chapter") {
+		t.Errorf("expected card header in chapter view")
+	}
+	if !strings.Contains(view, "Ch. 1 - Romance Dawn") {
+		t.Errorf("expected chapter 1 in list")
+	}
+	if !strings.Contains(view, "[enter] Mở đọc") || !strings.Contains(view, "[esc] Quay lại") {
+		t.Errorf("expected matched footer keys in chapter view, got:\n%s", view)
 	}
 }

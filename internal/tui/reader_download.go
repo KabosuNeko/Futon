@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/export"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -18,18 +18,6 @@ import (
 const mangaDexImageUserAgent = "Futon-App/1.0 (https://github.com/KabosuNeko/Futon)"
 
 const kittyClearSeq = "\x1b_Ga=d;\x1b\\"
-
-var filenameReplacer = strings.NewReplacer(
-	"/", "-",
-	"\\", "-",
-	":", "-",
-	"*", "-",
-	"?", "-",
-	"\"", "-",
-	"<", "-",
-	">", "-",
-	"|", "-",
-)
 
 func downloadImageBytes(url, referer, userAgent string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -78,7 +66,6 @@ func renderPage(r imgrender.Renderer, imgData []byte, index int) tea.Cmd {
 }
 
 // preloadNextChapter fetches the next chapter's pages before the user asks.
-// Because waiting is for people without ADHD.
 func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 	return func() tea.Msg {
 		urls, err := provider.FetchPages(nextID)
@@ -158,7 +145,7 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 		if err != nil {
 			return imageSavedMsg{err: fmt.Errorf("lấy thư mục home: %w", err)}
 		}
-		dir := filepath.Join(home, "Downloads", "Futon_Downloads")
+		dir := filepath.Join(home, "Downloads", "Futon")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return imageSavedMsg{err: fmt.Errorf("tạo thư mục download: %w", err)}
 		}
@@ -189,5 +176,9 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 }
 
 func sanitizeFilename(name string) string {
-	return filenameReplacer.Replace(name)
+	s := export.SanitizeFilename(name)
+	if s == "Untitled" {
+		return ""
+	}
+	return s
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -33,25 +34,46 @@ func (m ReaderModel) View() string {
 			return b.String()
 		}
 
-		offsetX, offsetY, _, cellsH := m.imageRect(img)
 		b.WriteString(m.centeredImage(img))
 
-		footer := fmt.Sprintf("Trang %d/%d | <-/h ->/l : chuyển trang | esc: thoát | ctrl+d: tải ảnh", m.currentIdx+1, m.total)
-		if m.hasNextChapter() && m.currentIdx == m.total-1 {
-			footer += " | ->: chap tiếp"
-		}
+		var footerParts []string
+		footerParts = append(footerParts, fmt.Sprintf("[󰈙 Trang %d/%d]", m.currentIdx+1, m.total))
+		footerParts = append(footerParts, "[󰁕/h] [󰁖/l] Trang")
 		if m.hasPreviousChapter() && m.currentIdx == 0 {
-			footer += " | <-: chap trước"
+			footerParts = append(footerParts, "[󰁕] Chap trước")
 		}
-		footerRow := offsetY + cellsH + 1
-		footerCol := offsetX + 1
+		if m.hasNextChapter() && m.currentIdx == m.total-1 {
+			footerParts = append(footerParts, "[󰁖] Chap tiếp")
+		}
+		footerParts = append(footerParts, "[ctrl+e] Xuất CBZ")
+		footerParts = append(footerParts, "[esc] Thoát")
+		footerParts = append(footerParts, "[ctrl+d] Lưu ảnh")
+
+		rawFooter := strings.Join(footerParts, "  ")
+
+		w, h := m.width, m.height
+		if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
+			w, h = ts.Cols, ts.Rows
+		}
+		footerRow := max(1, h)
+		footerCol := max(1, (w-runewidth.StringWidth(rawFooter))/2)
+
+		styledFooter := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Render(rawFooter)
+
 		b.WriteString(fmt.Sprintf("\x1b[%d;%dH", footerRow, footerCol))
-		b.WriteString(footer)
+		b.WriteString(styledFooter)
 
 		if m.flashMsg != "" {
-			flashRow := footerRow + 1
-			b.WriteString(fmt.Sprintf("\x1b[%d;%dH", flashRow, footerCol))
-			b.WriteString(m.flashMsg)
+			flashCol := max(1, (w-runewidth.StringWidth(m.flashMsg))/2)
+			flashRow := max(1, footerRow-1)
+			styledFlash := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("3")).
+				Bold(true).
+				Render(m.flashMsg)
+			b.WriteString(fmt.Sprintf("\x1b[%d;%dH", flashRow, flashCol))
+			b.WriteString(styledFlash)
 		}
 		return b.String()
 
@@ -97,7 +119,7 @@ func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY, c
 	cellsW = max(1, img.WidthPx/cellW)
 	cellsH = max(1, img.HeightPx/cellH)
 	offsetX = max(0, (ts.Cols-cellsW)/2)
-	offsetY = max(0, (ts.Rows-cellsH)/2)
+	offsetY = max(0, (ts.Rows-2-cellsH)/2)
 	return
 }
 
