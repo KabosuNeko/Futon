@@ -15,8 +15,7 @@ const (
 	truyenqqFallbackURL = "https://metruyenqq.net"
 )
 
-// TruyenQQ blocks anything that doesn't look like a real browser.
-// So we lie. Ethically questionable, functionally necessary.
+// truyenqqBrowserUA is used to pass Cloudflare/bot protection headers for TruyenQQ.
 const truyenqqBrowserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 
 type TruyenQQProvider struct {
@@ -106,6 +105,158 @@ func (p *TruyenQQProvider) Search(keyword string) ([]models.Manga, error) {
 		})
 	})
 
+	return mangas, nil
+}
+
+func (p *TruyenQQProvider) FetchLatest(page int) ([]models.Manga, error) {
+	if page < 1 {
+		page = 1
+	}
+	endpoint := resolveURL(p.baseURL, fmt.Sprintf("/truyen-moi-cap-nhat/trang-%d.html", page))
+	if page == 1 {
+		endpoint = resolveURL(p.baseURL, "/truyen-moi-cap-nhat.html")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("tạo request: %w", err)
+	}
+	req.Header.Set("User-Agent", truyenqqBrowserUA)
+	req.Header.Set("Referer", p.baseURL)
+
+	client := ensureClient(p.httpClient)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gọi HTTP: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	mangas := make([]models.Manga, 0)
+	doc.Find(".list_grid li, .list-stories li, .story-item").Each(func(i int, s *goquery.Selection) {
+		a := s.Find("h3 a, .book_name a, .title a, a.qtip").First()
+		if a.Length() == 0 {
+			a = s.Find("a").First()
+		}
+		href, exists := a.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+		name := strings.TrimSpace(a.Text())
+		if name == "" {
+			name = strings.TrimSpace(s.Find(".book_info h3").Text())
+		}
+		if name == "" {
+			return
+		}
+		cover, _ := imageSrc(s.Find("img"))
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    name,
+			CoverURL: cover,
+		})
+	})
+
+	if len(mangas) == 0 {
+		return p.Search("")
+	}
+
+	return mangas, nil
+}
+
+func (p *TruyenQQProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+
+	var endpoint string
+	if opts.Genre > 0 {
+		genres := []string{"", "action-26", "adventure", "comedy-28", "drama-29", "fantasy-30", "isekai", "romance-36", "shounen-38", "manhwa-35"}
+		if opts.Genre < len(genres) {
+			endpoint = resolveURL(p.baseURL, fmt.Sprintf("/the-loai/%s.html", genres[opts.Genre]))
+			if page > 1 {
+				endpoint = resolveURL(p.baseURL, fmt.Sprintf("/the-loai/%s/trang-%d.html", genres[opts.Genre], page))
+			}
+		}
+	} else if opts.Status == 2 {
+		endpoint = resolveURL(p.baseURL, "/truyen-hoan-thanh.html")
+		if page > 1 {
+			endpoint = resolveURL(p.baseURL, fmt.Sprintf("/truyen-hoan-thanh/trang-%d.html", page))
+		}
+	} else if opts.Sort == 1 {
+		endpoint = resolveURL(p.baseURL, "/truyen-top-thang.html")
+		if page > 1 {
+			endpoint = resolveURL(p.baseURL, fmt.Sprintf("/truyen-top-thang/trang-%d.html", page))
+		}
+	} else if opts.Sort == 2 {
+		endpoint = resolveURL(p.baseURL, "/truyen-yeu-thich.html")
+		if page > 1 {
+			endpoint = resolveURL(p.baseURL, fmt.Sprintf("/truyen-yeu-thich/trang-%d.html", page))
+		}
+	} else {
+		return p.FetchLatest(page)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return p.FetchLatest(page)
+	}
+	req.Header.Set("User-Agent", truyenqqBrowserUA)
+	req.Header.Set("Referer", p.baseURL)
+
+	client := ensureClient(p.httpClient)
+	resp, err := client.Do(req)
+	if err != nil {
+		return p.FetchLatest(page)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return p.FetchLatest(page)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	mangas := make([]models.Manga, 0)
+	doc.Find(".list_grid li, .list-stories li, .story-item").Each(func(i int, s *goquery.Selection) {
+		a := s.Find("h3 a, .book_name a, .title a, a.qtip").First()
+		if a.Length() == 0 {
+			a = s.Find("a").First()
+		}
+		href, exists := a.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+		name := strings.TrimSpace(a.Text())
+		if name == "" {
+			name = strings.TrimSpace(s.Find(".book_info h3").Text())
+		}
+		if name == "" {
+			return
+		}
+		cover, _ := imageSrc(s.Find("img"))
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    name,
+			CoverURL: cover,
+		})
+	})
+
+	if len(mangas) == 0 {
+		return p.FetchLatest(page)
+	}
 	return mangas, nil
 }
 

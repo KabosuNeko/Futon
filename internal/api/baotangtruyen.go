@@ -127,6 +127,135 @@ func (p *BaoTangTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 	return mangas, nil
 }
 
+func (p *BaoTangTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
+	if page < 1 {
+		page = 1
+	}
+	endpoint := p.baseURL + fmt.Sprintf("/truyen-moi?page=%d", page)
+
+	resp, err := p.baotangtruyenGet(endpoint)
+	if err != nil {
+		resp, err = p.baotangtruyenGet(p.baseURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	var mangas []models.Manga
+	doc.Find("div.items > div.row > div.item, .list-stories .item, .items .item").Each(func(i int, s *goquery.Selection) {
+		linkEl := s.Find("figcaption h3 a, h3 a, a.title").First()
+		if linkEl.Length() == 0 {
+			linkEl = s.Find("a").First()
+		}
+		href, exists := linkEl.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		title := strings.TrimSpace(linkEl.Text())
+		if title == "" {
+			title = strings.TrimSpace(s.Find(".title").Text())
+		}
+		if title == "" {
+			return
+		}
+
+		cover := ""
+		s.Find(".image a img, img").Each(func(_ int, img *goquery.Selection) {
+			if v, ok := foxImgAttr(img); ok && cover == "" {
+				cover = v
+			}
+		})
+
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    title,
+			CoverURL: cover,
+		})
+	})
+
+	if len(mangas) == 0 {
+		return p.Search("")
+	}
+	return mangas, nil
+}
+
+func (p *BaoTangTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
+	page := opts.Page
+	if page < 1 {
+		page = 1
+	}
+
+	var endpoint string
+	if opts.Genre > 0 {
+		genres := []string{"", "action", "adventure", "comedy", "drama", "fantasy", "isekai", "romance", "shounen", "manhwa"}
+		if opts.Genre < len(genres) {
+			endpoint = p.baseURL + fmt.Sprintf("/the-loai/%s?page=%d", genres[opts.Genre], page)
+		}
+	} else if opts.Status == 2 {
+		endpoint = p.baseURL + fmt.Sprintf("/truyen-hoan-thanh?page=%d", page)
+	} else if opts.Sort == 1 || opts.Sort == 2 {
+		endpoint = p.baseURL + fmt.Sprintf("/truyen-hot?page=%d", page)
+	} else {
+		return p.FetchLatest(page)
+	}
+
+	resp, err := p.baotangtruyenGet(endpoint)
+	if err != nil {
+		return p.FetchLatest(page)
+	}
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML: %w", err)
+	}
+
+	var mangas []models.Manga
+	doc.Find("div.items > div.row > div.item, .list-stories .item, .items .item").Each(func(i int, s *goquery.Selection) {
+		linkEl := s.Find("figcaption h3 a, h3 a, a.title").First()
+		if linkEl.Length() == 0 {
+			linkEl = s.Find("a").First()
+		}
+		href, exists := linkEl.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		title := strings.TrimSpace(linkEl.Text())
+		if title == "" {
+			title = strings.TrimSpace(s.Find(".title").Text())
+		}
+		if title == "" {
+			return
+		}
+
+		cover := ""
+		s.Find(".image a img, img").Each(func(_ int, img *goquery.Selection) {
+			if v, ok := foxImgAttr(img); ok && cover == "" {
+				cover = v
+			}
+		})
+
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    title,
+			CoverURL: cover,
+		})
+	})
+
+	if len(mangas) == 0 {
+		return p.FetchLatest(page)
+	}
+	return mangas, nil
+}
+
 type btChapterItem struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`

@@ -77,7 +77,7 @@ func loadHistory() error {
 	return nil
 }
 
-// SaveHistory memoizes in RAM, flushes to disk later (async — no UI blocking).
+// SaveHistory updates reading progress in memory and schedules background persistence.
 func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) error {
 	if mangaID == "" || chapterID == "" {
 		return nil
@@ -90,8 +90,6 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		return err
 	}
 
-	// Keep old title/number if caller forgot to tell us.
-	// Spoiler: callers forget. All the time. Every time.
 	if old, ok := historyCache[mangaID]; ok {
 		if mangaTitle == "" {
 			mangaTitle = old.MangaTitle
@@ -134,19 +132,22 @@ func GetHistory(mangaID string) (*ReadHistory, bool) {
 		return nil, false
 	}
 
-	// Return a copy so callers can't poke the cache directly.
 	return &ReadHistory{
 		MangaID:       h.MangaID,
 		MangaTitle:    h.MangaTitle,
 		Provider:      h.Provider,
 		ChapterID:     h.ChapterID,
 		ChapterNumber: h.ChapterNumber,
-		PageIndex:     h.PageIndex,
+		PageIndex:     pageIndexCopy(h.PageIndex),
 		UpdatedAt:     h.UpdatedAt,
 	}, true
 }
 
-// LoadAllHistory — sort newest first, because nobody cares about what they read last year.
+func pageIndexCopy(i int) int {
+	return i
+}
+
+// LoadAllHistory returns all reading history records sorted newest first.
 func LoadAllHistory() ([]ReadHistory, error) {
 	historyMu.Lock()
 	defer historyMu.Unlock()

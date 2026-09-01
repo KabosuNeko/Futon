@@ -3,6 +3,7 @@ package imgrender
 import (
 	"bytes"
 	"encoding/base64"
+	"image"
 	"image/png"
 	"strconv"
 	"strings"
@@ -27,7 +28,10 @@ func (r kittyRenderer) RenderInBox(imgData []byte, cols, rows int) (RenderedImag
 	if err != nil {
 		return RenderedImage{}, err
 	}
+	return r.RenderImage(img)
+}
 
+func (r kittyRenderer) RenderImage(img image.Image) (RenderedImage, error) {
 	var pngBuf bytes.Buffer
 	if err := png.Encode(&pngBuf, img); err != nil {
 		return RenderedImage{}, err

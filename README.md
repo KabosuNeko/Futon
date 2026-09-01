@@ -32,8 +32,6 @@ Một **terminal manga reader** viết bằng **Go** — render manga trực ti�
 ## Tài liệu
 
 - [SPEC.md](SPEC.md) — product requirements, scope, keybindings, Definition of Done
-- [ROADMAP.md](ROADMAP.md) — lộ trình phát triển, tech debt, backlog
-- [TASKS.md](TASKS.md) — trạng thái công việc hiện tại
 - [AGENTS.md](AGENTS.md) — kiến trúc & conventions cho contributors
 
 ## Yêu cầu
@@ -138,7 +136,7 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 |----|--------|
 | Favorites + Sources | `~/.config/futon/userdata.json` |
 | Reading history | `~/.config/futon/history.json` |
-| Ảnh đã download | `~/Downloads/Futon_Downloads/` |
+| Ảnh đã download | `~/Downloads/Futon/` |
 
 ## Architecture
 

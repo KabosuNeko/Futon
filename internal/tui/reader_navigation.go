@@ -30,10 +30,8 @@ func (m ReaderModel) validCurrentImage() bool {
 	return m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0
 }
 
-// Keep concurrent downloads sane — no need to DDOS the CDN for a manga reader.
 const maxConcurrentDownloads = 4
 
-// Fire up to maxConcurrentDownloads at a time, skip already-downloaded and inflight.
 func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 	var cmds []tea.Cmd
 	isMangaDex := m.provider != nil && m.provider.Name() == "MangaDex"

@@ -49,7 +49,87 @@ func GlobalSearchCmd(providers []MangaProvider, query string) tea.Cmd {
 		wg.Wait()
 
 		var combinedErr error
-		if len(errs) > 0 {
+		if len(errs) > 0 && len(allResults) == 0 {
+			combinedErr = fmt.Errorf("%s", strings.Join(errs, "; "))
+		}
+		return MangaSearchResultMsg{Manga: allResults, Err: combinedErr, ProviderCounts: counts, ProviderErrors: perr}
+	}
+}
+
+func GlobalLatestCmd(providers []MangaProvider, page int) tea.Cmd {
+	return func() tea.Msg {
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		allResults := make([]models.Manga, 0)
+		var errs []string
+		counts := make(map[string]int)
+		perr := make(map[string]string)
+
+		for _, p := range providers {
+			wg.Add(1)
+			go func(provider MangaProvider) {
+				defer wg.Done()
+				results, err := provider.FetchLatest(page)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", provider.Name(), err))
+					perr[provider.Name()] = err.Error()
+					counts[provider.Name()] = 0
+					return
+				}
+				for i := range results {
+					results[i].Provider = provider.Name()
+				}
+				counts[provider.Name()] = len(results)
+				allResults = append(allResults, results...)
+			}(p)
+		}
+
+		wg.Wait()
+
+		var combinedErr error
+		if len(errs) > 0 && len(allResults) == 0 {
+			combinedErr = fmt.Errorf("%s", strings.Join(errs, "; "))
+		}
+		return MangaSearchResultMsg{Manga: allResults, Err: combinedErr, ProviderCounts: counts, ProviderErrors: perr}
+	}
+}
+
+func GlobalFilterCmd(providers []MangaProvider, opts FilterOptions) tea.Cmd {
+	return func() tea.Msg {
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		allResults := make([]models.Manga, 0)
+		var errs []string
+		counts := make(map[string]int)
+		perr := make(map[string]string)
+
+		for _, p := range providers {
+			wg.Add(1)
+			go func(provider MangaProvider) {
+				defer wg.Done()
+				results, err := provider.Filter(opts)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", provider.Name(), err))
+					perr[provider.Name()] = err.Error()
+					counts[provider.Name()] = 0
+					return
+				}
+				for i := range results {
+					results[i].Provider = provider.Name()
+				}
+				counts[provider.Name()] = len(results)
+				allResults = append(allResults, results...)
+			}(p)
+		}
+
+		wg.Wait()
+
+		var combinedErr error
+		if len(errs) > 0 && len(allResults) == 0 {
 			combinedErr = fmt.Errorf("%s", strings.Join(errs, "; "))
 		}
 		return MangaSearchResultMsg{Manga: allResults, Err: combinedErr, ProviderCounts: counts, ProviderErrors: perr}

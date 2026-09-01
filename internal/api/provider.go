@@ -33,10 +33,19 @@ const defaultUserAgent = "Futon-App/1.0"
 const providerTimeout = 10 * time.Second
 const providerMaxRetries = 2
 
+type FilterOptions struct {
+	Status int // 0: All, 1: Ongoing, 2: Completed
+	Sort   int // 0: Updated, 1: Popular, 2: Rating, 3: Alphabetical
+	Genre  int // 0: All, 1: Action, 2: Adventure, 3: Comedy, 4: Drama, 5: Fantasy, 6: Isekai, 7: Romance, 8: Shounen, 9: Webtoons / Manhwa
+	Page   int
+}
+
 // MangaProvider is the contract every source must sign.
 type MangaProvider interface {
 	Name() string
 	Search(keyword string) ([]models.Manga, error)
+	FetchLatest(page int) ([]models.Manga, error)
+	Filter(opts FilterOptions) ([]models.Manga, error)
 	FetchChapters(mangaID string) ([]models.Chapter, error)
 	FetchPages(chapterID string) ([]string, error)
 }
