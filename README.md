@@ -4,7 +4,11 @@
 <p align="center">
   <img src="https://github.com/user-attachments/assets/2b1cd5ba-eb66-4632-82d8-284f7c1e3780" alt="Futon Logo" style="width: 192px" />
 </p>
-<p><br/></p>
+<p align="center">
+  <a href="https://github.com/KabosuNeko/Futon/releases"><img src="https://img.shields.io/github/v/release/KabosuNeko/Futon?color=d4a259&label=release" alt="GitHub release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/go-%3E%3D1.24-00ADD8.svg" alt="Go Version" /></a>
+</p>
 
 Một **terminal manga reader** viết bằng **Go** — render manga trực tiếp trong terminal qua **Kitty Graphics Protocol** hoặc **Sixel**, không cần mở app xem ảnh riêng. Search từ nhiều nguồn, browse chapters, đọc với Vim-style keys.
 
