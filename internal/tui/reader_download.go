@@ -17,7 +17,7 @@ import (
 // MangaDex returns placeholder images unless you send this exact UA + no Referer.
 const mangaDexImageUserAgent = "Futon-App/1.0 (https://github.com/KabosuNeko/Futon)"
 
-const kittyClearSeq = "\x1b_Ga=d;\x1b\\"
+const kittyClearSeq = "\x1b_Ga=d,q=2;\x1b\\"
 
 func downloadImageBytes(url, referer, userAgent string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)

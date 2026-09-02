@@ -167,7 +167,7 @@ func (m SearchModel) View() string {
 		previewInnerW := previewPaneW - 4
 
 		var clearSeq strings.Builder
-		clearSeq.WriteString("\x1b_Ga=d,d=A\x1b\\\x1b_Ga=d,d=a\x1b\\")
+		clearSeq.WriteString("\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\")
 		for r := bodyRow + 8; r <= bodyRow+boxH-2; r++ {
 			clearSeq.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[%dX", r, previewCol+3, max(1, previewInnerW-2)))
 		}
@@ -188,7 +188,7 @@ func (m SearchModel) View() string {
 			placed = placed + fmt.Sprintf("\x1b[s%s\x1b[u", clearSeq.String())
 		}
 	} else {
-		placed = placed + "\x1b_Ga=d,d=A\x1b\\\x1b_Ga=d,d=a\x1b\\"
+		placed = placed + "\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\"
 	}
 
 	return placed

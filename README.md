@@ -86,7 +86,8 @@ Hỗ trợ:
 ## Cách dùng
 
 ```bash
-futon
+futon              # mở TUI
+futon update       # kiểm tra & cài bản mới (không cần mở TUI)
 ```
 
 ### Keybindings
@@ -96,11 +97,13 @@ futon
 | Key | Action |
 |-----|--------|
 | `ctrl+c` | Thoát |
+| `ctrl+u` | Cài bản cập nhật (khi có banner) |
 | `enter` | Search / mở truyện đang chọn |
 | `↑` / `↓` | Di chuyển list |
 | `/fav` | Xem favorites |
 | `/his` | Xem history |
 | `/src` | Chọn nguồn (space để toggle) |
+| `/update` | Kiểm tra & cài cập nhật |
 | `/lang vi\|en` | Set ngôn ngữ chapter (MangaDex) |
 
 Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sách.

@@ -411,6 +411,11 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			return m, loadHistoryCmd(), true
 		}
 
+		if val == "/update" {
+			m.input.SetValue("")
+			return m, func() tea.Msg { return RequestUpdateMsg{} }, true
+		}
+
 		if newM, cmd, handled := m.selectCurrentItem(); handled {
 			return newM, cmd, true
 		}

@@ -138,13 +138,9 @@ func GetHistory(mangaID string) (*ReadHistory, bool) {
 		Provider:      h.Provider,
 		ChapterID:     h.ChapterID,
 		ChapterNumber: h.ChapterNumber,
-		PageIndex:     pageIndexCopy(h.PageIndex),
+		PageIndex:     h.PageIndex,
 		UpdatedAt:     h.UpdatedAt,
 	}, true
-}
-
-func pageIndexCopy(i int) int {
-	return i
 }
 
 // LoadAllHistory returns all reading history records sorted newest first.
