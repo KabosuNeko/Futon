@@ -420,6 +420,17 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	oldVal := m.input.Value()
 	m.input, cmd = m.input.Update(msg)
 	newVal := m.input.Value()
+	if strings.Contains(newVal, "_Gi=") || strings.Contains(newVal, ";OK") {
+		cleaned := strings.ReplaceAll(newVal, "_Gi=1;OK", "")
+		cleaned = strings.ReplaceAll(cleaned, "_Gi=", "")
+		cleaned = strings.ReplaceAll(cleaned, ";OK", "")
+		cleaned = strings.ReplaceAll(cleaned, "_G", "")
+		cleaned = strings.ReplaceAll(cleaned, "\\le", "")
+		if cleaned != newVal {
+			m.input.SetValue(cleaned)
+			newVal = cleaned
+		}
+	}
 
 	if oldVal != newVal {
 		trimmed := strings.TrimSpace(newVal)

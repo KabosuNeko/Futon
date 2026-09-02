@@ -41,6 +41,14 @@ type UpdateReadyMsg struct {
 	Err error
 }
 
+type RequestUpdateMsg struct{}
+
+type UpdateCheckedMsg struct {
+	Available bool
+	Version   string
+	Err       error
+}
+
 type appState int
 
 const (
@@ -98,6 +106,19 @@ func checkForUpdateCmd(currentVersion string) tea.Cmd {
 	}
 }
 
+func checkUpdateForManualCmd(currentVersion string) tea.Cmd {
+	return func() tea.Msg {
+		available, version, _, err := updater.CheckForUpdate(currentVersion)
+		if err != nil {
+			return UpdateCheckedMsg{Err: err}
+		}
+		if !available {
+			return UpdateCheckedMsg{Available: false}
+		}
+		return UpdateCheckedMsg{Available: true, Version: version}
+	}
+}
+
 func runInstallScriptCmd() tea.Cmd {
 	cmdStr := "curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh -o /tmp/futon_install.sh && bash /tmp/futon_install.sh && rm /tmp/futon_install.sh"
 	c := exec.Command("bash", "-c", cmdStr)
@@ -145,6 +166,35 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateVersion = msg.Version
 		m.updateURL = msg.URL
 		return m, nil
+
+	case RequestUpdateMsg:
+		if m.state != stateSearch {
+			return m, nil
+		}
+		if m.updateAvailable {
+			m.state = stateUpdating
+			return m, runInstallScriptCmd()
+		}
+		if m.appVersion == "dev" {
+			m.state = stateUpdating
+			return m, runInstallScriptCmd()
+		}
+		m.search.systemMsg = "Đang kiểm tra cập nhật..."
+		return m, checkUpdateForManualCmd(m.appVersion)
+
+	case UpdateCheckedMsg:
+		if msg.Err != nil {
+			m.search.systemMsg = fmt.Sprintf("Kiểm tra cập nhật lỗi: %v", msg.Err)
+			return m, nil
+		}
+		if !msg.Available {
+			m.search.systemMsg = "Đã là bản mới nhất."
+			return m, nil
+		}
+		m.updateAvailable = true
+		m.updateVersion = msg.Version
+		m.state = stateUpdating
+		return m, runInstallScriptCmd()
 
 	case UpdateReadyMsg:
 		if msg.Err != nil {
