@@ -108,8 +108,11 @@ Futon is a TUI (terminal user interface) application that lets users:
 
 - **FR-U1**: On startup, checks GitHub `releases/latest` (5s timeout) in the background; `dev` version (built from source) **does not check**.
 - **FR-U2**: If a new version exists → banner `"[!] Đã có bản cập nhật {version}. Nhấn Ctrl+u để tự động cài đặt."` (actual key: `ctrl+u`).
-- **FR-U3**: `ctrl+u` → runs `install.sh` from the GitHub main branch (via `curl|bash`, includes `sudo`), shows "Đang cập nhật..."; then forces exit to apply.
-- **FR-U4**: Version comparison is semver component-wise (strips the `v` prefix).
+- **FR-U3**: `ctrl+u` (only on search, when banner visible) → runs `install.sh` from the GitHub main branch (via `curl|bash`, includes `sudo`), shows "Đang cập nhật..."; then forces exit to apply. **Why `ctrl+u` not `U`:** the search input is always focused, so a single-letter `U` would be typed into the search box; a `ctrl` combo avoids conflict.
+- **FR-U4**: Alternative triggers (same install path, no conflict with typing):
+  - **`/update`** slash command in search (enter) → checks version first: if outdated → installs immediately; if up-to-date → systemMsg "Đã là bản mới nhất."; if check fails → error shown.
+  - **`futon update`** CLI (also `futon --update`, `futon self-update`): run outside TUI, prints status to stdout/stderr and exits.
+- **FR-U5**: Version comparison is semver component-wise (strips the `v` prefix).
 
 ### 4.9 Keybinding summary
 
@@ -117,9 +120,11 @@ Futon is a TUI (terminal user interface) application that lets users:
 |---|---|---|
 | Global | `ctrl+c` | Quit app |
 | Global | `ctrl+u` | Install update (only when available, on search) |
+| Global | `futon update` (CLI) | Check & install update without TUI |
+| Search | `/update` | Check & install update (slash command) |
 | Search | `enter` | Search / open selected item / run slash command |
 | Search | `↑`/`↓` | Move through list |
-| Search | `/fav`, `/his`, `/src`, `/lang vi\|en` | Open feature |
+| Search | `/fav`, `/his`, `/src`, `/update`, `/lang vi\|en` | Open feature |
 | Fav/His | `enter` | Open manga |
 | Fav/His | `ctrl+d` | Remove from list |
 | Fav/His/Src | `esc` | Back to search |

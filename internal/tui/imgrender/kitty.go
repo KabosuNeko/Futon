@@ -70,11 +70,11 @@ func (r kittyRenderer) chunkedPayload(w, h int, b64 string) string {
 }
 
 func (r kittyRenderer) chunk(w, h int, data, m string) string {
-	return kittyStart + "a=T,f=100,i=1,C=1,s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ",m=" + m + ";" + data + kittyST
+	return kittyStart + "a=T,f=100,i=1,C=1,q=2,s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ",m=" + m + ";" + data + kittyST
 }
 
 func (r kittyRenderer) continuationChunk(data, m string) string {
-	return kittyStart + "i=1,m=" + m + ";" + data + kittyST
+	return kittyStart + "i=1,q=2,m=" + m + ";" + data + kittyST
 }
 
 func splitChunks(s string, chunkSize int) []string {
