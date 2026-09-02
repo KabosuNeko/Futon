@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Futon
+Comment=TUI manga reader
+GenericName=Manga Reader
+Exec=futon
+Icon=futon
+Terminal=true
+Type=Application
+Categories=Graphics;Viewer;
+Keywords=manga;comic;reader;viewer;
+StartupWMClass=futon
+StartupNotify=false

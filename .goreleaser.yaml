@@ -27,6 +27,11 @@ archives:
       {{- if eq .Os "darwin" }}macOS
       {{- else }}{{ .Os }}{{ end }}_
       {{- .Arch }}
+    files:
+      - src: ./assets/futon.desktop
+      - src: ./assets/futon.png
+      - src: ./README.md
+      - src: ./LICENSE
 
 checksum:
   name_template: 'checksums.txt'
