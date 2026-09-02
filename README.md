@@ -33,11 +33,6 @@ Một **terminal manga reader** viết bằng **Go** — render manga trực ti�
 - **Language filter** — `/lang vi` hoặc `/lang en` cho MangaDex
 - **Vim-style navigation** — Arrow keys, h/l, number jump
 
-## Tài liệu
-
-- [SPEC.md](SPEC.md) — product requirements, scope, keybindings, Definition of Done
-- [AGENTS.md](AGENTS.md) — kiến trúc & conventions cho contributors
-
 ## Yêu cầu
 
 Terminal cần support **Kitty Graphics Protocol** hoặc **Sixel**:
