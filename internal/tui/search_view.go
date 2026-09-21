@@ -120,7 +120,7 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 			Foreground(lipgloss.Color("1")).
 			MarginTop(1)
 		listContent = errStyle.Render(fmt.Sprintf("󰅚 Lỗi: %v", m.err))
-	} else if m.isSearching {
+	} else if m.isSearching && len(m.results) == 0 {
 		msg := " Đang tìm kiếm..."
 		if m.showingFeed {
 			msg = "󰑓 Đang nạp danh sách truyện mới..."

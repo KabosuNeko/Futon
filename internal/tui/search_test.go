@@ -241,3 +241,79 @@ func TestSearchWithNoActiveSourceUsesErrNoSource(t *testing.T) {
 		t.Errorf("unexpected error message: %q", rm.err.Error())
 	}
 }
+
+type streamProvider struct {
+	name  string
+	manga []models.Manga
+}
+
+func (p streamProvider) Name() string                            { return p.name }
+func (p streamProvider) Search(string) ([]models.Manga, error)   { return p.manga, nil }
+func (p streamProvider) FetchLatest(int) ([]models.Manga, error) { return p.manga, nil }
+func (p streamProvider) Filter(api.FilterOptions) ([]models.Manga, error) {
+	return p.manga, nil
+}
+func (p streamProvider) FetchChapters(string) ([]models.Chapter, error) { return nil, nil }
+func (p streamProvider) FetchPages(string) ([]string, error)            { return nil, nil }
+
+func TestStreamedResultsApplyWhileSearching(t *testing.T) {
+	m := NewSearchModel([]api.MangaProvider{streamProvider{
+		name:  "Fake",
+		manga: []models.Manga{{ID: "m1", Title: "Naruto"}},
+	}})
+	m.width, m.height = 100, 24
+	m.showingFeed = false
+	m.currentQuery = "naruto"
+	m.isSearching = true
+
+	cmd := api.GlobalSearchCmd(m.providers, "naruto")
+	msg := cmd().(api.MangaSearchResultMsg)
+	if msg.Stream == nil {
+		t.Fatal("single-provider search should still stream a snapshot")
+	}
+
+	updated, next := m.Update(msg)
+	sm := updated.(SearchModel)
+	if len(sm.results) != 1 || !sm.isSearching {
+		t.Fatalf("partial snapshot must apply results and keep searching, got results=%d isSearching=%v", len(sm.results), sm.isSearching)
+	}
+	if next == nil {
+		t.Fatal("expected a command to await the next snapshot")
+	}
+
+	var final api.MangaSearchResultMsg
+	for _, sub := range drainBatch(t, next) {
+		if m, ok := sub.(api.MangaSearchResultMsg); ok {
+			final = m
+		}
+	}
+	if final.Stream != nil {
+		t.Fatal("expected the drained message to be the final snapshot")
+	}
+
+	updated2, _ := sm.Update(final)
+	sm2 := updated2.(SearchModel)
+	if sm2.isSearching {
+		t.Error("final snapshot must clear isSearching")
+	}
+	if len(sm2.results) != 1 {
+		t.Errorf("results after final = %d, want 1", len(sm2.results))
+	}
+}
+
+// drainBatch runs nested batch commands and returns every message they emit.
+func drainBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, drainBatch(t, c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
