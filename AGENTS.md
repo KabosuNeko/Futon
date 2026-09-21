@@ -70,8 +70,8 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 - Only checked providers are searched; if none are checked, an error is shown.
 - Toggle state is persisted to `userdata.json` and restored on next launch.
 - Typing in `/src` mode filters the provider list (case-insensitive substring).
-- Provider interface: `Name`, `Search`, `FetchChapters`, `FetchPages`.
-- `GlobalSearchCmd` in `source.go` uses `sync.WaitGroup` + `sync.Mutex` for concurrent searches.
+- Provider interface: `Name`, `Search`, `FetchLatest`, `Filter`, `FetchChapters`, `FetchPages`.
+- `globalCmd` in `source.go` uses `sync.WaitGroup` + `sync.Mutex` for concurrent searches.
 - Titles are standardized to `Name (source)` format in all search modes.
 
 ## Runtime State
