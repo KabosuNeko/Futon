@@ -116,23 +116,7 @@ Futon is a TUI (terminal user interface) application that lets users:
 
 ### 4.9 Keybinding summary
 
-| Screen | Key | Action |
-|---|---|---|
-| Global | `ctrl+c` | Quit app |
-| Global | `ctrl+u` | Install update (only when available, on search) |
-| Global | `futon update` (CLI) | Check & install update without TUI |
-| Search | `/update` | Check & install update (slash command) |
-| Search | `enter` | Search / open selected item / run slash command |
-| Search | `↑`/`↓` | Move through list |
-| Search | `/fav`, `/his`, `/src`, `/update`, `/lang vi\|en` | Open feature |
-| Fav/His | `enter` | Open manga |
-| Fav/His | `ctrl+d` | Remove from list |
-| Fav/His/Src | `esc` | Back to search |
-| Chapter | `ctrl+f` | Add to favorites |
-| Chapter | `[number]`+`enter` | Jump to chapter |
-| Reader | `→`/`l`, `←`/`h` | Next / previous page |
-| Reader | `ctrl+d` | Save current page image |
-| Reader | `ctrl+c` | Save + flush history then quit |
+The keybindings table in `README.md` is the user-facing source of truth; FR-R1/FR-H8/FR-U3 above are the normative requirements.
 
 ## 5. Non-Functional Requirements
 
@@ -141,7 +125,6 @@ Futon is a TUI (terminal user interface) application that lets users:
 - **NFR-3**: Key input must respond instantly; network search must not freeze the interface.
 - **NFR-4**: Local data safety — write files with 0644, do not overwrite unnecessarily.
 - **NFR-5**: Cross-compilation without CGO (`CGO_ENABLED=0`).
-- **NFR-6**: Exiting with `ctrl+c` in the reader flushes history immediately (synchronous save + flush) before quitting — no lost last-page position.
 
 ## 6. Data & Storage
 
@@ -162,10 +145,9 @@ Futon is a TUI (terminal user interface) application that lets users:
 
 ## 8. Architecture Constraints
 
-- `internal/api`: `MangaProvider` interface (`Name`, `Search`, `FetchChapters`, `FetchPages`) + `tea.Cmd` wrappers. Provider HTTP clients have 10s timeout and 2-retry backoff on transient failures.
-- `internal/tui`: Bubble Tea, `AppModel` router (search → chapters → reader), navigation messages `ViewMangaMsg` / `ViewChapterMsg` / `BackToSearchMsg` / `BackToChaptersMsg`.
-- `internal/storage`: all persistence goes through `userdata.go` (merged) or `history.go` (debounced).
 - Manga ID is an **opaque string** — slug (OTruyen), UUID (MangaDex), URL (HTML providers) — its format must not be assumed.
+- `internal/api` exposes `MangaProvider` (`Name`, `Search`, `FetchLatest`, `Filter`, `FetchChapters`, `FetchPages`) plus `tea.Cmd` wrappers.
+- Package layout and conventions live in `AGENTS.md`.
 
 ## 9. Definition of Done (for every change)
 
