@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 )
@@ -33,41 +32,19 @@ func (m *MangaDexProvider) SetLang(lang string) {
 	m.lang = lang
 }
 
-func mangadexGet(endpoint string) (*http.Response, error) {
-	client := ensureClient(http.DefaultClient)
-	var lastErr error
-	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
-		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, fmt.Errorf("tạo request: %w", err)
-		}
-		req.Header.Set("User-Agent", defaultUserAgent)
+func mangadexList(resp *http.Response) ([]models.Manga, int, error) {
+	defer resp.Body.Close()
 
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("gọi API: %w", err)
-			if attempt < providerMaxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
-			}
-			return nil, lastErr
-		}
-		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
-			resp.Body.Close()
-			lastErr = fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
-			if attempt < providerMaxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
-			}
-			return nil, lastErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
-		}
-		return resp, nil
+	var result models.MangaSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, fmt.Errorf("parse JSON: %w", err)
 	}
-	return nil, lastErr
+
+	all := make([]models.Manga, 0, len(result.Data))
+	for _, data := range result.Data {
+		all = append(all, data.ToManga())
+	}
+	return all, result.Total, nil
 }
 
 func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
@@ -80,26 +57,21 @@ func (m *MangaDexProvider) Search(query string) ([]models.Manga, error) {
 			mangadexBaseURL, url.QueryEscape(query), mangadexSearchPageLimit, offset,
 		)
 
-		resp, err := mangadexGet(endpoint)
+		resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 		if err != nil {
 			return nil, err
 		}
 
-		var result models.MangaSearchResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			resp.Body.Close()
-			return nil, fmt.Errorf("parse JSON: %w", err)
+		batch, total, err := mangadexList(resp)
+		if err != nil {
+			return nil, err
 		}
-		resp.Body.Close()
+		all = append(all, batch...)
 
-		for _, data := range result.Data {
-			all = append(all, data.ToManga())
-		}
-
-		if len(result.Data) < mangadexSearchPageLimit {
+		if len(batch) < mangadexSearchPageLimit {
 			break
 		}
-		if result.Total > 0 && len(all) >= result.Total {
+		if total > 0 && len(all) >= total {
 			break
 		}
 		offset += mangadexSearchPageLimit
@@ -118,22 +90,12 @@ func (m *MangaDexProvider) FetchLatest(page int) ([]models.Manga, error) {
 		mangadexBaseURL, offset,
 	)
 
-	resp, err := mangadexGet(endpoint)
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	var result models.MangaSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
-	all := make([]models.Manga, 0, len(result.Data))
-	for _, data := range result.Data {
-		all = append(all, data.ToManga())
-	}
-	return all, nil
+	mangas, _, err := mangadexList(resp)
+	return mangas, err
 }
 
 func (m *MangaDexProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
@@ -187,26 +149,15 @@ func (m *MangaDexProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
 	}
 
 	endpoint := fmt.Sprintf("%s/manga?%s", mangadexBaseURL, params.Encode())
-	resp, err := mangadexGet(endpoint)
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return m.FetchLatest(page)
 	}
-	defer resp.Body.Close()
-
-	var result models.MangaSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
-	all := make([]models.Manga, 0, len(result.Data))
-	for _, data := range result.Data {
-		all = append(all, data.ToManga())
-	}
-	return all, nil
+	mangas, _, err := mangadexList(resp)
+	return mangas, err
 }
 
 func (m *MangaDexProvider) FetchChapters(mangaID string) ([]models.Chapter, error) {
-	// MangaDex pagination: fetch up to 500 per page, loop until we have them all.
 	const limit = 500
 	var all []models.Chapter
 	offset := 0
@@ -217,7 +168,7 @@ func (m *MangaDexProvider) FetchChapters(mangaID string) ([]models.Chapter, erro
 			url.PathEscape(mangaID), m.lang, limit, offset,
 		)
 
-		resp, err := mangadexGet(endpoint)
+		resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +202,7 @@ func (m *MangaDexProvider) FetchPages(chapterID string) ([]string, error) {
 		url.PathEscape(chapterID),
 	)
 
-	resp, err := mangadexGet(endpoint)
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return nil, err
 	}

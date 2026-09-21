@@ -1,6 +1,6 @@
 package models
 
-import "fmt"
+import "strconv"
 
 type Manga struct {
 	ID       string
@@ -25,7 +25,6 @@ type MangaData struct {
 }
 
 type MangaRelationship struct {
-	ID         string              `json:"id"`
 	Type       string              `json:"type"`
 	Attributes *MangaRelAttributes `json:"attributes"`
 }
@@ -64,7 +63,7 @@ func (d MangaData) ToManga() Manga {
 
 	var year string
 	if d.Attributes.Year != nil && *d.Attributes.Year > 0 {
-		year = fmt.Sprintf("%d", *d.Attributes.Year)
+		year = strconv.Itoa(*d.Attributes.Year)
 	}
 
 	var genres []string

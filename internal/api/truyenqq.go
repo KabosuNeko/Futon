@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/KabosuNeko/Futon/internal/models"
@@ -108,6 +109,34 @@ func (p *TruyenQQProvider) Search(keyword string) ([]models.Manga, error) {
 	return mangas, nil
 }
 
+func parseTruyenQQList(doc *goquery.Document) []models.Manga {
+	mangas := make([]models.Manga, 0)
+	doc.Find(".list_grid li, .list-stories li, .story-item").Each(func(i int, s *goquery.Selection) {
+		a := s.Find("h3 a, .book_name a, .title a, a.qtip").First()
+		if a.Length() == 0 {
+			a = s.Find("a").First()
+		}
+		href, exists := a.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+		name := strings.TrimSpace(a.Text())
+		if name == "" {
+			name = strings.TrimSpace(s.Find(".book_info h3").Text())
+		}
+		if name == "" {
+			return
+		}
+		cover, _ := imageSrc(s.Find("img"))
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    name,
+			CoverURL: cover,
+		})
+	})
+	return mangas
+}
+
 func (p *TruyenQQProvider) FetchLatest(page int) ([]models.Manga, error) {
 	if page < 1 {
 		page = 1
@@ -140,31 +169,7 @@ func (p *TruyenQQProvider) FetchLatest(page int) ([]models.Manga, error) {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	mangas := make([]models.Manga, 0)
-	doc.Find(".list_grid li, .list-stories li, .story-item").Each(func(i int, s *goquery.Selection) {
-		a := s.Find("h3 a, .book_name a, .title a, a.qtip").First()
-		if a.Length() == 0 {
-			a = s.Find("a").First()
-		}
-		href, exists := a.Attr("href")
-		if !exists || href == "" {
-			return
-		}
-		name := strings.TrimSpace(a.Text())
-		if name == "" {
-			name = strings.TrimSpace(s.Find(".book_info h3").Text())
-		}
-		if name == "" {
-			return
-		}
-		cover, _ := imageSrc(s.Find("img"))
-		mangas = append(mangas, models.Manga{
-			ID:       href,
-			Title:    name,
-			CoverURL: cover,
-		})
-	})
-
+	mangas := parseTruyenQQList(doc)
 	if len(mangas) == 0 {
 		return p.Search("")
 	}
@@ -229,31 +234,7 @@ func (p *TruyenQQProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	mangas := make([]models.Manga, 0)
-	doc.Find(".list_grid li, .list-stories li, .story-item").Each(func(i int, s *goquery.Selection) {
-		a := s.Find("h3 a, .book_name a, .title a, a.qtip").First()
-		if a.Length() == 0 {
-			a = s.Find("a").First()
-		}
-		href, exists := a.Attr("href")
-		if !exists || href == "" {
-			return
-		}
-		name := strings.TrimSpace(a.Text())
-		if name == "" {
-			name = strings.TrimSpace(s.Find(".book_info h3").Text())
-		}
-		if name == "" {
-			return
-		}
-		cover, _ := imageSrc(s.Find("img"))
-		mangas = append(mangas, models.Manga{
-			ID:       href,
-			Title:    name,
-			CoverURL: cover,
-		})
-	})
-
+	mangas := parseTruyenQQList(doc)
 	if len(mangas) == 0 {
 		return p.FetchLatest(page)
 	}
@@ -287,7 +268,7 @@ func (p *TruyenQQProvider) FetchChapters(mangaURL string) ([]models.Chapter, err
 		})
 	})
 
-	reverseChapters(chapters)
+	slices.Reverse(chapters)
 	return chapters, nil
 }
 

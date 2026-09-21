@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -176,7 +177,6 @@ func TestCoverDebounceAndRenderMsg(t *testing.T) {
 	}
 	m.cursor = 0
 
-	// Trigger coverRenderedMsg
 	rendered := imgrender.RenderedImage{
 		EscapeSequence: "\x1b_Gtest\x1b\\",
 		WidthPx:        100,
@@ -202,3 +202,42 @@ func TestCoverDebounceAndRenderMsg(t *testing.T) {
 	}
 }
 
+func TestFilteredIndicesMatchesActiveList(t *testing.T) {
+	m := testSearchModel()
+	m.filterQuery = "nar"
+
+	m.favorites = []storage.FavoriteManga{{Title: "Naruto"}, {Title: "Bleach"}}
+	if got := m.filteredFavIndices(); !reflect.DeepEqual(got, []int{0}) {
+		t.Errorf("filteredFavIndices = %v, want [0]", got)
+	}
+
+	m.history = []storage.ReadHistory{{MangaID: "naruto-id"}, {MangaTitle: "Bleach"}}
+	if got := m.filteredHistoryIndices(); !reflect.DeepEqual(got, []int{0}) {
+		t.Errorf("filteredHistoryIndices = %v, want [0] via MangaID fallback", got)
+	}
+
+	m.filterQuery = "manga"
+	if got := m.filteredProviderIndices(); !reflect.DeepEqual(got, []int{1}) {
+		t.Errorf("filteredProviderIndices = %v, want [1]", got)
+	}
+
+	m.filterQuery = ""
+	if got := m.filteredFavIndices(); !reflect.DeepEqual(got, []int{0, 1}) {
+		t.Errorf("filteredFavIndices with empty query = %v, want [0 1]", got)
+	}
+}
+
+func TestSearchWithNoActiveSourceUsesErrNoSource(t *testing.T) {
+	m := testSearchModel()
+	m.providerToggles = []bool{false, false}
+	m.input.SetValue("naruto")
+
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	rm := newM.(SearchModel)
+	if rm.err != errNoSource {
+		t.Fatalf("expected errNoSource, got %v", rm.err)
+	}
+	if rm.err.Error() != "Chọn ít nhất một nguồn trong /src" {
+		t.Errorf("unexpected error message: %q", rm.err.Error())
+	}
+}

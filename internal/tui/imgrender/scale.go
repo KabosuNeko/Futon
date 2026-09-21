@@ -10,10 +10,6 @@ import (
 	"github.com/nfnt/resize"
 )
 
-func decodeAndScale(imgData []byte) (image.Image, error) {
-	return decodeAndScaleInBox(imgData, 0, 0)
-}
-
 func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(imgData))
 	if err != nil {

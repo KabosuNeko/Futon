@@ -66,17 +66,20 @@ func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderMode
 
 	var cmds []tea.Cmd
 	if msg.index == m.currentIdx && m.validCurrentImage() {
-		m.step = stepRead
-		m.isLoading = true
-		cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx))
+		cmds = append(cmds, m.startReading())
 	}
 	cmds = append(cmds, m.scheduleDownloads()...)
 	if len(cmds) == 0 && m.step != stepRead && m.validCurrentImage() {
-		m.step = stepRead
-		m.isLoading = true
-		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx)
+		return m, m.startReading()
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// startReading transitions to the read step and renders the current page.
+func (m *ReaderModel) startReading() tea.Cmd {
+	m.step = stepRead
+	m.isLoading = true
+	return renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx)
 }
 
 func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) {
@@ -92,8 +95,7 @@ func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) 
 		m.isLoading = false
 	}
 
-	var cmds []tea.Cmd
-	cmds = append(cmds, m.scheduleDownloads()...)
+	cmds := m.scheduleDownloads()
 	if nextIdx := m.nextRenderIndex(); nextIdx >= 0 && nextIdx < len(m.imageData) {
 		cmds = append(cmds, renderPage(m.renderer, m.imageData[nextIdx], nextIdx))
 	}
@@ -114,11 +116,10 @@ func (m ReaderModel) handlePreloadComplete(msg PreloadCompleteMsg) (ReaderModel,
 }
 
 func (m ReaderModel) handlePreloadTransitionReady(_ preloadTransitionReadyMsg) (ReaderModel, tea.Cmd) {
-	var cmds []tea.Cmd
+	cmds := m.scheduleDownloads()
 	if m.step == stepRead && m.validCurrentImage() {
 		cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx))
 	}
-	cmds = append(cmds, m.scheduleDownloads()...)
 	return m, tea.Batch(cmds...)
 }
 

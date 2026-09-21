@@ -15,15 +15,7 @@ func (m ReaderModel) hasPreviousChapter() bool {
 
 // Sanity-check currentIdx — prevents out-of-bounds on corrupted state after chapter transitions.
 func (m *ReaderModel) clampCurrentIndex() {
-	if m.total <= 0 {
-		m.currentIdx = 0
-		return
-	}
-	if m.currentIdx < 0 {
-		m.currentIdx = 0
-	} else if m.currentIdx >= m.total {
-		m.currentIdx = m.total - 1
-	}
+	m.currentIdx = max(0, min(m.currentIdx, m.total-1))
 }
 
 func (m ReaderModel) validCurrentImage() bool {
@@ -39,9 +31,6 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 		idx := m.downloadOrder[m.downloadPos]
 		m.downloadPos++
 		if len(m.imageData[idx]) > 0 {
-			continue
-		}
-		if _, ok := m.downloading[idx]; ok {
 			continue
 		}
 		m.downloading[idx] = struct{}{}
@@ -103,9 +92,7 @@ func (m *ReaderModel) applyPreloadedChapter(nextID string) {
 	m.imageCache = make(map[int]imgrender.RenderedImage)
 	m.cacheOrder = nil
 	m.downloading = make(map[int]struct{})
-	for i, data := range m.preloadedImages {
-		m.imageData[i] = data
-	}
+	copy(m.imageData, m.preloadedImages)
 	m.downloaded = len(m.preloadedImages)
 	m.currentIdx = 0
 	m.downloadPos = m.downloaded

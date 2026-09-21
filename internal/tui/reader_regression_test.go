@@ -102,7 +102,7 @@ func TestReaderViewRendersFooterInStepRead(t *testing.T) {
 	}
 
 	r := imgrender.New()
-	rendered, err := r.Render(buf.Bytes())
+	rendered, err := r.RenderInBox(buf.Bytes(), 0, 0)
 	if err != nil {
 		t.Fatalf("render image: %v", err)
 	}

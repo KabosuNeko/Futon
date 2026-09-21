@@ -102,7 +102,7 @@ func (m ReaderModel) centerText(text string) string {
 }
 
 // Convert image pixel size to terminal cell count — Kitty/Sixel geometry math.
-func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY, cellsW, cellsH int) {
+func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY int) {
 	ts, err := imgrender.GetTerminalSize()
 	if err != nil || ts.Cols <= 0 || ts.Rows <= 0 {
 		ts = imgrender.TerminalSize{Cols: m.width, Rows: m.height, PxW: m.width * 8, PxH: m.height * 16}
@@ -116,14 +116,14 @@ func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY, c
 
 	cellW := max(1, ts.PxW/ts.Cols)
 	cellH := max(1, ts.PxH/ts.Rows)
-	cellsW = max(1, img.WidthPx/cellW)
-	cellsH = max(1, img.HeightPx/cellH)
+	cellsW := max(1, img.WidthPx/cellW)
+	cellsH := max(1, img.HeightPx/cellH)
 	offsetX = max(0, (ts.Cols-cellsW)/2)
 	offsetY = max(0, (ts.Rows-2-cellsH)/2)
 	return
 }
 
 func (m ReaderModel) centeredImage(img imgrender.RenderedImage) string {
-	offsetX, offsetY, _, _ := m.imageRect(img)
+	offsetX, offsetY := m.imageRect(img)
 	return fmt.Sprintf("\x1b[%d;%dH", offsetY+1, offsetX+1) + img.EscapeSequence
 }

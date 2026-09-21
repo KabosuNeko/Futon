@@ -43,7 +43,7 @@ func exportReaderCBZCmd(mangaTitle, chapterNumber string, images [][]byte, urls 
 			path, err := export.ExportImagesToCBZ(mangaTitle, chapterNumber, images, "")
 			return cbzExportedMsg{path: path, err: err}
 		}
-		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "", "", "")
+		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "")
 		return cbzExportedMsg{path: path, err: err}
 	}
 }
@@ -56,9 +56,7 @@ func (m ReaderModel) handleNextPage() (ReaderModel, tea.Cmd) {
 	if m.currentIdx < m.total-1 {
 		m.currentIdx++
 
-		var cmds []tea.Cmd
-		m, pageCmds := m.loadCurrentPage()
-		cmds = append(cmds, pageCmds...)
+		m, cmds := m.loadCurrentPage()
 		cmds = append(cmds, storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
 		if m.currentIdx == m.total-preloadTriggerOffset && !m.isPreloadingNext && m.hasNextChapter() {
 			m.isPreloadingNext = true
@@ -99,9 +97,7 @@ func (m ReaderModel) handlePrevPage() (ReaderModel, tea.Cmd) {
 	if m.currentIdx > 0 {
 		m.currentIdx--
 
-		var cmds []tea.Cmd
-		m, pageCmds := m.loadCurrentPage()
-		cmds = append(cmds, pageCmds...)
+		m, cmds := m.loadCurrentPage()
 		cmds = append(cmds, storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
 		return m, tea.Batch(cmds...)
 	} else if m.hasPreviousChapter() {
