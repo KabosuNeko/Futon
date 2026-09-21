@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/KabosuNeko/Futon/internal/tui"
 	"github.com/KabosuNeko/Futon/internal/updater"
@@ -38,8 +37,7 @@ func runUpdateCLI(currentVersion string) {
 	if currentVersion == "dev" {
 		fmt.Println("Dev build: installing latest release...")
 		fmt.Println("Running install.sh...")
-		cmdStr := "curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh -o /tmp/futon_install.sh && bash /tmp/futon_install.sh && rm /tmp/futon_install.sh"
-		c := exec.Command("bash", "-c", cmdStr)
+		c := updater.InstallScriptCommand()
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
@@ -50,7 +48,7 @@ func runUpdateCLI(currentVersion string) {
 		fmt.Println("Update done. Restart futon to use the new version.")
 		return
 	}
-	available, version, _, err := updater.CheckForUpdate(currentVersion)
+	available, version, err := updater.CheckForUpdate(currentVersion)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Update check failed: %v\n", err)
 		os.Exit(1)
@@ -60,8 +58,7 @@ func runUpdateCLI(currentVersion string) {
 		return
 	}
 	fmt.Printf("New version %s available — installing...\n", version)
-	cmdStr := "curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh -o /tmp/futon_install.sh && bash /tmp/futon_install.sh && rm /tmp/futon_install.sh"
-	c := exec.Command("bash", "-c", cmdStr)
+	c := updater.InstallScriptCommand()
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

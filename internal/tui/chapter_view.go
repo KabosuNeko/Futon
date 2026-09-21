@@ -10,8 +10,6 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-const chapterUIOffset = 4
-
 func (m ChapterListModel) View() string {
 	w, h := m.width, m.height
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
@@ -123,27 +121,22 @@ func (m ChapterListModel) View() string {
 				title = "Không tiêu đề"
 			}
 
-			chLabel := fmt.Sprintf("%sCh. %s - %s", prefix, ch.Number, title)
+			truncW := maxLineW
+			badge := ""
 			if isHistory {
-				badge := " [Đang đọc]"
-				availW := maxLineW - runewidth.StringWidth(badge)
-				if availW < 10 {
-					availW = 10
-				}
-				truncated := runewidth.Truncate(chLabel, availW, "...")
-				if isCursor {
-					contentLines = append(contentLines, selectedStyle.Render(truncated)+historyBadgeStyle.Render(badge))
-				} else {
-					contentLines = append(contentLines, normalStyle.Render(truncated)+historyBadgeStyle.Render(badge))
-				}
-			} else {
-				truncated := runewidth.Truncate(chLabel, maxLineW, "...")
-				if isCursor {
-					contentLines = append(contentLines, selectedStyle.Render(truncated))
-				} else {
-					contentLines = append(contentLines, normalStyle.Render(truncated))
-				}
+				badge = " [Đang đọc]"
+				truncW = max(10, maxLineW-runewidth.StringWidth(badge))
 			}
+			line := runewidth.Truncate(fmt.Sprintf("%sCh. %s - %s", prefix, ch.Number, title), truncW, "...")
+			if isCursor {
+				line = selectedStyle.Render(line)
+			} else {
+				line = normalStyle.Render(line)
+			}
+			if badge != "" {
+				line += historyBadgeStyle.Render(badge)
+			}
+			contentLines = append(contentLines, line)
 		}
 	}
 

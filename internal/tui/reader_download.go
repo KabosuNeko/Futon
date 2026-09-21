@@ -24,11 +24,10 @@ func downloadImageBytes(url, referer, userAgent string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if userAgent != "" {
-		req.Header.Set("User-Agent", userAgent)
-	} else {
-		req.Header.Set("User-Agent", "Futon-App/1.0")
+	if userAgent == "" {
+		userAgent = "Futon-App/1.0"
 	}
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
 	if referer != "" {
 		req.Header.Set("Referer", referer)
@@ -57,7 +56,7 @@ func downloadOne(url string, index int, referer, userAgent string) tea.Cmd {
 
 func renderPage(r imgrender.Renderer, imgData []byte, index int) tea.Cmd {
 	return func() tea.Msg {
-		img, err := r.Render(imgData)
+		img, err := r.RenderInBox(imgData, 0, 0)
 		if err != nil {
 			return renderDoneMsg{index: index, err: fmt.Errorf("render trang %d: %w", index+1, err)}
 		}
@@ -73,10 +72,8 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 			return PreloadCompleteMsg{ChapID: nextID}
 		}
 
-		preloadCount := 2 // Preload 2 pages — enough for instant flip, light on bandwidth.
-		if len(urls) < preloadCount {
-			preloadCount = len(urls)
-		}
+		// Preload 2 pages — enough for instant flip, light on bandwidth.
+		preloadCount := min(2, len(urls))
 
 		var referer, userAgent string
 		if provider != nil && provider.Name() == "MangaDex" {
@@ -86,7 +83,7 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 		}
 
 		images := make([][]byte, 0, preloadCount)
-		for i := 0; i < preloadCount && i < len(urls); i++ {
+		for i := 0; i < preloadCount; i++ {
 			data, err := downloadImageBytes(urls[i], referer, userAgent)
 			if err != nil {
 				break
@@ -127,7 +124,7 @@ func chapterNavCmd(chapterID, mangaID, mangaTitle string, allChapterIDs, allChap
 func clearGraphicsCmd() tea.Cmd {
 	return func() tea.Msg {
 		fmt.Print(kittyClearSeq)
-		return clearDoneMsg{}
+		return nil
 	}
 }
 
@@ -135,27 +132,23 @@ func clearScreenCmd() tea.Cmd {
 	return func() tea.Msg {
 		fmt.Print(kittyClearSeq)
 		fmt.Print("\x1b[H\x1b[2J")
-		return clearDoneMsg{}
+		return nil
 	}
 }
 
 func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int) tea.Cmd {
 	return func() tea.Msg {
-		home, err := os.UserHomeDir()
+		dir, err := export.GetDefaultExportDir()
 		if err != nil {
-			return imageSavedMsg{err: fmt.Errorf("lấy thư mục home: %w", err)}
-		}
-		dir := filepath.Join(home, "Downloads", "Futon")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return imageSavedMsg{err: fmt.Errorf("tạo thư mục download: %w", err)}
 		}
 
-		safeTitle := sanitizeFilename(mangaTitle)
-		if safeTitle == "" {
+		safeTitle := export.SanitizeFilename(mangaTitle)
+		if safeTitle == "Untitled" {
 			safeTitle = "manga"
 		}
-		ch := sanitizeFilename(chapterNumber)
-		if ch == "" {
+		ch := export.SanitizeFilename(chapterNumber)
+		if ch == "Untitled" {
 			ch = "unknown"
 		}
 		path := filepath.Join(dir, fmt.Sprintf("%s_Ch%s_Pg%d.jpg", safeTitle, ch, pageNumber))
@@ -173,12 +166,4 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 		}
 		return imageSavedMsg{path: path}
 	}
-}
-
-func sanitizeFilename(name string) string {
-	s := export.SanitizeFilename(name)
-	if s == "Untitled" {
-		return ""
-	}
-	return s
 }

@@ -4,21 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestCheckForUpdate_dev(t *testing.T) {
-	ok, tag, url, err := CheckForUpdate("dev")
+	ok, tag, err := CheckForUpdate("dev")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if ok {
 		t.Fatal("expected false for dev version")
 	}
-	if tag != "" || url != "" {
-		t.Fatal("expected empty tag and url for dev version")
+	if tag != "" {
+		t.Fatal("expected empty tag for dev version")
 	}
 }
 
@@ -32,7 +31,7 @@ func TestCheckForUpdate_noNewVersion(t *testing.T) {
 	apiURL = srv.URL
 	defer func() { apiURL = origURL }()
 
-	ok, _, _, err := CheckForUpdate("v1.0.0")
+	ok, _, err := CheckForUpdate("v1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -43,16 +42,8 @@ func TestCheckForUpdate_noNewVersion(t *testing.T) {
 
 func TestCheckForUpdate_hasUpdate(t *testing.T) {
 	tag := "v2.0.0"
-	ver := strings.TrimPrefix(tag, "v")
-	wanted := assetFileName(ver, runtime.GOOS, runtime.GOARCH)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(releaseInfo{
-			TagName: tag,
-			Assets: []releaseAsset{
-				{Name: "other_file", BrowserDownloadURL: "https://example.com/other"},
-				{Name: wanted, BrowserDownloadURL: "https://example.com/futon.tar.gz"},
-			},
-		})
+		json.NewEncoder(w).Encode(releaseInfo{TagName: tag})
 	}))
 	defer srv.Close()
 
@@ -60,7 +51,7 @@ func TestCheckForUpdate_hasUpdate(t *testing.T) {
 	apiURL = srv.URL
 	defer func() { apiURL = origURL }()
 
-	ok, gotTag, gotURL, err := CheckForUpdate("v1.0.0")
+	ok, gotTag, err := CheckForUpdate("v1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,17 +61,11 @@ func TestCheckForUpdate_hasUpdate(t *testing.T) {
 	if gotTag != tag {
 		t.Fatalf("expected tag %s, got %s", tag, gotTag)
 	}
-	if gotURL != "https://example.com/futon.tar.gz" {
-		t.Fatalf("expected URL https://example.com/futon.tar.gz, got %s", gotURL)
-	}
 }
 
-func TestCheckForUpdate_noMatchingAsset(t *testing.T) {
+func TestCheckForUpdate_emptyTagNoUpdate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(releaseInfo{
-			TagName: "v2.0.0",
-			Assets:  []releaseAsset{{Name: "wrong_name.tar.gz", BrowserDownloadURL: "https://example.com/wrong"}},
-		})
+		json.NewEncoder(w).Encode(releaseInfo{})
 	}))
 	defer srv.Close()
 
@@ -88,12 +73,12 @@ func TestCheckForUpdate_noMatchingAsset(t *testing.T) {
 	apiURL = srv.URL
 	defer func() { apiURL = origURL }()
 
-	_, _, _, err := CheckForUpdate("v1.0.0")
-	if err == nil {
-		t.Fatal("expected error when no matching asset")
+	ok, _, err := CheckForUpdate("v1.0.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no asset found") {
-		t.Fatalf("expected 'no asset found', got: %v", err)
+	if ok {
+		t.Fatal("expected false when release tag is empty")
 	}
 }
 
@@ -107,26 +92,12 @@ func TestCheckForUpdate_httpError(t *testing.T) {
 	apiURL = srv.URL
 	defer func() { apiURL = origURL }()
 
-	_, _, _, err := CheckForUpdate("v1.0.0")
+	_, _, err := CheckForUpdate("v1.0.0")
 	if err == nil {
 		t.Fatal("expected error on non-200 status")
 	}
 	if !strings.Contains(err.Error(), "HTTP status: 404") {
 		t.Fatalf("expected 404 error, got: %v", err)
-	}
-}
-
-func TestAssetFileNameDarwin(t *testing.T) {
-	got := assetFileName("1.2.3", "darwin", "arm64")
-	if got != "futon_1.2.3_macOS_arm64.tar.gz" {
-		t.Fatalf("expected futon_1.2.3_macOS_arm64.tar.gz, got %s", got)
-	}
-}
-
-func TestAssetFileNameLinux(t *testing.T) {
-	got := assetFileName("1.2.3", "linux", "amd64")
-	if got != "futon_1.2.3_linux_amd64.tar.gz" {
-		t.Fatalf("expected futon_1.2.3_linux_amd64.tar.gz, got %s", got)
 	}
 }
 
@@ -140,8 +111,40 @@ func TestCheckForUpdate_invalidJSON(t *testing.T) {
 	apiURL = srv.URL
 	defer func() { apiURL = origURL }()
 
-	_, _, _, err := CheckForUpdate("v1.0.0")
+	_, _, err := CheckForUpdate("v1.0.0")
 	if err == nil {
 		t.Fatal("expected error on invalid JSON")
+	}
+}
+
+func TestVersLE(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"1.0.0", "1.0.0", true},
+		{"1.0.1", "1.0.0", false},
+		{"1.0", "1.0.0", true},
+		{"1.2", "1.10", true},
+		{"1.10", "1.2", false},
+		{"2.0.0", "1.9.9", false},
+	}
+	for _, c := range cases {
+		if got := versLE(c.a, c.b); got != c.want {
+			t.Errorf("versLE(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestInstallScriptCommand(t *testing.T) {
+	c := InstallScriptCommand()
+	if c == nil {
+		t.Fatal("expected a command")
+	}
+	if c.Args[0] != "bash" || c.Args[1] != "-c" {
+		t.Fatalf("unexpected argv: %v", c.Args)
+	}
+	if !strings.Contains(c.Args[2], "install.sh") || !strings.Contains(c.Args[2], "/tmp/futon_install.sh") {
+		t.Fatalf("unexpected install script command: %q", c.Args[2])
 	}
 }

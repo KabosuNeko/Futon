@@ -4,21 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 )
-
-// assetFileName builds the GoReleaser asset name for a given version and
-// platform. GoReleaser names macOS assets with "macOS" while runtime.GOOS
-// reports "darwin", so map it explicitly.
-func assetFileName(version, goos, goarch string) string {
-	if goos == "darwin" {
-		goos = "macOS"
-	}
-	return fmt.Sprintf("futon_%s_%s_%s.tar.gz", version, goos, goarch)
-}
 
 // Treat non-numeric components as 0 — good enough for semver comparison.
 func versLE(a, b string) bool {
@@ -47,58 +37,50 @@ const (
 	repoName  = "Futon"
 )
 
+const installScript = "curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh -o /tmp/futon_install.sh && bash /tmp/futon_install.sh && rm /tmp/futon_install.sh"
+
+// InstallScriptCommand returns the install.sh invocation shared by the CLI
+// updater and the TUI update flow. Callers wire stdin/stdout/stderr.
+func InstallScriptCommand() *exec.Cmd {
+	return exec.Command("bash", "-c", installScript)
+}
+
 var apiURL = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/releases/latest"
 
 type releaseInfo struct {
-	TagName string         `json:"tag_name"`
-	Assets  []releaseAsset `json:"assets"`
+	TagName string `json:"tag_name"`
 }
 
-type releaseAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
-
-func CheckForUpdate(currentVersion string) (bool, string, string, error) {
+// CheckForUpdate reports whether the latest GitHub release is newer than
+// currentVersion, returning the release tag when one is available.
+func CheckForUpdate(currentVersion string) (bool, string, error) {
 	if currentVersion == "dev" {
-		return false, "", "", nil
+		return false, "", nil
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	resp, err := client.Get(apiURL)
 	if err != nil {
-		return false, "", "", fmt.Errorf("failed to check update: %w", err)
+		return false, "", fmt.Errorf("failed to check update: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return false, "", "", fmt.Errorf("check update failed, HTTP status: %d", resp.StatusCode)
+		return false, "", fmt.Errorf("check update failed, HTTP status: %d", resp.StatusCode)
 	}
 
 	var rel releaseInfo
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return false, "", "", fmt.Errorf("failed to parse release info: %w", err)
+		return false, "", fmt.Errorf("failed to parse release info: %w", err)
 	}
 
 	latest := strings.TrimPrefix(rel.TagName, "v")
 	current := strings.TrimPrefix(currentVersion, "v")
 
 	if versLE(latest, current) {
-		return false, "", "", nil
+		return false, "", nil
 	}
 
-	wanted := assetFileName(latest, runtime.GOOS, runtime.GOARCH)
-	var downloadURL string
-	for _, a := range rel.Assets {
-		if a.Name == wanted {
-			downloadURL = a.BrowserDownloadURL
-			break
-		}
-	}
-	if downloadURL == "" {
-		return false, "", "", fmt.Errorf("no asset found for %s", wanted)
-	}
-
-	return true, rel.TagName, downloadURL, nil
+	return true, rel.TagName, nil
 }

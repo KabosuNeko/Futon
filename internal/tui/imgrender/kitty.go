@@ -11,17 +11,13 @@ import (
 
 const kittyChunkSize = 2048
 
-var (
-	kittyEsc   = string([]byte{0x1b})
+const (
+	kittyEsc   = "\x1b"
 	kittyST    = kittyEsc + "\\"
 	kittyStart = kittyEsc + "_G"
 )
 
 type kittyRenderer struct{}
-
-func (r kittyRenderer) Render(imgData []byte) (RenderedImage, error) {
-	return r.RenderInBox(imgData, 0, 0)
-}
 
 func (r kittyRenderer) RenderInBox(imgData []byte, cols, rows int) (RenderedImage, error) {
 	img, err := decodeAndScaleInBox(imgData, cols, rows)
@@ -38,8 +34,6 @@ func (r kittyRenderer) RenderImage(img image.Image) (RenderedImage, error) {
 	}
 
 	b64 := base64.StdEncoding.EncodeToString(pngBuf.Bytes())
-	b64 = strings.ReplaceAll(b64, "\n", "")
-	b64 = strings.ReplaceAll(b64, "\r", "")
 
 	bounds := img.Bounds()
 	return RenderedImage{
@@ -50,9 +44,6 @@ func (r kittyRenderer) RenderImage(img image.Image) (RenderedImage, error) {
 }
 
 func (r kittyRenderer) chunkedPayload(w, h int, b64 string) string {
-	if len(b64) <= kittyChunkSize {
-		return r.chunk(w, h, b64, "0")
-	}
 	var sb strings.Builder
 	chunks := splitChunks(b64, kittyChunkSize)
 	for i, chunk := range chunks {
@@ -78,16 +69,9 @@ func (r kittyRenderer) continuationChunk(data, m string) string {
 }
 
 func splitChunks(s string, chunkSize int) []string {
-	if len(s) == 0 {
-		return nil
-	}
 	var chunks []string
 	for i := 0; i < len(s); i += chunkSize {
-		end := i + chunkSize
-		if end > len(s) {
-			end = len(s)
-		}
-		chunks = append(chunks, s[i:end])
+		chunks = append(chunks, s[i:min(i+chunkSize, len(s))])
 	}
 	return chunks
 }

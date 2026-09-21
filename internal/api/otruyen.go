@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 )
@@ -24,58 +23,17 @@ func (o *OTruyenProvider) Name() string {
 	return "OTruyen"
 }
 
-func otruyenGet(endpoint string) (*http.Response, error) {
-	client := ensureClient(http.DefaultClient)
-	var lastErr error
-	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
-		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, fmt.Errorf("tạo request: %w", err)
-		}
-		req.Header.Set("User-Agent", defaultUserAgent)
-
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("gọi API: %w", err)
-			if attempt < providerMaxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
-			}
-			return nil, lastErr
-		}
-		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
-			resp.Body.Close()
-			lastErr = fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
-			if attempt < providerMaxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
-			}
-			return nil, lastErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("API trả về HTTP %d", resp.StatusCode)
-		}
-		return resp, nil
-	}
-	return nil, lastErr
+type otruyenListResponse struct {
+	Data struct {
+		AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
+		Items             []otruyenMangaItem `json:"items"`
+	} `json:"data"`
 }
 
-func (o *OTruyenProvider) Search(query string) ([]models.Manga, error) {
-	endpoint := fmt.Sprintf("%s/tim-kiem?keyword=%s", otruyenBaseURL, url.QueryEscape(query))
-
-	resp, err := otruyenGet(endpoint)
-	if err != nil {
-		return nil, err
-	}
+func otruyenList(resp *http.Response) ([]models.Manga, error) {
 	defer resp.Body.Close()
 
-	var result struct {
-		Data struct {
-			AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
-			Items             []otruyenMangaItem `json:"items"`
-		} `json:"data"`
-	}
+	var result otruyenListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
@@ -86,6 +44,16 @@ func (o *OTruyenProvider) Search(query string) ([]models.Manga, error) {
 		mangas = append(mangas, item.toManga(cdnDomain))
 	}
 	return mangas, nil
+}
+
+func (o *OTruyenProvider) Search(query string) ([]models.Manga, error) {
+	endpoint := fmt.Sprintf("%s/tim-kiem?keyword=%s", otruyenBaseURL, url.QueryEscape(query))
+
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
+	if err != nil {
+		return nil, err
+	}
+	return otruyenList(resp)
 }
 
 func (o *OTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
@@ -94,28 +62,11 @@ func (o *OTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
 	}
 	endpoint := fmt.Sprintf("%s/danh-sach/truyen-moi?page=%d", otruyenBaseURL, page)
 
-	resp, err := otruyenGet(endpoint)
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data struct {
-			AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
-			Items             []otruyenMangaItem `json:"items"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
-	cdnDomain := result.Data.AppDomainCDNImage
-	mangas := make([]models.Manga, 0, len(result.Data.Items))
-	for _, item := range result.Data.Items {
-		mangas = append(mangas, item.toManga(cdnDomain))
-	}
-	return mangas, nil
+	return otruyenList(resp)
 }
 
 func (o *OTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
@@ -139,34 +90,17 @@ func (o *OTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
 		endpoint = fmt.Sprintf("%s/danh-sach/truyen-moi?page=%d", otruyenBaseURL, page)
 	}
 
-	resp, err := otruyenGet(endpoint)
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return o.FetchLatest(page)
 	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data struct {
-			AppDomainCDNImage string             `json:"APP_DOMAIN_CDN_IMAGE"`
-			Items             []otruyenMangaItem `json:"items"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
-	cdnDomain := result.Data.AppDomainCDNImage
-	mangas := make([]models.Manga, 0, len(result.Data.Items))
-	for _, item := range result.Data.Items {
-		mangas = append(mangas, item.toManga(cdnDomain))
-	}
-	return mangas, nil
+	return otruyenList(resp)
 }
 
 func (o *OTruyenProvider) FetchChapters(slug string) ([]models.Chapter, error) {
 	endpoint := fmt.Sprintf("%s/truyen-tranh/%s", otruyenBaseURL, url.PathEscape(slug))
 
-	resp, err := otruyenGet(endpoint)
+	resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +129,7 @@ func (o *OTruyenProvider) FetchChapters(slug string) ([]models.Chapter, error) {
 }
 
 func (o *OTruyenProvider) FetchPages(chapterEndpoint string) ([]string, error) {
-	resp, err := otruyenGet(chapterEndpoint)
+	resp, err := httpGet(http.DefaultClient, chapterEndpoint, defaultUserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -279,18 +213,14 @@ func (item otruyenMangaItem) toManga(cdnDomain string) models.Manga {
 }
 
 type otruyenMangaDetail struct {
-	Name     string                 `json:"name"`
-	Slug     string                 `json:"slug"`
 	Chapters []otruyenChapterServer `json:"chapters"`
 }
 
 type otruyenChapterServer struct {
-	ServerName string               `json:"server_name"`
 	ServerData []otruyenChapterData `json:"server_data"`
 }
 
 type otruyenChapterData struct {
-	Filename      string `json:"filename"`
 	ChapterName   string `json:"chapter_name"`
 	ChapterTitle  string `json:"chapter_title"`
 	ChapterAPIURL string `json:"chapter_api_data"`

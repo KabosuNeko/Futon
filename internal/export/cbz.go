@@ -2,7 +2,6 @@ package export
 
 import (
 	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -111,7 +110,7 @@ func ExportImagesToCBZ(mangaTitle, chapterNumber string, images [][]byte, destDi
 }
 
 // ExportChapterURLsToCBZ downloads images from urls and packages them into a .cbz file.
-func ExportChapterURLsToCBZ(mangaTitle, chapterNumber string, urls []string, referer, userAgent, destDir string) (string, error) {
+func ExportChapterURLsToCBZ(mangaTitle, chapterNumber string, urls []string, destDir string) (string, error) {
 	if len(urls) == 0 {
 		return "", fmt.Errorf("danh sách URL ảnh trống")
 	}
@@ -124,15 +123,8 @@ func ExportChapterURLsToCBZ(mangaTitle, chapterNumber string, urls []string, ref
 		if err != nil {
 			continue
 		}
-		if userAgent != "" {
-			req.Header.Set("User-Agent", userAgent)
-		} else {
-			req.Header.Set("User-Agent", "Futon-App/1.0")
-		}
+		req.Header.Set("User-Agent", "Futon-App/1.0")
 		req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-		if referer != "" {
-			req.Header.Set("Referer", referer)
-		}
 
 		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
@@ -157,19 +149,14 @@ func ExportChapterURLsToCBZ(mangaTitle, chapterNumber string, urls []string, ref
 }
 
 func detectImageExt(data []byte) string {
-	if len(data) > 4 {
-		if bytes.HasPrefix(data, []byte("\xff\xd8\xff")) {
-			return "jpg"
-		}
-		if bytes.HasPrefix(data, []byte("\x89PNG")) {
-			return "png"
-		}
-		if bytes.HasPrefix(data, []byte("GIF8")) {
-			return "gif"
-		}
-		if len(data) > 12 && string(data[8:12]) == "WEBP" {
-			return "webp"
-		}
+	switch http.DetectContentType(data) {
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/webp":
+		return "webp"
+	default:
+		return "jpg"
 	}
-	return "jpg"
 }

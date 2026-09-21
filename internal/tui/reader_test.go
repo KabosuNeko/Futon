@@ -129,6 +129,23 @@ func TestWindowSizeNoPanicWithEmptyImageData(t *testing.T) {
 	}
 }
 
+func TestDownloadProgressStartsReadingCurrentPage(t *testing.T) {
+	m := NewReaderModel("m1", "Title", "c1", "1", nil, 0, -1, nil)
+	m.step = stepDownload
+	m.total = 2
+	m.imageData = make([][]byte, 2)
+	m.currentIdx = 0
+
+	newM, cmd := m.Update(downloadProgressMsg{index: 0, data: []byte{1}})
+	rm := newM.(ReaderModel)
+	if rm.step != stepRead || !rm.isLoading {
+		t.Fatalf("expected stepRead with isLoading, got step=%v loading=%v", rm.step, rm.isLoading)
+	}
+	if cmd == nil {
+		t.Fatal("expected a render cmd")
+	}
+}
+
 func TestNextRenderIndexRespectsImageDataBounds(t *testing.T) {
 	m := NewReaderModel("m1", "Title", "c1", "1", nil, 0, -1, nil)
 	m.total = 5

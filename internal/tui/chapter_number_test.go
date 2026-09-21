@@ -30,52 +30,55 @@ func TestChapterNavCmdSetsChapterNumber(t *testing.T) {
 	}
 }
 
-func TestChapterNavCmdOutOfRangeNumberEmpty(t *testing.T) {
-	cmd := chapterNavCmd("c9", "m1", "Title", []string{"c1"}, []string{"101"}, 9, 0)
-	msg := cmd().(ViewChapterMsg)
-	if msg.ChapterNumber != "" {
-		t.Errorf("expected empty ChapterNumber for out-of-range index, got %q", msg.ChapterNumber)
+func TestChapterNavCmdMissingNumber(t *testing.T) {
+	cases := []struct {
+		name    string
+		numbers []string
+		index   int
+	}{
+		{"out of range index", []string{"101"}, 9},
+		{"nil numbers", nil, 1},
 	}
-}
-
-func TestChapterNavCmdNilNumbersNoPanic(t *testing.T) {
-	cmd := chapterNavCmd("c2", "m1", "Title", []string{"c1", "c2"}, nil, 1, 0)
-	msg := cmd().(ViewChapterMsg)
-	if msg.ChapterNumber != "" {
-		t.Errorf("expected empty ChapterNumber with nil numbers, got %q", msg.ChapterNumber)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := chapterNavCmd("c2", "m1", "Title", []string{"c1", "c2"}, tc.numbers, tc.index, 0)
+			msg := cmd().(ViewChapterMsg)
+			if msg.ChapterNumber != "" {
+				t.Errorf("expected empty ChapterNumber for %s, got %q", tc.name, msg.ChapterNumber)
+			}
+		})
 	}
 }
 
 func TestApplyPreloadedChapterUpdatesChapterNumber(t *testing.T) {
-	m := NewReaderModel("m1", "Title", "c1", "101", []string{"c1", "c2", "c3"}, 0, -1, nil)
-	m.allChapterNumbers = []string{"101", "102", "103"}
-	m.preloadedChapID = "c2"
-	m.preloadedURLs = []string{"u1", "u2"}
-	m.preloadedImages = [][]byte{{1}, {2}}
-
-	m.applyPreloadedChapter("c2")
-
-	if m.chapterNumber != "102" {
-		t.Errorf("expected chapterNumber 102 after preload apply, got %q", m.chapterNumber)
+	cases := []struct {
+		name    string
+		numbers []string
+		want    string
+	}{
+		{"with numbers", []string{"101", "102", "103"}, "102"},
+		{"nil numbers keep old", nil, "101"},
 	}
-	if m.chapterIndex != 1 {
-		t.Errorf("expected chapterIndex 1, got %d", m.chapterIndex)
-	}
-	if m.chapterID != "c2" {
-		t.Errorf("expected chapterID c2, got %q", m.chapterID)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewReaderModel("m1", "Title", "c1", "101", []string{"c1", "c2", "c3"}, 0, -1, nil)
+			m.allChapterNumbers = tc.numbers
+			m.preloadedChapID = "c2"
+			m.preloadedURLs = []string{"u1", "u2"}
+			m.preloadedImages = [][]byte{{1}, {2}}
 
-func TestApplyPreloadedChapterNilNumbersKeepsOld(t *testing.T) {
-	m := NewReaderModel("m1", "Title", "c1", "101", []string{"c1", "c2"}, 0, -1, nil)
-	m.preloadedChapID = "c2"
-	m.preloadedURLs = []string{"u1"}
-	m.preloadedImages = [][]byte{{1}}
+			m.applyPreloadedChapter("c2")
 
-	m.applyPreloadedChapter("c2")
-
-	if m.chapterNumber != "101" {
-		t.Errorf("expected chapterNumber unchanged with nil numbers, got %q", m.chapterNumber)
+			if m.chapterNumber != tc.want {
+				t.Errorf("expected chapterNumber %q after preload apply, got %q", tc.want, m.chapterNumber)
+			}
+			if m.chapterIndex != 1 {
+				t.Errorf("expected chapterIndex 1, got %d", m.chapterIndex)
+			}
+			if m.chapterID != "c2" {
+				t.Errorf("expected chapterID c2, got %q", m.chapterID)
+			}
+		})
 	}
 }
 

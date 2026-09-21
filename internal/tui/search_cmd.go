@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -10,6 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+//lint:ignore ST1005 Vietnamese UI message is intentionally capitalized.
+var errNoSource = errors.New("Chọn ít nhất một nguồn trong /src")
 
 type searchTriggerMsg struct {
 	query string
@@ -55,7 +59,6 @@ func boxColor(val string) lipgloss.Color {
 type coverDebounceMsg struct {
 	mangaID  string
 	coverURL string
-	provider string
 }
 
 type coverRenderedMsg struct {
@@ -65,21 +68,17 @@ type coverRenderedMsg struct {
 	err      error
 }
 
-func debounceCover(mangaID, coverURL, provider string, delay time.Duration) tea.Cmd {
+func debounceCover(mangaID, coverURL string, delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
 		return coverDebounceMsg{
 			mangaID:  mangaID,
 			coverURL: coverURL,
-			provider: provider,
 		}
 	})
 }
 
 func fetchAndRenderCoverCmd(renderer imgrender.Renderer, mangaID, coverURL, provider string, cols, rows int) tea.Cmd {
 	return func() tea.Msg {
-		if coverURL == "" || renderer == nil {
-			return coverRenderedMsg{mangaID: mangaID, coverURL: coverURL, err: nil}
-		}
 		data, err := api.FetchCoverBytes(coverURL, provider)
 		if err != nil {
 			return coverRenderedMsg{mangaID: mangaID, coverURL: coverURL, err: err}
@@ -95,4 +94,3 @@ func fetchAndRenderCoverCmd(renderer imgrender.Renderer, mangaID, coverURL, prov
 		}
 	}
 }
-
