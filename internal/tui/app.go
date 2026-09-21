@@ -144,7 +144,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case BackToSearchMsg:
 		m.state = stateSearch
-		return m, nil
+		return m, m.search.repaintCoverCmd()
 
 	case ViewChapterMsg:
 		m.state = stateReader

@@ -10,9 +10,32 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// coverPaintKey captures everything that determines the out-of-band cover
+// paint: the pane geometry, whether an image is drawn, and a generation
+// counter bumped whenever the cover changes.
+type coverPaintKey struct {
+	gen       int
+	isSplit   bool
+	draw      bool
+	clearFrom int
+	clearTo   int
+	eraseCol  int
+	eraseW    int
+	imgRow    int
+	imgCol    int
+}
+
 func (m SearchModel) View() tea.View {
+	content, _ := m.buildContent()
+	return tea.NewView(content)
+}
+
+// buildContent renders the search screen and computes the cover geometry.
+// Cover escape sequences are not part of the returned content; they are painted
+// out-of-band with tea.Raw because the v2 cell renderer strips them.
+func (m SearchModel) buildContent() (string, coverPaintKey) {
 	if m.width == 0 || m.height == 0 {
-		return tea.NewView("Loading...")
+		return "Loading...", coverPaintKey{}
 	}
 
 	boxStyle := lipgloss.NewStyle().
@@ -165,6 +188,7 @@ func (m SearchModel) View() tea.View {
 		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
 	}
 
+	key := coverPaintKey{gen: m.coverGen}
 	if isSplit {
 		headerH := lipgloss.Height(headerNode)
 		bodyRow := topRow + headerH + 1
@@ -176,11 +200,11 @@ func (m SearchModel) View() tea.View {
 		boxH := m.listVisibleItems() + 4
 		previewInnerW := previewPaneW - 4
 
-		var clearSeq strings.Builder
-		clearSeq.WriteString("\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\")
-		for r := bodyRow + 8; r <= bodyRow+boxH-2; r++ {
-			clearSeq.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[%dX", r, previewCol+3, max(1, previewInnerW-2)))
-		}
+		key.isSplit = true
+		key.clearFrom = bodyRow + 8
+		key.clearTo = bodyRow + boxH - 2
+		key.eraseCol = previewCol + 3
+		key.eraseW = max(1, previewInnerW-2)
 
 		if m.currentCover != nil && m.currentCover.EscapeSequence != "" {
 			ts, _ := imgrender.GetTerminalSize()
@@ -190,18 +214,33 @@ func (m SearchModel) View() tea.View {
 			}
 			imgCellW := max(1, m.currentCover.WidthPx/cellW)
 			indent := max(1, (previewInnerW-imgCellW)/2)
-			imgCol := previewCol + 2 + indent
-
-			imageCmd := fmt.Sprintf("\x1b[s%s\x1b[%d;%dH%s\x1b[u", clearSeq.String(), imgRow, imgCol, m.currentCover.EscapeSequence)
-			placed = placed + imageCmd
-		} else {
-			placed = placed + fmt.Sprintf("\x1b[s%s\x1b[u", clearSeq.String())
+			key.draw = true
+			key.imgRow = imgRow
+			key.imgCol = previewCol + 2 + indent
 		}
-	} else {
-		placed = placed + "\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\"
 	}
 
-	return tea.NewView(placed)
+	return placed, key
+}
+
+// coverSequence mirrors the sequences the pre-v2 View appended for the preview
+// cover, including the save/restore cursor wrapper.
+func (m SearchModel) coverSequence(key coverPaintKey) string {
+	const deleteAll = "\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\"
+	if !key.isSplit {
+		return deleteAll
+	}
+
+	var clearSeq strings.Builder
+	clearSeq.WriteString(deleteAll)
+	for r := key.clearFrom; r <= key.clearTo; r++ {
+		clearSeq.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[%dX", r, key.eraseCol, key.eraseW))
+	}
+
+	if !key.draw {
+		return fmt.Sprintf("\x1b[s%s\x1b[u", clearSeq.String())
+	}
+	return fmt.Sprintf("\x1b[s%s\x1b[%d;%dH%s\x1b[u", clearSeq.String(), key.imgRow, key.imgCol, m.currentCover.EscapeSequence)
 }
 
 func (m SearchModel) renderPreviewPane() string {

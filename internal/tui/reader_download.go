@@ -121,19 +121,15 @@ func chapterNavCmd(chapterID, mangaID, mangaTitle string, allChapterIDs, allChap
 	}
 }
 
+// clearGraphicsCmd deletes every terminal image without touching text.
 func clearGraphicsCmd() tea.Cmd {
-	return func() tea.Msg {
-		fmt.Print(kittyClearSeq)
-		return nil
-	}
+	return tea.Raw(kittyClearSeq)
 }
 
+// clearScreenCmd deletes every terminal image and repaints the screen blank so
+// the next rendered screen is not ghosted by stale image pixels.
 func clearScreenCmd() tea.Cmd {
-	return func() tea.Msg {
-		fmt.Print(kittyClearSeq)
-		fmt.Print("\x1b[H\x1b[2J")
-		return nil
-	}
+	return tea.Raw(kittyClearSeq + "\x1b[H\x1b[2J")
 }
 
 func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int) tea.Cmd {

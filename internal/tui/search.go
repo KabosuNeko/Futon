@@ -61,6 +61,8 @@ type SearchModel struct {
 	currentCover   *imgrender.RenderedImage
 	currentCoverID string
 	coverLoading   bool
+	coverGen       int
+	coverKey       coverPaintKey
 }
 
 func NewSearchModel(providers []api.MangaProvider) SearchModel {
@@ -243,7 +245,57 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 	return m, nil, false
 }
 
+// coverPaintDelay lets the renderer flush the view that reserves the preview
+// area before the cover is drawn. Raw output is flushed before the renderer's
+// diff within a tick, so an immediate draw can land before the reserving pane
+// (and a resize forces a full renderer erase that would wipe it). Deferring one
+// frame puts the draw strictly after the render.
+const coverPaintDelay = 30 * time.Millisecond
+
+type coverPaintMsg struct{ key coverPaintKey }
+
+// Update wraps message handling with the out-of-band cover paint: whenever the
+// cover image or the pane geometry changes, a deferred tea.Raw command clears
+// and redraws the preview cover.
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	newM, cmd := m.update(msg)
+	if key := newM.coverPaintState(); key != m.coverKey {
+		newM.coverKey = key
+		cmd = tea.Batch(cmd, tea.Tick(coverPaintDelay, func(time.Time) tea.Msg {
+			return coverPaintMsg{key: key}
+		}))
+	}
+	return newM, cmd
+}
+
+// coverPaintState computes the cover paint key for the current state.
+func (m SearchModel) coverPaintState() coverPaintKey {
+	_, key := m.buildContent()
+	return key
+}
+
+// repaintCoverCmd forces the preview cover to be painted again. The reader
+// deletes every terminal image when it exits, so a cover on screen before must
+// be redrawn when the search screen comes back.
+func (m *SearchModel) repaintCoverCmd() tea.Cmd {
+	key := m.coverPaintState()
+	m.coverKey = key
+	return tea.Tick(coverPaintDelay, func(time.Time) tea.Msg {
+		return coverPaintMsg{key: key}
+	})
+}
+
+// setCover records the rendered preview cover and bumps coverGen so the
+// out-of-band cover paint is re-emitted.
+func (m *SearchModel) setCover(img *imgrender.RenderedImage) {
+	if m.currentCover == img {
+		return
+	}
+	m.currentCover = img
+	m.coverGen++
+}
+
+func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -306,7 +358,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.Manga) == 0 && msg.Err != nil {
 			m.results = nil
 			m.err = msg.Err
-			m.currentCover = nil
+			m.setCover(nil)
 			m.currentCoverID = ""
 			m.coverLoading = false
 			return m, nil
@@ -336,15 +388,21 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.coverCache[msg.coverURL] = msg.rendered
 			focused, ok := m.focusedManga()
 			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
-				m.currentCover = &msg.rendered
+				m.setCover(&msg.rendered)
 				m.coverLoading = false
 			}
 		} else {
 			focused, ok := m.focusedManga()
 			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
-				m.currentCover = nil
+				m.setCover(nil)
 				m.coverLoading = false
 			}
+		}
+		return m, nil
+
+	case coverPaintMsg:
+		if msg.key == m.coverKey {
+			return m, tea.Raw(m.coverSequence(msg.key))
 		}
 		return m, nil
 
@@ -534,7 +592,7 @@ func (m SearchModel) focusedManga() (manga models.Manga, ok bool) {
 func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	focused, ok := m.focusedManga()
 	if !ok || focused.CoverURL == "" {
-		m.currentCover = nil
+		m.setCover(nil)
 		m.currentCoverID = ""
 		m.coverLoading = false
 		return nil
@@ -544,11 +602,11 @@ func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	}
 	m.currentCoverID = focused.ID
 	if img, cached := m.coverCache[focused.CoverURL]; cached {
-		m.currentCover = &img
+		m.setCover(&img)
 		m.coverLoading = false
 		return nil
 	}
-	m.currentCover = nil
+	m.setCover(nil)
 	m.coverLoading = true
 	return debounceCover(focused.ID, focused.CoverURL, 150*time.Millisecond)
 }
