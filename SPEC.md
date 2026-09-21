@@ -10,12 +10,7 @@ Terminal manga reader written in **Go** + **Bubble Tea**, rendering images direc
 
 ## 1. Overview
 
-Futon is a TUI (terminal user interface) application that lets users:
-
-1. Search manga from multiple sources at once (multi-source search).
-2. Browse the chapter list of a manga.
-3. Read manga right in the terminal — images render inline, no external image viewer needed.
-4. Manage favorites, reading history, and download images to disk.
+Futon is a terminal manga reader: multi-source search, chapter browsing, inline image reading via Kitty or Sixel, favorites/history, and page download. Usage lives in `README.md`.
 
 ## 2. Goals
 
@@ -139,15 +134,14 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 ## 7. Platform
 
-- **Build**: Go 1.26, `go build ./...`, `go test ./...`, `go test -race ./...`.
+- **Language**: Go 1.26; build/test commands live in `AGENTS.md`.
 - **Release**: GoReleaser — Linux + macOS × amd64 + arm64; `v*` tags; version injected into the binary (`main.Version`).
 - **Supported terminals**: Kitty, WezTerm, Ghostty, foot, iTerm2, Konsole, mlterm, XTerm (sixel).
 
 ## 8. Architecture Constraints
 
 - Manga ID is an **opaque string** — slug (OTruyen), UUID (MangaDex), URL (HTML providers) — its format must not be assumed.
-- `internal/api` exposes `MangaProvider` (`Name`, `Search`, `FetchLatest`, `Filter`, `FetchChapters`, `FetchPages`) plus `tea.Cmd` wrappers.
-- Package layout and conventions live in `AGENTS.md`.
+- Code structure, provider interface, and conventions live in `AGENTS.md`.
 
 ## 9. Definition of Done (for every change)
 
