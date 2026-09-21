@@ -34,13 +34,13 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 ### 4.1 Search
 
 - **FR-S1**: Typing ≥ 3 characters on the search screen triggers a search after a **300ms debounce**; fewer than 3 characters does not trigger a search.
-- **FR-S2**: Search runs **concurrently across all enabled providers** (1 goroutine per provider, waits via WaitGroup).
+- **FR-S2**: Search runs **concurrently across all enabled providers** (1 goroutine per provider); each source's results stream back as soon as it finishes, and a final snapshot marks completion.
 - **FR-S3**: Each source's results carry a `Provider` and the title is rewritten to `"Title (sourcename)"` (lowercase source name).
 - **FR-S4**: If one provider fails, results from the other providers are still returned (partial success); errors are joined into a single message with `"; "` and a per-provider warning line shows which sources failed while still displaying successful results.
 - **FR-S5**: If **no source is enabled**, every search action shows the error "Chọn ít nhất một nguồn trong /src".
 - **FR-S6**: Input starting with `/` resets previous results and does not search (reserved for slash commands).
 - **FR-S7**: Stale search results are discarded if the query has changed (stale-response guard).
-- **FR-S8**: While searching, the status line shows the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ..."); after completion a subtle warning lists any failed providers with counts.
+- **FR-S8**: Until the first results arrive, the status line shows the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ..."); partial results appear as each source completes; after completion a subtle warning lists any failed providers with counts.
 - **FR-S9**: Provider HTTP calls have a **10s timeout** and retry up to **2 times** on network errors or 5xx responses with incremental backoff.
 
 #### Per-provider limits

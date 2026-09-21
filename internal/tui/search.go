@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 const searchUIOffset = 9
@@ -61,6 +61,8 @@ type SearchModel struct {
 	currentCover   *imgrender.RenderedImage
 	currentCoverID string
 	coverLoading   bool
+	coverGen       int
+	coverKey       coverPaintKey
 }
 
 func NewSearchModel(providers []api.MangaProvider) SearchModel {
@@ -68,7 +70,7 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 	ti.Placeholder = "Nhập tên manga cần tìm..."
 	ti.Focus()
 	ti.CharLimit = 156
-	ti.Width = 40
+	ti.SetWidth(40)
 
 	toggles := loadSourceToggles(providers)
 
@@ -80,7 +82,6 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		providers:       providers,
 		providerToggles: toggles,
 		showingFeed:     true,
-		isSearching:     false,
 		renderer:        imgrender.New(),
 		coverCache:      make(map[string]imgrender.RenderedImage),
 	}
@@ -176,13 +177,20 @@ func (m SearchModel) Init() tea.Cmd {
 	}
 	return tea.Batch(
 		textinput.Blink,
+		func() tea.Msg { return searchInitMsg{} },
 		api.GlobalLatestCmd(active, 1),
 	)
 }
 
+// searchInitMsg marks the initial feed load as in progress once the model is
+// running; the constructor stays quiet so tests can build a SearchModel without
+// a pending search.
+type searchInitMsg struct{}
+
 func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, bool) {
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
+	mouse := msg.Mouse()
+	switch mouse.Button {
+	case tea.MouseWheelUp:
 		if m.showingFilters {
 			if m.filterCursor > 0 {
 				m.filterCursor--
@@ -200,7 +208,7 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 		}
 		return m, nil, true
 
-	case tea.MouseButtonWheelDown:
+	case tea.MouseWheelDown:
 		if m.showingFilters {
 			if m.filterCursor < 4 {
 				m.filterCursor++
@@ -218,12 +226,12 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 		}
 		return m, nil, true
 
-	case tea.MouseButtonLeft:
-		if msg.Action != tea.MouseActionPress {
+	case tea.MouseLeft:
+		if _, ok := msg.(tea.MouseClickMsg); !ok {
 			return m, nil, false
 		}
 
-		itemIdx := m.viewportStart + (msg.Y - searchUIOffset)
+		itemIdx := m.viewportStart + (mouse.Y - searchUIOffset)
 		if itemIdx >= 0 && itemIdx < m.currentListLen() {
 			if m.showingSources {
 				m.sourceCursor = itemIdx
@@ -242,7 +250,69 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 	return m, nil, false
 }
 
+// coverPaintDelay lets the renderer flush the view that reserves the preview
+// area before the cover is drawn. Raw output is flushed before the renderer's
+// diff within a tick, so an immediate draw can land before the reserving pane
+// (and a resize forces a full renderer erase that would wipe it). Deferring one
+// frame puts the draw strictly after the render.
+const coverPaintDelay = 30 * time.Millisecond
+
+type coverPaintMsg struct{ key coverPaintKey }
+
+// Update wraps message handling with the out-of-band cover paint: whenever the
+// cover image or the pane geometry changes, a deferred tea.Raw command clears
+// and redraws the preview cover.
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	newM, cmd := m.update(msg)
+	if key := newM.coverPaintState(); key != m.coverKey {
+		newM.coverKey = key
+		cmd = tea.Batch(cmd, tea.Tick(coverPaintDelay, func(time.Time) tea.Msg {
+			return coverPaintMsg{key: key}
+		}))
+	}
+	return newM, cmd
+}
+
+// coverPaintState computes the cover paint key for the current state.
+func (m SearchModel) coverPaintState() coverPaintKey {
+	_, key := m.buildContent()
+	return key
+}
+
+// clearCoverCmd removes the preview cover from the terminal and invalidates any
+// pending paint so the image does not ghost over the next screen. It is emitted
+// before the state switches away from search; the clear must land while the
+// search view is still the renderer's buffer, otherwise it could erase cells of
+// the screen that replaces it.
+func (m *SearchModel) clearCoverCmd() tea.Cmd {
+	_, key := m.buildContent()
+	key.draw = false
+	m.coverKey = coverPaintKey{}
+	return tea.Raw(m.coverSequence(key))
+}
+
+// repaintCoverCmd forces the preview cover to be painted again. The reader
+// deletes every terminal image when it exits, so a cover on screen before must
+// be redrawn when the search screen comes back.
+func (m *SearchModel) repaintCoverCmd() tea.Cmd {
+	key := m.coverPaintState()
+	m.coverKey = key
+	return tea.Tick(coverPaintDelay, func(time.Time) tea.Msg {
+		return coverPaintMsg{key: key}
+	})
+}
+
+// setCover records the rendered preview cover and bumps coverGen so the
+// out-of-band cover paint is re-emitted.
+func (m *SearchModel) setCover(img *imgrender.RenderedImage) {
+	if m.currentCover == img {
+		return
+	}
+	m.currentCover = img
+	m.coverGen++
+}
+
+func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -278,6 +348,11 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewportStart = 0
 		return m, nil
 
+	case searchInitMsg:
+		m.isSearching = true
+		m.searchingProviders = m.activeProviderNames()
+		return m, nil
+
 	case searchTriggerMsg:
 		if msg.query == m.currentQuery && len(strings.TrimSpace(msg.query)) >= 3 {
 			active := m.activeProviders()
@@ -295,17 +370,30 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case api.MangaSearchResultMsg:
-		m.isSearching = false
-		m.searchingProviders = nil
+		applicable := m.showingFeed || len(strings.TrimSpace(m.currentQuery)) >= 3
 		m.providerCounts = msg.ProviderCounts
 		m.providerErrors = msg.ProviderErrors
-		if !m.showingFeed && len(strings.TrimSpace(m.currentQuery)) < 3 {
+
+		if msg.Stream != nil {
+			if applicable && len(msg.Manga) > 0 {
+				m.results = msg.Manga
+				m.cursor = 0
+				m.viewportStart = 0
+				m.err = nil
+				return m, tea.Batch(msg.Stream.Next(), m.updateFocusedCover())
+			}
+			return m, msg.Stream.Next()
+		}
+
+		m.isSearching = false
+		m.searchingProviders = nil
+		if !applicable {
 			return m, nil
 		}
 		if len(msg.Manga) == 0 && msg.Err != nil {
 			m.results = nil
 			m.err = msg.Err
-			m.currentCover = nil
+			m.setCover(nil)
 			m.currentCoverID = ""
 			m.coverLoading = false
 			return m, nil
@@ -335,15 +423,21 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.coverCache[msg.coverURL] = msg.rendered
 			focused, ok := m.focusedManga()
 			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
-				m.currentCover = &msg.rendered
+				m.setCover(&msg.rendered)
 				m.coverLoading = false
 			}
 		} else {
 			focused, ok := m.focusedManga()
 			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
-				m.currentCover = nil
+				m.setCover(nil)
 				m.coverLoading = false
 			}
+		}
+		return m, nil
+
+	case coverPaintMsg:
+		if msg.key == m.coverKey {
+			return m, tea.Raw(m.coverSequence(msg.key))
 		}
 		return m, nil
 
@@ -533,7 +627,7 @@ func (m SearchModel) focusedManga() (manga models.Manga, ok bool) {
 func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	focused, ok := m.focusedManga()
 	if !ok || focused.CoverURL == "" {
-		m.currentCover = nil
+		m.setCover(nil)
 		m.currentCoverID = ""
 		m.coverLoading = false
 		return nil
@@ -543,11 +637,11 @@ func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	}
 	m.currentCoverID = focused.ID
 	if img, cached := m.coverCache[focused.CoverURL]; cached {
-		m.currentCover = &img
+		m.setCover(&img)
 		m.coverLoading = false
 		return nil
 	}
-	m.currentCover = nil
+	m.setCover(nil)
 	m.coverLoading = true
 	return debounceCover(focused.ID, focused.CoverURL, 150*time.Millisecond)
 }

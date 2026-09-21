@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRightKeyBlockedWhenNotReady(t *testing.T) {
@@ -13,8 +13,7 @@ func TestRightKeyBlockedWhenNotReady(t *testing.T) {
 
 	// stepFetchURLs: should ignore right.
 	m.step = stepFetchURLs
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	rm := newM.(ReaderModel)
+	rm, cmd := m.update(tea.KeyPressMsg{Code: tea.KeyRight})
 	if cmd != nil {
 		t.Errorf("expected nil cmd in stepFetchURLs, got %v", cmd)
 	}
@@ -25,8 +24,7 @@ func TestRightKeyBlockedWhenNotReady(t *testing.T) {
 	// stepRead but rendering: should ignore right.
 	m.step = stepRead
 	m.isLoading = true
-	newM, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	rm = newM.(ReaderModel)
+	rm, cmd = m.update(tea.KeyPressMsg{Code: tea.KeyRight})
 	if cmd != nil {
 		t.Errorf("expected nil cmd while loading, got %v", cmd)
 	}
@@ -42,8 +40,7 @@ func TestRightKeyClampsCurrentIndex(t *testing.T) {
 	m.currentIdx = 10
 	m.imageData = make([][]byte, 3)
 
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	rm := newM.(ReaderModel)
+	rm, cmd := m.update(tea.KeyPressMsg{Code: tea.KeyRight})
 	if cmd != nil {
 		t.Errorf("expected nil cmd, got %v", cmd)
 	}
@@ -59,8 +56,7 @@ func TestLeftKeyClampsCurrentIndex(t *testing.T) {
 	m.currentIdx = -5
 	m.imageData = make([][]byte, 3)
 
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	rm := newM.(ReaderModel)
+	rm, cmd := m.update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	if cmd != nil {
 		t.Errorf("expected nil cmd, got %v", cmd)
 	}
@@ -79,8 +75,7 @@ func TestDownloadProgressIgnoresStaleIndex(t *testing.T) {
 	m.currentIdx = 0
 
 	msg := downloadProgressMsg{index: 5, data: []byte{1, 2, 3}}
-	newM, cmd := m.Update(msg)
-	rm := newM.(ReaderModel)
+	rm, cmd := m.update(msg)
 	if cmd != nil {
 		t.Errorf("expected nil cmd for stale index, got %v", cmd)
 	}
@@ -103,8 +98,7 @@ func TestRenderDoneIgnoresStaleIndex(t *testing.T) {
 	m.isLoading = true
 
 	msg := renderDoneMsg{index: 7, img: imgrender.RenderedImage{WidthPx: 1, HeightPx: 1}}
-	newM, cmd := m.Update(msg)
-	rm := newM.(ReaderModel)
+	rm, cmd := m.update(msg)
 	if cmd != nil {
 		t.Errorf("expected nil cmd for stale render, got %v", cmd)
 	}
@@ -123,7 +117,7 @@ func TestWindowSizeNoPanicWithEmptyImageData(t *testing.T) {
 	m.currentIdx = 0
 	m.imageData = make([][]byte, 0)
 
-	_, cmd := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	_, cmd := m.update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	if cmd != nil {
 		t.Errorf("expected nil cmd when no image data, got %v", cmd)
 	}
@@ -136,8 +130,7 @@ func TestDownloadProgressStartsReadingCurrentPage(t *testing.T) {
 	m.imageData = make([][]byte, 2)
 	m.currentIdx = 0
 
-	newM, cmd := m.Update(downloadProgressMsg{index: 0, data: []byte{1}})
-	rm := newM.(ReaderModel)
+	rm, cmd := m.update(downloadProgressMsg{index: 0, data: []byte{1}})
 	if rm.step != stepRead || !rm.isLoading {
 		t.Fatalf("expected stepRead with isLoading, got step=%v loading=%v", rm.step, rm.isLoading)
 	}

@@ -7,11 +7,11 @@ import (
 	"time"
 	"unicode"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/export"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ChapterListModel struct {
@@ -133,25 +133,26 @@ func (m ChapterListModel) selectCurrentChapter() (ChapterListModel, tea.Cmd) {
 func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseMsg:
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
+		mouse := msg.Mouse()
+		switch mouse.Button {
+		case tea.MouseWheelUp:
 			if m.cursor > 0 {
 				m.cursor--
 				m.adjustViewport()
 			}
 			return m, nil
-		case tea.MouseButtonWheelDown:
+		case tea.MouseWheelDown:
 			if m.cursor < len(m.chapters)-1 {
 				m.cursor++
 				m.adjustViewport()
 			}
 			return m, nil
-		case tea.MouseButtonLeft:
-			if msg.Action != tea.MouseActionPress {
+		case tea.MouseLeft:
+			if _, ok := msg.(tea.MouseClickMsg); !ok {
 				return m, nil
 			}
 			// Header/margin offset in chapter list card is ~6 lines
-			itemIdx := m.viewportStart + (msg.Y - 6)
+			itemIdx := m.viewportStart + (mouse.Y - 6)
 			if itemIdx >= 0 && itemIdx < len(m.chapters) {
 				if itemIdx == m.cursor {
 					return m.selectCurrentChapter()

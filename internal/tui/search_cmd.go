@@ -2,14 +2,15 @@ package tui
 
 import (
 	"errors"
+	"image/color"
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 //lint:ignore ST1005 Vietnamese UI message is intentionally capitalized.
@@ -49,11 +50,11 @@ func loadHistoryCmd() tea.Cmd {
 	}
 }
 
-func boxColor(val string) lipgloss.Color {
+func boxColor(val string) color.Color {
 	if strings.HasPrefix(strings.TrimSpace(val), "/") {
-		return "5"
+		return lipgloss.Color("5")
 	}
-	return "6"
+	return lipgloss.Color("6")
 }
 
 type coverDebounceMsg struct {
