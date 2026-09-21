@@ -104,47 +104,15 @@ sudo mv futon /usr/local/bin/
 
 # ---- Desktop entry & icon (Linux only) ----
 if [ "$OS" = "linux" ]; then
-  echo "Installing desktop entry ..."
-  DESKTOP_SRC=""
-  if [ -f "assets/futon.desktop" ]; then DESKTOP_SRC="assets/futon.desktop";
-  elif [ -f "futon.desktop" ]; then DESKTOP_SRC="futon.desktop"; fi
-  if [ -n "$DESKTOP_SRC" ] && [ -f "$DESKTOP_SRC" ]; then
+  if [ -f "assets/futon.desktop" ]; then
+    echo "Installing desktop entry ..."
     sudo mkdir -p /usr/share/applications
-    sudo install -m 644 "$DESKTOP_SRC" /usr/share/applications/futon.desktop
-  else
-    sudo mkdir -p /usr/share/applications
-    cat | sudo tee /usr/share/applications/futon.desktop >/dev/null <<'DESKTOP'
-[Desktop Entry]
-Name=Futon
-Comment=TUI manga reader
-GenericName=Manga Reader
-Exec=futon
-Icon=futon
-Terminal=true
-Type=Application
-Categories=Graphics;Viewer;
-Keywords=manga;comic;reader;viewer;
-StartupWMClass=futon
-StartupNotify=false
-DESKTOP
+    sudo install -m 644 "assets/futon.desktop" /usr/share/applications/futon.desktop
   fi
-  ICON_SRC=""
-  if [ -f "assets/futon.png" ]; then ICON_SRC="assets/futon.png";
-  elif [ -f "futon.png" ]; then ICON_SRC="futon.png";
-  fi
-  if [ -n "$ICON_SRC" ]; then
+  if [ -f "assets/futon.png" ]; then
     sudo mkdir -p /usr/share/pixmaps /usr/share/icons/hicolor/512x512/apps
-    sudo install -m 644 "$ICON_SRC" /usr/share/pixmaps/futon.png
-    sudo install -m 644 "$ICON_SRC" /usr/share/icons/hicolor/512x512/apps/futon.png
-  else
-    echo "Fetching icon ..."
-    TMP_ICON=$(mktemp)
-    if curl -sfL -o "$TMP_ICON" "https://raw.githubusercontent.com/$REPO/main/assets/futon.png"; then
-      sudo mkdir -p /usr/share/pixmaps /usr/share/icons/hicolor/512x512/apps
-      sudo install -m 644 "$TMP_ICON" /usr/share/pixmaps/futon.png
-      sudo install -m 644 "$TMP_ICON" /usr/share/icons/hicolor/512x512/apps/futon.png
-    fi
-    rm -f "$TMP_ICON"
+    sudo install -m 644 "assets/futon.png" /usr/share/pixmaps/futon.png
+    sudo install -m 644 "assets/futon.png" /usr/share/icons/hicolor/512x512/apps/futon.png
   fi
   if command -v update-desktop-database >/dev/null 2>&1; then
     sudo update-desktop-database /usr/share/applications 2>/dev/null || true
@@ -157,7 +125,6 @@ fi
 # ---- Cleanup ----
 rm -f "$FILENAME" checksums.txt
 rm -rf assets 2>/dev/null || true
-rm -f futon.desktop futon.png 2>/dev/null || true
 
 echo ""
 echo "Futon $VERSION installed successfully!"

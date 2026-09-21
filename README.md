@@ -1,37 +1,21 @@
 # Futon
 
-<p><br/></p>
 <p align="center">
   <img src="https://github.com/user-attachments/assets/2b1cd5ba-eb66-4632-82d8-284f7c1e3780" alt="Futon Logo" style="width: 192px" />
 </p>
 <p align="center">
   <a href="https://github.com/KabosuNeko/Futon/releases"><img src="https://img.shields.io/github/v/release/KabosuNeko/Futon?color=d4a259&label=release" alt="GitHub release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/go-%3E%3D1.24-00ADD8.svg" alt="Go Version" /></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/go-%3E%3D1.26-00ADD8.svg" alt="Go Version" /></a>
 </p>
 
 Một **terminal manga reader** viết bằng **Go** — render manga trực tiếp trong terminal qua **Kitty Graphics Protocol** hoặc **Sixel**, không cần mở app xem ảnh riêng. Search từ nhiều nguồn, browse chapters, đọc với Vim-style keys.
 
 ## Preview
 
-<p><br/></p>
 <p align="center">
   <img src="https://github.com/user-attachments/assets/da70481c-36f1-4516-84f2-e647a2668a75" alt="Futon Preview" />
 </p>
-<p><br/></p>
-
-## Highlights
-
-- **Render ảnh trong terminal** — Kitty hoặc Sixel, auto-detect
-- **Multi-source search** — OTruyen, MangaDex, TruyenQQ, FoxTruyen, BaoTangTruyen (chọn nguồn qua `/src`)
-- **Favorites & History** — Bookmark truyện, resume từ trang đã đọc
-- **Filter trong fav/his/src** — Gõ chữ để lọc danh sách real-time
-- **Save ảnh** — `ctrl+d` để download trang hiện tại
-- **Preload chapter** — Chuyển chapter mượt, zero waiting
-- **LRU image cache** — 20 ảnh cached, flip page ko cần re-render
-- **Quick jump** — Gõ số chapter + enter
-- **Language filter** — `/lang vi` hoặc `/lang en` cho MangaDex
-- **Vim-style navigation** — Arrow keys, h/l, number jump
 
 ## Yêu cầu
 
@@ -67,7 +51,7 @@ curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh | b
 ### Build từ source
 
 ```bash
-go install github.com/KabosuNeko/Futon@latest
+go install github.com/KabosuNeko/Futon/cmd@latest
 ```
 
 ### Binary
@@ -142,31 +126,7 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 
 ## Architecture
 
-```
-cmd/main.go            — entry point
-internal/
-  api/                 — MangaProvider interface & HTTP clients
-    provider.go        — interface + shared helpers, tea.Msg types
-    source.go          — tea.Cmd wrappers (Search, GlobalSearch, Fetch*)
-    otruyen.go         — OTruyen provider
-    mangadex.go        — MangaDex provider
-    truyenqq.go        — TruyenQQ provider
-    baotangtruyen.go   — BaoTangTruyen provider
-    foxtruyen.go       — FoxTruyen provider
-  models/              — shared types (manga, chapter)
-  storage/             — local JSON persistence
-    userdata.go        — UserData (favorites + sources merged)
-    sources.go         — Load/SaveSources → delegates to userdata
-    favorites.go       — Load/SaveFavorites → delegates to userdata
-    history.go         — per-manga reading history
-  tui/                 — Bubble Tea screens
-    app.go             — state machine: search → chapters → reader
-    search*.go         — search screen (model, keys, cmd, view)
-    chapter*.go        — chapter list (model, view)
-    reader*.go         — reader (model, keys, msgs, cache, nav, view, download)
-    flash.go           — flash message utility
-    imgrender/         — Kitty / Sixel renderer
-```
+Xem [`AGENTS.md`](AGENTS.md) để biết cấu trúc project và conventions.
 
 ## License
 
