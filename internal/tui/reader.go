@@ -65,6 +65,7 @@ type ReaderModel struct {
 	err               error
 	width             int
 	height            int
+	lastFrame         string
 }
 
 type readerStep int
@@ -97,11 +98,35 @@ func NewReaderModel(mangaID, mangaTitle, chapterID, chapterNumber string, allCha
 	}
 }
 
+// readerFirstFrameDelay gives the renderer one frame to paint the reader's
+// blank view before the first raw frame is submitted. The first flush after
+// switching away from a non-blank screen erases the whole screen; a frame
+// submitted in that same tick would be wiped. Later frames are safe because
+// the renderer settles once the blank view repeats.
+const readerFirstFrameDelay = 30 * time.Millisecond
+
+type readerFirstFrameMsg struct{}
+
 func (m ReaderModel) Init() tea.Cmd {
-	return api.FetchPagesCmd(m.provider, m.chapterID)
+	return tea.Batch(
+		api.FetchPagesCmd(m.provider, m.chapterID),
+		tea.Tick(readerFirstFrameDelay, func(time.Time) tea.Msg { return readerFirstFrameMsg{} }),
+	)
 }
 
+// Update wraps message handling with the reader's out-of-band frame painting:
+// whenever the frame content changes, a tea.Raw command repaints the whole
+// frame (see View in reader_view.go for why).
 func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	newM, cmd := m.update(msg)
+	if frame := newM.frameContent(); frame != newM.lastFrame {
+		newM.lastFrame = frame
+		cmd = tea.Batch(cmd, tea.Raw(frame))
+	}
+	return newM, cmd
+}
+
+func (m ReaderModel) update(msg tea.Msg) (ReaderModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseMsg:
 		return m.handleMouseMsg(msg)
@@ -131,6 +156,11 @@ func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
+	case readerFirstFrameMsg:
+		// Force a repaint: a frame emitted before this tick may have been
+		// erased by the renderer's transition flush.
+		m.lastFrame = m.frameContent()
+		return m, tea.Raw(m.lastFrame)
 	}
 	return m, nil
 }
