@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
@@ -87,7 +88,7 @@ func TestApplyPreloadedChapterResetsState(t *testing.T) {
 	}
 }
 
-func TestReaderViewRendersFooterInStepRead(t *testing.T) {
+func TestReaderFrameRendersFooterInStepRead(t *testing.T) {
 	m := NewReaderModel("m1", "Title", "c1", "1", nil, 0, -1, nil)
 	m.step = stepRead
 	m.total = 3
@@ -110,15 +111,26 @@ func TestReaderViewRendersFooterInStepRead(t *testing.T) {
 	m.imageData = [][]byte{buf.Bytes(), buf.Bytes(), buf.Bytes()}
 	m.setCached(m.currentIdx, rendered)
 
-	view := m.View()
-	if !strings.Contains(view, "Trang 2/3") {
-		t.Errorf("expected footer with page info, got:\n%s", view)
+	// Any message triggers the frame wrapper; an unhandled key keeps state.
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	frame := collectRawPayloads(cmd)
+	if frame == "" {
+		t.Fatal("expected the reader frame as raw output")
 	}
-	if !strings.Contains(view, "[ctrl+d] Lưu ảnh") {
-		t.Errorf("expected reader footer hint, got:\n%s", view)
+	if !strings.Contains(frame, "\x1b[H\x1b[2J") {
+		t.Errorf("expected frame to clear the screen, got:\n%q", frame)
 	}
-	if !strings.Contains(view, "[ctrl+e] Xuất CBZ") {
-		t.Errorf("expected reader footer cbz hint, got:\n%s", view)
+	if !strings.Contains(frame, rendered.EscapeSequence) {
+		t.Errorf("expected frame to embed the image escape sequence, got:\n%q", frame)
+	}
+	if !strings.Contains(frame, "Trang 2/3") {
+		t.Errorf("expected footer with page info, got:\n%q", frame)
+	}
+	if !strings.Contains(frame, "[ctrl+d] Lưu ảnh") {
+		t.Errorf("expected reader footer hint, got:\n%q", frame)
+	}
+	if !strings.Contains(frame, "[ctrl+e] Xuất CBZ") {
+		t.Errorf("expected reader footer cbz hint, got:\n%q", frame)
 	}
 }
 

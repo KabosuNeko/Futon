@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/tui"
 	"github.com/KabosuNeko/Futon/internal/updater"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 var Version = "dev"
@@ -26,7 +26,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(tui.NewAppModel(Version), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(tui.NewAppModel(Version))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

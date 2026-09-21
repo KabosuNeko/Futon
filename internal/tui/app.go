@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/updater"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ViewMangaMsg struct {
@@ -40,6 +40,10 @@ type UpdateReadyMsg struct {
 }
 
 type RequestUpdateMsg struct{}
+
+// chaptersReadyMsg switches the app to the chapter list after the search
+// cover has been cleared from the terminal.
+type chaptersReadyMsg struct{}
 
 type UpdateCheckedMsg struct {
 	Available bool
@@ -137,14 +141,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(sc, cc, rc)
 
 	case ViewMangaMsg:
-		m.state = stateChapters
 		m.currentProvider = m.findProvider(msg.ProviderName)
 		m.chapter = NewChapterListModel(msg.MangaID, msg.Title, m.currentProvider)
+		// Clear the preview cover while the search view is still current, then
+		// switch state: a clear emitted after the switch would sit on top of the
+		// freshly rendered chapter list.
+		return m, tea.Sequence(
+			m.search.clearCoverCmd(),
+			func() tea.Msg { return chaptersReadyMsg{} },
+		)
+
+	case chaptersReadyMsg:
+		m.state = stateChapters
 		return m, m.chapter.Init()
 
 	case BackToSearchMsg:
 		m.state = stateSearch
-		return m, nil
+		return m, m.search.repaintCoverCmd()
 
 	case ViewChapterMsg:
 		m.state = stateReader
@@ -254,9 +267,9 @@ func (m *AppModel) findProvider(name string) api.MangaProvider {
 	return nil
 }
 
-func (m AppModel) View() string {
+func (m AppModel) View() tea.View {
 	if m.state == stateUpdating {
-		return "Đang cập nhật...\n"
+		return appView("Đang cập nhật...\n")
 	}
 
 	var updateBanner string
@@ -267,11 +280,11 @@ func (m AppModel) View() string {
 	view := ""
 	switch m.state {
 	case stateSearch:
-		view = m.search.View()
+		view = m.search.View().Content
 	case stateChapters:
-		view = m.chapter.View()
+		view = m.chapter.View().Content
 	case stateReader:
-		view = m.reader.View()
+		view = m.reader.View().Content
 	default:
 		view = "Unknown state"
 	}
@@ -284,5 +297,13 @@ func (m AppModel) View() string {
 		view = view + "\nCập nhật thành công! Vui lòng thoát (Ctrl+C) và mở lại futon."
 	}
 
-	return view
+	return appView(view)
+}
+
+// appView wraps rendered content with the terminal features every futon screen needs.
+func appView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
 }

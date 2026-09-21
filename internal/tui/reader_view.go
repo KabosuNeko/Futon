@@ -4,12 +4,34 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
 
-func (m ReaderModel) View() string {
+// View reports a blank, non-empty screen to the renderer. The reader frame
+// (image, footer, flash) is painted out-of-band with tea.Raw because the v2
+// cell renderer strips cursor positioning and graphics sequences embedded in a
+// View. The blank screen must stay non-empty: an empty View makes the renderer
+// shrink its cell buffer to zero height and emit a full-screen erase on every
+// frame, which would wipe the raw frame (verified against bubbletea v2.0.9).
+func (m ReaderModel) View() tea.View {
+	return tea.NewView(m.blankScreen())
+}
+
+// blankScreen returns a space-filled screen sized to the terminal.
+func (m ReaderModel) blankScreen() string {
+	w, h := m.width, m.height
+	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
+		w, h = ts.Cols, ts.Rows
+	}
+	return strings.Repeat(" ", max(1, w*h))
+}
+
+// frameContent builds the entire reader frame. The layout and wording match the
+// pre-v2 View byte for byte; only the transport changed to tea.Raw.
+func (m ReaderModel) frameContent() string {
 	var b strings.Builder
 
 	b.WriteString("\x1b[H\x1b[2J")

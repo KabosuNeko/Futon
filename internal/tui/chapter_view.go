@@ -4,19 +4,20 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
 
-func (m ChapterListModel) View() string {
+func (m ChapterListModel) View() tea.View {
 	w, h := m.width, m.height
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
 		w, h = ts.Cols, ts.Rows
 	}
 	if w == 0 || h == 0 {
-		return "Loading..."
+		return tea.NewView("Loading...")
 	}
 
 	boxW := min(76, max(36, w-8))
@@ -197,7 +198,7 @@ func (m ChapterListModel) View() string {
 		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
 	}
 
-	return placed
+	return tea.NewView(placed)
 }
 
 func (m *ChapterListModel) jumpToChapter(number string) bool {

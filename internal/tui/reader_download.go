@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/export"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // MangaDex returns placeholder images unless you send this exact UA + no Referer.
@@ -121,19 +121,15 @@ func chapterNavCmd(chapterID, mangaID, mangaTitle string, allChapterIDs, allChap
 	}
 }
 
+// clearGraphicsCmd deletes every terminal image without touching text.
 func clearGraphicsCmd() tea.Cmd {
-	return func() tea.Msg {
-		fmt.Print(kittyClearSeq)
-		return nil
-	}
+	return tea.Raw(kittyClearSeq)
 }
 
+// clearScreenCmd deletes every terminal image and repaints the screen blank so
+// the next rendered screen is not ghosted by stale image pixels.
 func clearScreenCmd() tea.Cmd {
-	return func() tea.Msg {
-		fmt.Print(kittyClearSeq)
-		fmt.Print("\x1b[H\x1b[2J")
-		return nil
-	}
+	return tea.Raw(kittyClearSeq + "\x1b[H\x1b[2J")
 }
 
 func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int) tea.Cmd {
