@@ -41,6 +41,10 @@ type UpdateReadyMsg struct {
 
 type RequestUpdateMsg struct{}
 
+// chaptersReadyMsg switches the app to the chapter list after the search
+// cover has been cleared from the terminal.
+type chaptersReadyMsg struct{}
+
 type UpdateCheckedMsg struct {
 	Available bool
 	Version   string
@@ -137,9 +141,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(sc, cc, rc)
 
 	case ViewMangaMsg:
-		m.state = stateChapters
 		m.currentProvider = m.findProvider(msg.ProviderName)
 		m.chapter = NewChapterListModel(msg.MangaID, msg.Title, m.currentProvider)
+		// Clear the preview cover while the search view is still current, then
+		// switch state: a clear emitted after the switch would sit on top of the
+		// freshly rendered chapter list.
+		return m, tea.Sequence(
+			m.search.clearCoverCmd(),
+			func() tea.Msg { return chaptersReadyMsg{} },
+		)
+
+	case chaptersReadyMsg:
+		m.state = stateChapters
 		return m, m.chapter.Init()
 
 	case BackToSearchMsg:
