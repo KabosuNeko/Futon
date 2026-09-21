@@ -82,7 +82,6 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		providers:       providers,
 		providerToggles: toggles,
 		showingFeed:     true,
-		isSearching:     false,
 		renderer:        imgrender.New(),
 		coverCache:      make(map[string]imgrender.RenderedImage),
 	}
@@ -178,9 +177,15 @@ func (m SearchModel) Init() tea.Cmd {
 	}
 	return tea.Batch(
 		textinput.Blink,
+		func() tea.Msg { return searchInitMsg{} },
 		api.GlobalLatestCmd(active, 1),
 	)
 }
+
+// searchInitMsg marks the initial feed load as in progress once the model is
+// running; the constructor stays quiet so tests can build a SearchModel without
+// a pending search.
+type searchInitMsg struct{}
 
 func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, bool) {
 	mouse := msg.Mouse()
@@ -343,6 +348,11 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		m.viewportStart = 0
 		return m, nil
 
+	case searchInitMsg:
+		m.isSearching = true
+		m.searchingProviders = m.activeProviderNames()
+		return m, nil
+
 	case searchTriggerMsg:
 		if msg.query == m.currentQuery && len(strings.TrimSpace(msg.query)) >= 3 {
 			active := m.activeProviders()
@@ -360,11 +370,24 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		return m, nil
 
 	case api.MangaSearchResultMsg:
-		m.isSearching = false
-		m.searchingProviders = nil
+		applicable := m.showingFeed || len(strings.TrimSpace(m.currentQuery)) >= 3
 		m.providerCounts = msg.ProviderCounts
 		m.providerErrors = msg.ProviderErrors
-		if !m.showingFeed && len(strings.TrimSpace(m.currentQuery)) < 3 {
+
+		if msg.Stream != nil {
+			if applicable && len(msg.Manga) > 0 {
+				m.results = msg.Manga
+				m.cursor = 0
+				m.viewportStart = 0
+				m.err = nil
+				return m, tea.Batch(msg.Stream.Next(), m.updateFocusedCover())
+			}
+			return m, msg.Stream.Next()
+		}
+
+		m.isSearching = false
+		m.searchingProviders = nil
+		if !applicable {
 			return m, nil
 		}
 		if len(msg.Manga) == 0 && msg.Err != nil {

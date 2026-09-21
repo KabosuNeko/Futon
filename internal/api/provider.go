@@ -16,6 +16,9 @@ type MangaSearchResultMsg struct {
 	Err            error
 	ProviderCounts map[string]int
 	ProviderErrors map[string]string
+	// Stream is non-nil while more snapshots for this request are coming. The
+	// final snapshot carries a nil Stream.
+	Stream *SearchStream
 }
 
 type ChapterListMsg struct {
