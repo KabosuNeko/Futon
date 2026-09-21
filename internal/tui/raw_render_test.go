@@ -377,3 +377,54 @@ func TestBackToSearchRepaintsCover(t *testing.T) {
 		t.Errorf("expected the cover repaint after returning to search, got %q", payload)
 	}
 }
+
+func TestClearCoverCmdRemovesImageWithoutRedraw(t *testing.T) {
+	m, rendered := splitSearchModelWithCover()
+	m.currentCover = &rendered
+	m.coverKey = m.coverPaintState()
+
+	payload := collectRawPayloads(m.clearCoverCmd())
+	if payload == "" {
+		t.Fatal("expected a raw cover clear")
+	}
+	for _, want := range []string{"\x1b_Ga=d,d=A,q=2\x1b\\", "\x1b_Ga=d,d=a,q=2\x1b\\", "\x1b[s", "\x1b[u"} {
+		if !strings.Contains(payload, want) {
+			t.Errorf("cover clear missing %q, got %q", want, payload)
+		}
+	}
+	if strings.Contains(payload, rendered.EscapeSequence) {
+		t.Errorf("cover clear must not redraw the image, got %q", payload)
+	}
+	if m.coverKey != (coverPaintKey{}) {
+		t.Errorf("cover clear must invalidate pending paints, got %+v", m.coverKey)
+	}
+}
+
+func TestLeaveSearchClearsCoverBeforeChapters(t *testing.T) {
+	app := NewAppModel("dev")
+	app.search.width = 100
+	app.search.height = 24
+	app.search.results = []models.Manga{
+		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "OTruyen"},
+	}
+	rendered := imgrender.RenderedImage{
+		EscapeSequence: "\x1b_Gf=100,a=T;COVER\x1b\\",
+		WidthPx:        100,
+		HeightPx:       150,
+	}
+	app.search.currentCover = &rendered
+	app.search.coverKey = app.search.coverPaintState()
+
+	updated, cmd := app.Update(ViewMangaMsg{MangaID: "m1", Title: "One Piece", ProviderName: "OTruyen"})
+	if cmd == nil {
+		t.Fatal("expected a clear command before switching to chapters")
+	}
+	if updated.(AppModel).state == stateChapters {
+		t.Error("state must not switch before the cover clear has been emitted")
+	}
+
+	updated2, _ := updated.(AppModel).Update(chaptersReadyMsg{})
+	if updated2.(AppModel).state != stateChapters {
+		t.Error("chaptersReadyMsg must switch to the chapter list")
+	}
+}

@@ -274,6 +274,18 @@ func (m SearchModel) coverPaintState() coverPaintKey {
 	return key
 }
 
+// clearCoverCmd removes the preview cover from the terminal and invalidates any
+// pending paint so the image does not ghost over the next screen. It is emitted
+// before the state switches away from search; the clear must land while the
+// search view is still the renderer's buffer, otherwise it could erase cells of
+// the screen that replaces it.
+func (m *SearchModel) clearCoverCmd() tea.Cmd {
+	_, key := m.buildContent()
+	key.draw = false
+	m.coverKey = coverPaintKey{}
+	return tea.Raw(m.coverSequence(key))
+}
+
 // repaintCoverCmd forces the preview cover to be painted again. The reader
 // deletes every terminal image when it exits, so a cover on screen before must
 // be redrawn when the search screen comes back.
