@@ -13,6 +13,24 @@ type UserData struct {
 	Favorites []FavoriteManga `json:"favorites,omitempty"`
 }
 
+type FavoriteManga struct {
+	MangaID  string `json:"manga_id"`
+	Title    string `json:"title"`
+	Provider string `json:"provider,omitempty"`
+}
+
+func ConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("lấy thư mục home: %w", err)
+	}
+	dir := filepath.Join(home, ".config", "futon")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("tạo thư mục cấu hình: %w", err)
+	}
+	return dir, nil
+}
+
 func userdataPath() (string, error) {
 	dir, err := ConfigDir()
 	if err != nil {
@@ -34,7 +52,7 @@ func LoadUserData() (*UserData, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
+			return &UserData{}, nil
 		}
 		return nil, fmt.Errorf("đọc file userdata: %w", err)
 	}
@@ -46,21 +64,75 @@ func LoadUserData() (*UserData, error) {
 	return &ud, nil
 }
 
+func updateUserData(update func(*UserData)) error {
+	ud, err := LoadUserData()
+	if err != nil {
+		return err
+	}
+	update(ud)
+	return SaveUserData(ud)
+}
+
 func SaveUserData(ud *UserData) error {
 	path, err := userdataPath()
 	if err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(ud, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode userdata JSON: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeJSON(path, ud); err != nil {
 		return fmt.Errorf("ghi file userdata: %w", err)
 	}
 	return nil
+}
+
+func LoadSources() ([]string, error) {
+	ud, err := LoadUserData()
+	if err != nil {
+		return nil, err
+	}
+	return ud.Sources, nil
+}
+
+func SaveSources(names []string) error {
+	return updateUserData(func(ud *UserData) { ud.Sources = names })
+}
+
+func LoadFavorites() ([]FavoriteManga, error) {
+	ud, err := LoadUserData()
+	if err != nil {
+		return nil, err
+	}
+	return ud.Favorites, nil
+}
+
+func AddFavorite(manga FavoriteManga) error {
+	return updateUserData(func(ud *UserData) {
+		for _, f := range ud.Favorites {
+			if f.MangaID == manga.MangaID {
+				return
+			}
+		}
+		ud.Favorites = append(ud.Favorites, manga)
+	})
+}
+
+func RemoveFavorite(mangaID string) error {
+	return updateUserData(func(ud *UserData) {
+		for i, f := range ud.Favorites {
+			if f.MangaID == mangaID {
+				ud.Favorites = append(ud.Favorites[:i], ud.Favorites[i+1:]...)
+				return
+			}
+		}
+	})
+}
+
+func writeJSON(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // migrateOldData — because past me thought one file per feature was a good idea.
@@ -74,11 +146,10 @@ func migrateOldData() error {
 		return nil
 	}
 
-	home, err := os.UserHomeDir()
+	oldDir, err := ConfigDir()
 	if err != nil {
 		return err
 	}
-	oldDir := filepath.Join(home, ".config", "futon")
 
 	var ud UserData
 

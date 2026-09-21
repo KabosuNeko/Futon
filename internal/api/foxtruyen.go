@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
-	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/PuerkitoBio/goquery"
@@ -31,71 +31,46 @@ func (p *FoxTruyenProvider) Name() string {
 	return "FoxTruyen"
 }
 
-func (p *FoxTruyenProvider) foxtruyenGet(endpoint string) (*http.Response, error) {
-	client := ensureClient(p.httpClient)
-	var lastErr error
-	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
-		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, fmt.Errorf("tạo request: %w", err)
+func parseFoxList(doc *goquery.Document) []models.Manga {
+	var mangas []models.Manga
+	doc.Find(".row.list_item_home > .item_home, .list_item_home .item_home, .list-stories .item").Each(func(i int, s *goquery.Selection) {
+		mangaLink := s.Find("a.thumbblock")
+		if mangaLink.Length() == 0 {
+			mangaLink = s.Find("a.book_name")
 		}
-		req.Header.Set("User-Agent", foxtruyenBrowserUA)
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+		href, exists := mangaLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
 
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("gọi HTTP: %w", err)
-			if attempt < providerMaxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
+		title := strings.TrimSpace(s.Find("a.book_name").Text())
+		if title == "" {
+			title = strings.TrimSpace(s.Find("h3 a").Text())
+		}
+		if title == "" {
+			return
+		}
+
+		cover := ""
+		s.Find(".image-cover img, img").Each(func(_ int, img *goquery.Selection) {
+			if v, ok := imageSrc(img); ok && cover == "" {
+				cover = v
 			}
-			return nil, lastErr
-		}
-		if resp.StatusCode >= 500 && resp.StatusCode < 600 {
-			resp.Body.Close()
-			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
-			if attempt < providerMaxRetries {
-				time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
-				continue
-			}
-			return nil, lastErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-		}
-		return resp, nil
-	}
-	return nil, lastErr
-}
+		})
 
-func (p *FoxTruyenProvider) resolveURL(path string) string {
-	if strings.HasPrefix(path, "http") {
-		return path
-	}
-	base := strings.TrimRight(p.baseURL, "/")
-	path = strings.TrimPrefix(path, "/")
-	return base + "/" + path
-}
-
-func foxImgAttr(s *goquery.Selection) (string, bool) {
-	for _, attr := range []string{"data-original", "data-src", "data-lazy-src"} {
-		if v, exists := s.Attr(attr); exists && strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v), true
-		}
-	}
-	src, exists := s.Attr("src")
-	if exists && strings.TrimSpace(src) != "" {
-		return strings.TrimSpace(src), true
-	}
-	return "", false
+		mangas = append(mangas, models.Manga{
+			ID:       href,
+			Title:    title,
+			CoverURL: cover,
+		})
+	})
+	return mangas
 }
 
 func (p *FoxTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 	endpoint := p.baseURL + "/tim-kiem?q=" + url.QueryEscape(keyword)
 
-	resp, err := p.foxtruyenGet(endpoint)
+	resp, err := httpGet(p.httpClient, endpoint, foxtruyenBrowserUA)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +96,7 @@ func (p *FoxTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 
 		cover := ""
 		s.Find(".image-cover img").Each(func(_ int, img *goquery.Selection) {
-			if v, ok := foxImgAttr(img); ok {
+			if v, ok := imageSrc(img); ok {
 				cover = v
 			}
 		})
@@ -133,9 +108,6 @@ func (p *FoxTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 		})
 	})
 
-	if mangas == nil {
-		mangas = []models.Manga{}
-	}
 	return mangas, nil
 }
 
@@ -145,9 +117,9 @@ func (p *FoxTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
 	}
 	endpoint := p.baseURL + fmt.Sprintf("/danh-sach/truyen-moi?page=%d", page)
 
-	resp, err := p.foxtruyenGet(endpoint)
+	resp, err := httpGet(p.httpClient, endpoint, foxtruyenBrowserUA)
 	if err != nil {
-		resp, err = p.foxtruyenGet(p.baseURL)
+		resp, err = httpGet(p.httpClient, p.baseURL, foxtruyenBrowserUA)
 		if err != nil {
 			return nil, err
 		}
@@ -159,39 +131,7 @@ func (p *FoxTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	var mangas []models.Manga
-	doc.Find(".row.list_item_home > .item_home, .list_item_home .item_home, .list-stories .item").Each(func(i int, s *goquery.Selection) {
-		mangaLink := s.Find("a.thumbblock")
-		if mangaLink.Length() == 0 {
-			mangaLink = s.Find("a.book_name")
-		}
-		href, exists := mangaLink.Attr("href")
-		if !exists || href == "" {
-			return
-		}
-
-		title := strings.TrimSpace(s.Find("a.book_name").Text())
-		if title == "" {
-			title = strings.TrimSpace(s.Find("h3 a").Text())
-		}
-		if title == "" {
-			return
-		}
-
-		cover := ""
-		s.Find(".image-cover img, img").Each(func(_ int, img *goquery.Selection) {
-			if v, ok := foxImgAttr(img); ok && cover == "" {
-				cover = v
-			}
-		})
-
-		mangas = append(mangas, models.Manga{
-			ID:       href,
-			Title:    title,
-			CoverURL: cover,
-		})
-	})
-
+	mangas := parseFoxList(doc)
 	if len(mangas) == 0 {
 		return p.Search("")
 	}
@@ -218,7 +158,7 @@ func (p *FoxTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
 		return p.FetchLatest(page)
 	}
 
-	resp, err := p.foxtruyenGet(endpoint)
+	resp, err := httpGet(p.httpClient, endpoint, foxtruyenBrowserUA)
 	if err != nil {
 		return p.FetchLatest(page)
 	}
@@ -229,39 +169,7 @@ func (p *FoxTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	var mangas []models.Manga
-	doc.Find(".row.list_item_home > .item_home, .list_item_home .item_home, .list-stories .item").Each(func(i int, s *goquery.Selection) {
-		mangaLink := s.Find("a.thumbblock")
-		if mangaLink.Length() == 0 {
-			mangaLink = s.Find("a.book_name")
-		}
-		href, exists := mangaLink.Attr("href")
-		if !exists || href == "" {
-			return
-		}
-
-		title := strings.TrimSpace(s.Find("a.book_name").Text())
-		if title == "" {
-			title = strings.TrimSpace(s.Find("h3 a").Text())
-		}
-		if title == "" {
-			return
-		}
-
-		cover := ""
-		s.Find(".image-cover img, img").Each(func(_ int, img *goquery.Selection) {
-			if v, ok := foxImgAttr(img); ok && cover == "" {
-				cover = v
-			}
-		})
-
-		mangas = append(mangas, models.Manga{
-			ID:       href,
-			Title:    title,
-			CoverURL: cover,
-		})
-	})
-
+	mangas := parseFoxList(doc)
 	if len(mangas) == 0 {
 		return p.FetchLatest(page)
 	}
@@ -269,9 +177,9 @@ func (p *FoxTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
 }
 
 func (p *FoxTruyenProvider) FetchChapters(mangaURL string) ([]models.Chapter, error) {
-	endpoint := p.resolveURL(mangaURL)
+	endpoint := resolveURL(p.baseURL, mangaURL)
 
-	resp, err := p.foxtruyenGet(endpoint)
+	resp, err := httpGet(p.httpClient, endpoint, foxtruyenBrowserUA)
 	if err != nil {
 		return nil, err
 	}
@@ -295,20 +203,14 @@ func (p *FoxTruyenProvider) FetchChapters(mangaURL string) ([]models.Chapter, er
 		})
 	})
 
-	for i, j := 0, len(chapters)-1; i < j; i, j = i+1, j-1 {
-		chapters[i], chapters[j] = chapters[j], chapters[i]
-	}
-
-	if chapters == nil {
-		chapters = []models.Chapter{}
-	}
+	slices.Reverse(chapters)
 	return chapters, nil
 }
 
 func (p *FoxTruyenProvider) FetchPages(chapterID string) ([]string, error) {
-	endpoint := p.resolveURL(chapterID)
+	endpoint := resolveURL(p.baseURL, chapterID)
 
-	resp, err := p.foxtruyenGet(endpoint)
+	resp, err := httpGet(p.httpClient, endpoint, foxtruyenBrowserUA)
 	if err != nil {
 		return nil, err
 	}
@@ -321,15 +223,12 @@ func (p *FoxTruyenProvider) FetchPages(chapterID string) ([]string, error) {
 
 	var urls []string
 	doc.Find("div.content_detail_manga img").Each(func(i int, s *goquery.Selection) {
-		src, ok := foxImgAttr(s)
+		src, ok := imageSrc(s)
 		if !ok || src == "" {
 			return
 		}
 		urls = append(urls, src)
 	})
 
-	if urls == nil {
-		urls = []string{}
-	}
 	return urls, nil
 }

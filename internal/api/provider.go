@@ -40,7 +40,6 @@ type FilterOptions struct {
 	Page   int
 }
 
-// MangaProvider is the contract every source must sign.
 type MangaProvider interface {
 	Name() string
 	Search(keyword string) ([]models.Manga, error)
@@ -58,9 +57,6 @@ func resolveURL(baseURL, path string) string {
 }
 
 func ensureClient(client *http.Client) *http.Client {
-	if client == nil {
-		return &http.Client{Timeout: providerTimeout}
-	}
 	if client.Timeout == 0 {
 		c := *client
 		c.Timeout = providerTimeout
@@ -159,17 +155,9 @@ func FetchCoverBytes(coverURL, provider string) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP %d khi tải ảnh", resp.StatusCode)
 	}
 
-	var buf strings.Builder
-	_ = buf
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("đọc dữ liệu ảnh: %w", err)
 	}
 	return data, nil
-}
-
-func reverseChapters(chapters []models.Chapter) {
-	for i, j := 0, len(chapters)-1; i < j; i, j = i+1, j-1 {
-		chapters[i], chapters[j] = chapters[j], chapters[i]
-	}
 }

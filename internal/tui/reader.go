@@ -21,8 +21,6 @@ type renderDoneMsg struct {
 	err   error
 }
 
-type clearDoneMsg struct{}
-
 type PreloadCompleteMsg struct {
 	ChapID string
 	URLs   []string
@@ -115,8 +113,6 @@ func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleDownloadProgress(msg)
 	case renderDoneMsg:
 		return m.handleRenderDone(msg)
-	case clearDoneMsg:
-		return m, nil
 	case PreloadCompleteMsg:
 		return m.handlePreloadComplete(msg)
 	case preloadTransitionReadyMsg:

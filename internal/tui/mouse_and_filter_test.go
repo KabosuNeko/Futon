@@ -20,14 +20,12 @@ func TestSearchMouseWheelAndClick(t *testing.T) {
 	}
 	m.cursor = 0
 
-	// Mouse wheel down -> cursor 1
 	newM, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	sm := newM.(SearchModel)
 	if sm.cursor != 1 {
 		t.Errorf("expected cursor 1 after wheel down, got %d", sm.cursor)
 	}
 
-	// Mouse wheel up -> cursor 0
 	newM2, _ := sm.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
 	sm2 := newM2.(SearchModel)
 	if sm2.cursor != 0 {
@@ -47,42 +45,36 @@ func TestSearchTabCycleAndFilterModal(t *testing.T) {
 	m := NewSearchModel([]api.MangaProvider{provider})
 	m.showingFeed = true
 
-	// Press Tab -> switches to Favorites
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	sm := newM.(SearchModel)
 	if !sm.showingFavorites {
 		t.Errorf("expected showingFavorites after tab 1")
 	}
 
-	// Press Tab -> switches to History
 	newM, _ = sm.Update(tea.KeyMsg{Type: tea.KeyTab})
 	sm = newM.(SearchModel)
 	if !sm.showingHistory {
 		t.Errorf("expected showingHistory after tab 2")
 	}
 
-	// Press Tab -> switches to Sources
 	newM, _ = sm.Update(tea.KeyMsg{Type: tea.KeyTab})
 	sm = newM.(SearchModel)
 	if !sm.showingSources {
 		t.Errorf("expected showingSources after tab 3")
 	}
 
-	// Press Tab -> switches to Filters
 	newM, _ = sm.Update(tea.KeyMsg{Type: tea.KeyTab})
 	sm = newM.(SearchModel)
 	if !sm.showingFilters {
 		t.Errorf("expected showingFilters after tab 4")
 	}
 
-	// In Filters: Right arrow changes status
 	newM, _ = sm.Update(tea.KeyMsg{Type: tea.KeyRight})
 	sm = newM.(SearchModel)
 	if sm.filterStatus != 1 {
 		t.Errorf("expected filterStatus=1 (Ongoing), got %d", sm.filterStatus)
 	}
 
-	// View rendering contains filter modal
 	view := sm.View()
 	if !strings.Contains(view, "BỘ LỌC TÌM KIẾM") {
 		t.Errorf("expected filter modal in view, got:\n%s", view)
@@ -96,7 +88,6 @@ func TestReaderMouseClicks(t *testing.T) {
 	m.currentIdx = 0
 	m.width = 80
 
-	// Click right side (X=60 > 40) -> Next page (1)
 	newM, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 60})
 	rm := newM.(ReaderModel)
 	if rm.currentIdx != 1 {
@@ -105,7 +96,6 @@ func TestReaderMouseClicks(t *testing.T) {
 
 	rm.isLoading = false
 
-	// Click left side (X=20 <= 40) -> Prev page (0)
 	newM2, _ := rm.Update(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 20})
 	rm2 := newM2.(ReaderModel)
 	if rm2.currentIdx != 0 {
@@ -114,7 +104,6 @@ func TestReaderMouseClicks(t *testing.T) {
 
 	rm2.isLoading = false
 
-	// Wheel down -> Next page (1)
 	newM3, _ := rm2.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	rm3 := newM3.(ReaderModel)
 	if rm3.currentIdx != 1 {
@@ -133,14 +122,12 @@ func TestChapterListMouseAndExportKey(t *testing.T) {
 	}
 	m.cursor = 0
 
-	// Wheel down -> cursor 1
 	newM, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	cm := newM.(ChapterListModel)
 	if cm.cursor != 1 {
 		t.Errorf("expected cursor 1 after wheel down, got %d", cm.cursor)
 	}
 
-	// Wheel up -> cursor 0
 	newM2, _ := cm.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
 	cm2 := newM2.(ChapterListModel)
 	if cm2.cursor != 0 {

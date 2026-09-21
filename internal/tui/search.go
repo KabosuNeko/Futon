@@ -132,62 +132,41 @@ func (m SearchModel) activeProviderNames() []string {
 	return names
 }
 
-func (m SearchModel) filteredFavIndices() []int {
-	if m.filterQuery == "" || m.showingSources {
-		indices := make([]int, len(m.favorites))
-		for i := range m.favorites {
+// filteredIndices returns the indices of n items whose key contains the
+// current filter query, or all indices when the query is empty.
+func (m SearchModel) filteredIndices(n int, key func(int) string) []int {
+	if m.filterQuery == "" {
+		indices := make([]int, n)
+		for i := range indices {
 			indices[i] = i
 		}
 		return indices
 	}
 	var indices []int
 	q := strings.ToLower(m.filterQuery)
-	for i, fav := range m.favorites {
-		if strings.Contains(strings.ToLower(fav.Title), q) {
+	for i := 0; i < n; i++ {
+		if strings.Contains(strings.ToLower(key(i)), q) {
 			indices = append(indices, i)
 		}
 	}
 	return indices
+}
+
+func (m SearchModel) filteredFavIndices() []int {
+	return m.filteredIndices(len(m.favorites), func(i int) string { return m.favorites[i].Title })
 }
 
 func (m SearchModel) filteredHistoryIndices() []int {
-	if m.filterQuery == "" || m.showingSources {
-		indices := make([]int, len(m.history))
-		for i := range m.history {
-			indices[i] = i
+	return m.filteredIndices(len(m.history), func(i int) string {
+		if m.history[i].MangaTitle != "" {
+			return m.history[i].MangaTitle
 		}
-		return indices
-	}
-	var indices []int
-	q := strings.ToLower(m.filterQuery)
-	for i, h := range m.history {
-		title := strings.ToLower(h.MangaTitle)
-		if title == "" {
-			title = strings.ToLower(h.MangaID)
-		}
-		if strings.Contains(title, q) {
-			indices = append(indices, i)
-		}
-	}
-	return indices
+		return m.history[i].MangaID
+	})
 }
 
 func (m SearchModel) filteredProviderIndices() []int {
-	if m.filterQuery == "" || !m.showingSources {
-		indices := make([]int, len(m.providers))
-		for i := range m.providers {
-			indices[i] = i
-		}
-		return indices
-	}
-	var indices []int
-	q := strings.ToLower(m.filterQuery)
-	for i, p := range m.providers {
-		if strings.Contains(strings.ToLower(p.Name()), q) {
-			indices = append(indices, i)
-		}
-	}
-	return indices
+	return m.filteredIndices(len(m.providers), func(i int) string { return m.providers[i].Name() })
 }
 
 func (m SearchModel) Init() tea.Cmd {
@@ -216,9 +195,7 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 			}
 			return m, nil, true
 		}
-		if m.cursor > 0 {
-			m.cursor--
-			m.adjustViewport()
+		if m.moveCursor(-1) {
 			return m, m.updateFocusedCover(), true
 		}
 		return m, nil, true
@@ -231,28 +208,12 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 			return m, nil, true
 		}
 		if m.showingSources {
-			indices := m.filteredProviderIndices()
-			if m.sourceCursor < len(indices)-1 {
+			if m.sourceCursor < m.currentListLen()-1 {
 				m.sourceCursor++
 			}
 			return m, nil, true
 		}
-		moved := false
-		switch {
-		case m.showingFavorites && m.cursor < len(m.filteredFavIndices())-1:
-			m.cursor++
-			m.adjustViewport()
-			moved = true
-		case m.showingHistory && m.cursor < len(m.filteredHistoryIndices())-1:
-			m.cursor++
-			m.adjustViewport()
-			moved = true
-		case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
-			m.cursor++
-			m.adjustViewport()
-			moved = true
-		}
-		if moved {
+		if m.moveCursor(1) {
 			return m, m.updateFocusedCover(), true
 		}
 		return m, nil, true
@@ -261,25 +222,12 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 		if msg.Action != tea.MouseActionPress {
 			return m, nil, false
 		}
-		// Clicked on result list item
-		listLen := len(m.results)
-		if m.showingFavorites {
-			listLen = len(m.filteredFavIndices())
-		} else if m.showingHistory {
-			listLen = len(m.filteredHistoryIndices())
-		} else if m.showingSources {
-			listLen = len(m.filteredProviderIndices())
-		}
 
 		itemIdx := m.viewportStart + (msg.Y - searchUIOffset)
-		if itemIdx >= 0 && itemIdx < listLen {
+		if itemIdx >= 0 && itemIdx < m.currentListLen() {
 			if m.showingSources {
 				m.sourceCursor = itemIdx
-				indices := m.filteredProviderIndices()
-				if m.sourceCursor < len(indices) {
-					m.providerToggles[indices[m.sourceCursor]] = !m.providerToggles[indices[m.sourceCursor]]
-					_ = storage.SaveSources(m.activeProviderNames())
-				}
+				m.toggleCurrentSource()
 				return m, nil, true
 			}
 
@@ -334,7 +282,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.query == m.currentQuery && len(strings.TrimSpace(msg.query)) >= 3 {
 			active := m.activeProviders()
 			if len(active) == 0 {
-				m.err = fmt.Errorf("Chọn ít nhất một nguồn trong /src")
+				m.err = errNoSource
 				return m, nil
 			}
 			m.isSearching = true
@@ -448,14 +396,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if strings.HasPrefix(trimmed, "/") {
 			m.currentQuery = ""
-			m.results = nil
-			m.cursor = 0
-			m.viewportStart = 0
-			m.isSearching = false
-			m.err = nil
-			m.providerCounts = nil
-			m.providerErrors = nil
-			m.searchingProviders = nil
+			m.resetSearchResults()
 			return m, cmd
 		}
 
@@ -463,14 +404,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(trimmed) >= 3 {
 			return m, tea.Batch(cmd, debounceSearch(trimmed, 300*time.Millisecond))
 		}
-		m.results = nil
-		m.cursor = 0
-		m.viewportStart = 0
-		m.isSearching = false
-		m.err = nil
-		m.providerCounts = nil
-		m.providerErrors = nil
-		m.searchingProviders = nil
+		m.resetSearchResults()
 	}
 
 	return m, cmd
@@ -492,17 +426,22 @@ func (m SearchModel) listVisibleItems() int {
 	return visible
 }
 
-func (m *SearchModel) adjustViewport() {
-	visible := m.listVisibleItems()
-	var total int
+func (m SearchModel) currentListLen() int {
 	switch {
 	case m.showingFavorites:
-		total = len(m.filteredFavIndices())
+		return len(m.filteredFavIndices())
 	case m.showingHistory:
-		total = len(m.filteredHistoryIndices())
+		return len(m.filteredHistoryIndices())
+	case m.showingSources:
+		return len(m.filteredProviderIndices())
 	default:
-		total = len(m.results)
+		return len(m.results)
 	}
+}
+
+func (m *SearchModel) adjustViewport() {
+	visible := m.listVisibleItems()
+	total := m.currentListLen()
 
 	if m.cursor < m.viewportStart {
 		m.viewportStart = m.cursor
@@ -515,6 +454,40 @@ func (m *SearchModel) adjustViewport() {
 	}
 	if m.viewportStart >= total && total > 0 {
 		m.viewportStart = total - 1
+	}
+}
+
+// moveCursor shifts the list cursor by delta, clamped to the active list.
+// It reports whether the cursor moved.
+func (m *SearchModel) moveCursor(delta int) bool {
+	next := m.cursor + delta
+	if next < 0 || next >= m.currentListLen() {
+		return false
+	}
+	m.cursor = next
+	m.adjustViewport()
+	return true
+}
+
+// resetSearchResults clears result-bound state when the query changes.
+func (m *SearchModel) resetSearchResults() {
+	m.results = nil
+	m.cursor = 0
+	m.viewportStart = 0
+	m.isSearching = false
+	m.err = nil
+	m.providerCounts = nil
+	m.providerErrors = nil
+	m.searchingProviders = nil
+}
+
+// toggleCurrentSource flips the checkbox under the source cursor and persists it.
+func (m *SearchModel) toggleCurrentSource() {
+	indices := m.filteredProviderIndices()
+	if m.sourceCursor < len(indices) {
+		idx := indices[m.sourceCursor]
+		m.providerToggles[idx] = !m.providerToggles[idx]
+		_ = storage.SaveSources(m.activeProviderNames())
 	}
 }
 
@@ -576,7 +549,7 @@ func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	}
 	m.currentCover = nil
 	m.coverLoading = true
-	return debounceCover(focused.ID, focused.CoverURL, focused.Provider, 150*time.Millisecond)
+	return debounceCover(focused.ID, focused.CoverURL, 150*time.Millisecond)
 }
 
 func (m SearchModel) previewPaneWidth() int {
@@ -636,4 +609,3 @@ func (m SearchModel) previewBoxSize() (cols, rows int) {
 	}
 	return cols, rows
 }
-

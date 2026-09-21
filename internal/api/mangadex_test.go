@@ -12,14 +12,13 @@ import (
 	"github.com/KabosuNeko/Futon/internal/models"
 )
 
-func newMangaDexTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+func newMangaDexTestServer(t *testing.T, handler http.HandlerFunc) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	old := mangadexBaseURL
 	mangadexBaseURL = srv.URL
 	t.Cleanup(func() { mangadexBaseURL = old })
-	return srv
 }
 
 func mangaJSON(t *testing.T, items int, total int) []byte {
