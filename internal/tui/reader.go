@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type downloadProgressMsg struct {

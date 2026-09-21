@@ -115,7 +115,7 @@ func TestChapterListViewCardAndFooter(t *testing.T) {
 	}
 	m.loading = false
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Danh sách chapter") {
 		t.Errorf("expected card header in chapter view")
 	}

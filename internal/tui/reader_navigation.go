@@ -1,8 +1,8 @@
 package tui
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m ReaderModel) hasNextChapter() bool {

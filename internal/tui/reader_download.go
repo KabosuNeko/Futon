@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/export"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // MangaDex returns placeholder images unless you send this exact UA + no Referer.

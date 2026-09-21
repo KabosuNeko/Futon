@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/storage"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // execCmd simulates the bubbletea runtime: nested commands returned by
@@ -38,7 +38,7 @@ func TestCtrlCInReaderFlushesHistory(t *testing.T) {
 	m.reader = NewReaderModel(mangaID, "Title", "c1", "1", []string{"c1", "c2"}, 0, -1, nil)
 	m.reader.currentIdx = 3
 
-	model, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("expected a cmd for ctrl+c in reader")
 	}
@@ -61,7 +61,7 @@ func TestCtrlCInSearchQuits(t *testing.T) {
 	m := NewAppModel("dev")
 	m.state = stateSearch
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("expected quit cmd in search state")
 	}
@@ -77,7 +77,7 @@ func TestReaderKeysCtrlCFlushesHistory(t *testing.T) {
 	m := NewReaderModel(mangaID, "Title", "c1", "1", []string{"c1", "c2"}, 0, -1, nil)
 	m.currentIdx = 2
 
-	model, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("expected a cmd for ctrl+c")
 	}
@@ -98,7 +98,7 @@ func TestReaderKeysCtrlCFlushesHistory(t *testing.T) {
 
 func TestReaderKeysCtrlCNoMangaQuitsDirectly(t *testing.T) {
 	m := NewReaderModel("", "Title", "", "1", nil, 0, -1, nil)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("expected quit cmd")
 	}
@@ -110,7 +110,7 @@ func TestQueryBannerSaysCtrlU(t *testing.T) {
 	m.updateVersion = "v9.9.9"
 	m.state = stateSearch
 
-	view := m.View()
+	view := m.View().Content
 	if strings.Contains(view, "Nhấn 'U'") {
 		t.Error("banner still says 'U'")
 	}

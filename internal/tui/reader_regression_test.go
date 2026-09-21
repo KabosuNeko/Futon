@@ -110,7 +110,7 @@ func TestReaderViewRendersFooterInStepRead(t *testing.T) {
 	m.imageData = [][]byte{buf.Bytes(), buf.Bytes(), buf.Bytes()}
 	m.setCached(m.currentIdx, rendered)
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Trang 2/3") {
 		t.Errorf("expected footer with page info, got:\n%s", view)
 	}
