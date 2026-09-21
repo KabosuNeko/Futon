@@ -94,15 +94,18 @@ func TestMigrateOldDataSkipsWhenUserDataExists(t *testing.T) {
 	}
 }
 
-func TestMigrateOldDataNoFilesReturnsNil(t *testing.T) {
+func TestMigrateOldDataNoFilesReturnsEmpty(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	ud, err := LoadUserData()
 	if err != nil {
 		t.Fatalf("LoadUserData error: %v", err)
 	}
-	if ud != nil {
-		t.Errorf("expected nil UserData, got %+v", ud)
+	if ud == nil {
+		t.Fatal("expected non-nil UserData, got nil")
+	}
+	if len(ud.Favorites) != 0 || len(ud.Sources) != 0 {
+		t.Errorf("expected empty UserData, got %+v", ud)
 	}
 
 	// No userdata.json should be created.

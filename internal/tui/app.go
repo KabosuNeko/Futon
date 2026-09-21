@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
@@ -34,7 +33,6 @@ type BackToChaptersMsg struct{}
 
 type UpdateAvailableMsg struct {
 	Version string
-	URL     string
 }
 
 type UpdateReadyMsg struct {
@@ -69,8 +67,6 @@ type AppModel struct {
 	appVersion      string
 	updateAvailable bool
 	updateVersion   string
-	updateURL       string
-	updateError     error
 	updateSuccess   bool
 }
 
@@ -98,17 +94,17 @@ func (m AppModel) Init() tea.Cmd {
 
 func checkForUpdateCmd(currentVersion string) tea.Cmd {
 	return func() tea.Msg {
-		available, version, url, err := updater.CheckForUpdate(currentVersion)
+		available, version, err := updater.CheckForUpdate(currentVersion)
 		if err != nil || !available {
 			return nil
 		}
-		return UpdateAvailableMsg{Version: version, URL: url}
+		return UpdateAvailableMsg{Version: version}
 	}
 }
 
 func checkUpdateForManualCmd(currentVersion string) tea.Cmd {
 	return func() tea.Msg {
-		available, version, _, err := updater.CheckForUpdate(currentVersion)
+		available, version, err := updater.CheckForUpdate(currentVersion)
 		if err != nil {
 			return UpdateCheckedMsg{Err: err}
 		}
@@ -120,8 +116,7 @@ func checkUpdateForManualCmd(currentVersion string) tea.Cmd {
 }
 
 func runInstallScriptCmd() tea.Cmd {
-	cmdStr := "curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh -o /tmp/futon_install.sh && bash /tmp/futon_install.sh && rm /tmp/futon_install.sh"
-	c := exec.Command("bash", "-c", cmdStr)
+	c := updater.InstallScriptCommand()
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -164,7 +159,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case UpdateAvailableMsg:
 		m.updateAvailable = true
 		m.updateVersion = msg.Version
-		m.updateURL = msg.URL
 		return m, nil
 
 	case RequestUpdateMsg:
@@ -197,9 +191,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runInstallScriptCmd()
 
 	case UpdateReadyMsg:
-		if msg.Err != nil {
-			m.updateError = msg.Err
-		}
 		m.updateSuccess = true
 		m.updateAvailable = false
 		return m, tea.Quit
@@ -220,9 +211,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		case "ctrl+u":
-			if m.updateAvailable && m.state == stateSearch {
-				m.state = stateUpdating
-				return m, runInstallScriptCmd()
+			if m.state == stateSearch {
+				return m.Update(RequestUpdateMsg{})
 			}
 			return m, nil
 		}
@@ -232,22 +222,18 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	var newModel tea.Model
+	var cmd tea.Cmd
 	switch m.state {
 	case stateSearch:
-		var cmd tea.Cmd
-		var newModel tea.Model
 		newModel, cmd = m.search.Update(msg)
 		m.search = newModel.(SearchModel)
 		return m, cmd
 	case stateChapters:
-		var cmd tea.Cmd
-		var newModel tea.Model
 		newModel, cmd = m.chapter.Update(msg)
 		m.chapter = newModel.(ChapterListModel)
 		return m, cmd
 	case stateReader:
-		var cmd tea.Cmd
-		var newModel tea.Model
 		newModel, cmd = m.reader.Update(msg)
 		m.reader = newModel.(ReaderModel)
 		return m, cmd

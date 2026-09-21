@@ -29,14 +29,12 @@ func TestSourceCommandToggles(t *testing.T) {
 	providers := []api.MangaProvider{api.NewOTruyenProvider(), api.NewMangaDexProvider()}
 	m := NewSearchModel(providers)
 
-	// All should be checked by default
 	for i := range m.providers {
 		if !m.providerToggles[i] {
 			t.Fatalf("expected provider %d to be toggled on by default", i)
 		}
 	}
 
-	// Type /src and press enter
 	for _, r := range "/src" {
 		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = newM.(SearchModel)
@@ -47,42 +45,36 @@ func TestSourceCommandToggles(t *testing.T) {
 		t.Fatalf("expected showingSources after /src")
 	}
 
-	// Space toggles off current (cursor = 0)
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = newM.(SearchModel)
 	if m.providerToggles[0] {
 		t.Errorf("expected provider 0 to be toggled off after space")
 	}
 
-	// Space toggles back on
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = newM.(SearchModel)
 	if !m.providerToggles[0] {
 		t.Errorf("expected provider 0 to be toggled on after second space")
 	}
 
-	// Down arrow moves cursor
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = newM.(SearchModel)
 	if m.sourceCursor != 1 {
 		t.Errorf("expected sourceCursor 1, got %d", m.sourceCursor)
 	}
 
-	// Space toggles provider at cursor 1
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = newM.(SearchModel)
 	if m.providerToggles[1] {
 		t.Errorf("expected provider 1 to be toggled off")
 	}
 
-	// ESC closes sources
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = newM.(SearchModel)
 	if m.showingSources {
 		t.Errorf("expected showingSources false after ESC")
 	}
 
-	// activeProviders returns only checked ones
 	m.providerToggles = []bool{true, false}
 	m.showingSources = false
 	active := m.activeProviders()

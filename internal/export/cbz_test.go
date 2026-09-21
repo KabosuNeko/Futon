@@ -95,3 +95,23 @@ func TestGetDefaultExportDir(t *testing.T) {
 		t.Errorf("unexpected export dir: %s", dir)
 	}
 }
+
+func TestDetectImageExt(t *testing.T) {
+	cases := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"jpeg", []byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"), "jpg"},
+		{"png", []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"), "png"},
+		{"gif", []byte("GIF89a\x01\x00\x01\x00"), "gif"},
+		{"webp", []byte("RIFF\x00\x00\x00\x00WEBPVP8 "), "webp"},
+		{"unknown", []byte("not an image"), "jpg"},
+	}
+
+	for _, c := range cases {
+		if got := detectImageExt(c.data); got != c.want {
+			t.Errorf("detectImageExt(%s) = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

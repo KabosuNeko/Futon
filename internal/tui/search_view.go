@@ -30,17 +30,26 @@ func (m SearchModel) View() string {
 	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 
-	var tabs []string
-	if m.showingFilters {
-		tabs = []string{inactiveTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), activeTabStyle.Render(tabFlt)}
-	} else if m.showingSources {
-		tabs = []string{inactiveTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), activeTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
-	} else if m.showingFavorites {
-		tabs = []string{inactiveTabStyle.Render(tabFeed), activeTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
-	} else if m.showingHistory {
-		tabs = []string{inactiveTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), activeTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
-	} else {
-		tabs = []string{activeTabStyle.Render(tabFeed), inactiveTabStyle.Render(tabFav), inactiveTabStyle.Render(tabHis), inactiveTabStyle.Render(tabSrc), inactiveTabStyle.Render(tabFlt)}
+	tabLabels := []string{tabFeed, tabFav, tabHis, tabSrc, tabFlt}
+	activeTab := 0
+	switch {
+	case m.showingFilters:
+		activeTab = 4
+	case m.showingSources:
+		activeTab = 3
+	case m.showingFavorites:
+		activeTab = 1
+	case m.showingHistory:
+		activeTab = 2
+	}
+
+	tabs := make([]string, len(tabLabels))
+	for i, label := range tabLabels {
+		if i == activeTab {
+			tabs[i] = activeTabStyle.Render(label)
+		} else {
+			tabs[i] = inactiveTabStyle.Render(label)
+		}
 	}
 	tabBar := strings.Join(tabs, " ")
 
@@ -100,15 +109,15 @@ func (m SearchModel) View() string {
 	} else if m.loadingHistory {
 		listContent = statusStyle.Render(" Đang tải lịch sử đọc...")
 	} else if m.showingSources {
-		listContent = m.renderSources("")
+		listContent = m.renderSources()
 	} else if m.showingFavorites {
-		listContent = m.renderFavorites("")
+		listContent = m.renderFavorites()
 	} else if m.showingHistory {
-		listContent = m.renderHistory("")
+		listContent = m.renderHistory()
 	} else if len(m.currentQuery) >= 3 && len(m.results) == 0 {
 		listContent = subtleStyle.Render("Không tìm thấy kết quả.")
 	} else if len(m.results) > 0 {
-		listContent = m.renderSearchResults("")
+		listContent = m.renderSearchResults()
 	}
 
 	hasItems := (len(m.results) > 0 && !m.showingFavorites && !m.showingHistory && !m.showingSources && !m.showingFilters) ||
@@ -497,7 +506,7 @@ func (m SearchModel) renderList(title, emptyMsg string, items []string, cursor i
 	return listCard.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
-func (m SearchModel) renderSources(content string) string {
+func (m SearchModel) renderSources() string {
 	indices := m.filteredProviderIndices()
 	items := make([]string, len(indices))
 	for i, idx := range indices {
@@ -513,26 +522,7 @@ func (m SearchModel) renderSources(content string) string {
 	} else {
 		title = "󰖟 Chọn nguồn:"
 	}
-	res := m.renderList(title, "Không tìm thấy nguồn nào.", items, m.sourceCursor)
-	if content != "" {
-		return lipgloss.JoinVertical(lipgloss.Center, content, res)
-	}
-	return res
-}
-
-func (m SearchModel) renderSourceName() string {
-	active := m.activeProviders()
-	if len(active) == 0 {
-		return "Chưa chọn nguồn"
-	}
-	names := make([]string, len(active))
-	for i, p := range active {
-		names[i] = p.Name()
-	}
-	if len(names) == 1 {
-		return names[0]
-	}
-	return strings.Join(names, ", ")
+	return m.renderList(title, "Không tìm thấy nguồn nào.", items, m.sourceCursor)
 }
 
 func cleanTitle(title, provider string) string {
@@ -570,25 +560,19 @@ func (m SearchModel) renderFilterModal() string {
 	b.WriteString(titleStyle.Render("󰈲 BỘ LỌC TÌM KIẾM"))
 	b.WriteString("\n\n")
 
-	if m.filterCursor == 0 {
-		b.WriteString(cursorStyle.Render("► ") + activeStyle.Render(fmt.Sprintf("Trạng thái:  < %s >", filterStatusOptions[m.filterStatus])))
-	} else {
-		b.WriteString(fmt.Sprintf("   Trạng thái:  < %s >", filterStatusOptions[m.filterStatus]))
+	filterRow := func(row int, label, value string) string {
+		line := label + "< " + value + " >"
+		if m.filterCursor == row {
+			return cursorStyle.Render("► ") + activeStyle.Render(line)
+		}
+		return "   " + line
 	}
-	b.WriteString("\n")
 
-	if m.filterCursor == 1 {
-		b.WriteString(cursorStyle.Render("► ") + activeStyle.Render(fmt.Sprintf("Sắp xếp:     < %s >", filterSortOptions[m.filterSort])))
-	} else {
-		b.WriteString(fmt.Sprintf("   Sắp xếp:     < %s >", filterSortOptions[m.filterSort]))
-	}
+	b.WriteString(filterRow(0, "Trạng thái:  ", filterStatusOptions[m.filterStatus]))
 	b.WriteString("\n")
-
-	if m.filterCursor == 2 {
-		b.WriteString(cursorStyle.Render("► ") + activeStyle.Render(fmt.Sprintf("Thể loại:    < %s >", filterGenreOptions[m.filterGenre])))
-	} else {
-		b.WriteString(fmt.Sprintf("   Thể loại:    < %s >", filterGenreOptions[m.filterGenre]))
-	}
+	b.WriteString(filterRow(1, "Sắp xếp:     ", filterSortOptions[m.filterSort]))
+	b.WriteString("\n")
+	b.WriteString(filterRow(2, "Thể loại:    ", filterGenreOptions[m.filterGenre]))
 	b.WriteString("\n\n")
 
 	btnApply := "[ Áp dụng (Enter) ]"
@@ -606,7 +590,7 @@ func (m SearchModel) renderFilterModal() string {
 	return boxStyle.Render(b.String())
 }
 
-func (m SearchModel) renderSearchResults(content string) string {
+func (m SearchModel) renderSearchResults() string {
 	items := make([]string, len(m.results))
 	for i, manga := range m.results {
 		t := cleanTitle(manga.Title, manga.Provider)
@@ -621,13 +605,10 @@ func (m SearchModel) renderSearchResults(content string) string {
 		title = fmt.Sprintf("󰑓 Truyện Mới Cập Nhật (%d/%d):", m.cursor+1, len(m.results))
 	}
 	res := m.renderList(title, "", items, m.cursor)
-	if content != "" {
-		return lipgloss.JoinVertical(lipgloss.Center, content, res)
-	}
 	return res
 }
 
-func (m SearchModel) renderFavorites(content string) string {
+func (m SearchModel) renderFavorites() string {
 	indices := m.filteredFavIndices()
 	items := make([]string, len(indices))
 	for i, idx := range indices {
@@ -650,13 +631,10 @@ func (m SearchModel) renderFavorites(content string) string {
 		title = fmt.Sprintf(" Truyện Yêu Thích (%d/%d):", m.cursor+1, len(indices))
 	}
 	res := m.renderList(title, emptyMsg, items, m.cursor)
-	if content != "" {
-		return lipgloss.JoinVertical(lipgloss.Center, content, res)
-	}
 	return res
 }
 
-func (m SearchModel) renderHistory(content string) string {
+func (m SearchModel) renderHistory() string {
 	indices := m.filteredHistoryIndices()
 	items := make([]string, len(indices))
 	for i, idx := range indices {
@@ -685,9 +663,6 @@ func (m SearchModel) renderHistory(content string) string {
 		title = fmt.Sprintf(" Lịch Sử Đọc (%d/%d):", m.cursor+1, len(indices))
 	}
 	res := m.renderList(title, emptyMsg, items, m.cursor)
-	if content != "" {
-		return lipgloss.JoinVertical(lipgloss.Center, content, res)
-	}
 	return res
 }
 

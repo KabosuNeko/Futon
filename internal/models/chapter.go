@@ -7,10 +7,8 @@ type Chapter struct {
 }
 
 type ChapterFeedResponse struct {
-	Data   []ChapterData `json:"data"`
-	Limit  int           `json:"limit"`
-	Offset int           `json:"offset"`
-	Total  int           `json:"total"`
+	Data  []ChapterData `json:"data"`
+	Total int           `json:"total"`
 }
 
 type ChapterData struct {

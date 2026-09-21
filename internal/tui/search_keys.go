@@ -78,9 +78,6 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 
 func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 	switch msg.String() {
-	case "ctrl+c":
-		return m, tea.Quit, true
-
 	case "esc":
 		if m.showingFilters {
 			m.showingFilters = false
@@ -118,34 +115,29 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m.cursor = 0
 		m.viewportStart = 0
 		if m.showingFeed && !m.showingFavorites && !m.showingHistory && !m.showingSources && !m.showingFilters {
-			// Switch to Favorites
 			m.showingFeed = false
 			m.showingFavorites = true
 			m.loadingFavorites = true
 			m.input.Placeholder = "Lọc truyện yêu thích..."
 			return m, loadFavoritesCmd(), true
 		} else if m.showingFavorites {
-			// Switch to History
 			m.showingFavorites = false
 			m.showingHistory = true
 			m.loadingHistory = true
 			m.input.Placeholder = "Lọc lịch sử đọc..."
 			return m, loadHistoryCmd(), true
 		} else if m.showingHistory {
-			// Switch to Sources
 			m.showingHistory = false
 			m.showingSources = true
 			m.sourceCursor = 0
 			m.input.Placeholder = "Lọc nguồn..."
 			return m, nil, true
 		} else if m.showingSources {
-			// Switch to Filters
 			m.showingSources = false
 			m.showingFilters = true
 			m.filterCursor = 0
 			return m, nil, true
 		} else {
-			// Switch to Feed
 			m.showingFilters = false
 			m.showingSources = false
 			m.showingFavorites = false
@@ -162,27 +154,13 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 
 	case "left":
 		if m.showingFilters {
-			switch m.filterCursor {
-			case 0:
-				m.filterStatus = (m.filterStatus - 1 + len(filterStatusOptions)) % len(filterStatusOptions)
-			case 1:
-				m.filterSort = (m.filterSort - 1 + len(filterSortOptions)) % len(filterSortOptions)
-			case 2:
-				m.filterGenre = (m.filterGenre - 1 + len(filterGenreOptions)) % len(filterGenreOptions)
-			}
+			m.cycleFilter(-1)
 			return m, nil, true
 		}
 
 	case "right":
 		if m.showingFilters {
-			switch m.filterCursor {
-			case 0:
-				m.filterStatus = (m.filterStatus + 1) % len(filterStatusOptions)
-			case 1:
-				m.filterSort = (m.filterSort + 1) % len(filterSortOptions)
-			case 2:
-				m.filterGenre = (m.filterGenre + 1) % len(filterGenreOptions)
-			}
+			m.cycleFilter(1)
 			return m, nil, true
 		}
 
@@ -198,11 +176,9 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 				m.sourceCursor--
 			}
 			return m, nil, true
-		} else if m.cursor > 0 {
-			m.cursor--
-			m.adjustViewport()
-			coverCmd := m.updateFocusedCover()
-			return m, coverCmd, true
+		}
+		if m.moveCursor(-1) {
+			return m, m.updateFocusedCover(), true
 		}
 		return m, nil, true
 
@@ -214,40 +190,19 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		if m.showingSources {
-			indices := m.filteredProviderIndices()
-			if m.sourceCursor < len(indices)-1 {
+			if m.sourceCursor < m.currentListLen()-1 {
 				m.sourceCursor++
 			}
 			return m, nil, true
 		}
-		moved := false
-		switch {
-		case m.showingFavorites && m.cursor < len(m.filteredFavIndices())-1:
-			m.cursor++
-			m.adjustViewport()
-			moved = true
-		case m.showingHistory && m.cursor < len(m.filteredHistoryIndices())-1:
-			m.cursor++
-			m.adjustViewport()
-			moved = true
-		case !m.showingFavorites && !m.showingHistory && m.cursor < len(m.results)-1:
-			m.cursor++
-			m.adjustViewport()
-			moved = true
-		}
-		if moved {
-			coverCmd := m.updateFocusedCover()
-			return m, coverCmd, true
+		if m.moveCursor(1) {
+			return m, m.updateFocusedCover(), true
 		}
 		return m, nil, true
 
 	case " ":
 		if m.showingSources {
-			indices := m.filteredProviderIndices()
-			if m.sourceCursor < len(indices) {
-				m.providerToggles[indices[m.sourceCursor]] = !m.providerToggles[indices[m.sourceCursor]]
-				_ = storage.SaveSources(m.activeProviderNames())
-			}
+			m.toggleCurrentSource()
 			return m, nil, true
 		}
 		return m, nil, false
@@ -290,7 +245,6 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 	case "enter":
 		if m.showingFilters {
 			if m.filterCursor == 4 {
-				// Reset
 				m.filterStatus = 0
 				m.filterSort = 0
 				m.filterGenre = 0
@@ -435,11 +389,24 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m.isSearching = true
 		active := m.activeProviders()
 		if len(active) == 0 {
-			m.err = fmt.Errorf("Chọn ít nhất một nguồn trong /src")
+			m.err = errNoSource
 			m.isSearching = false
 			return m, nil, true
 		}
 		return m, api.GlobalSearchCmd(active, val), true
 	}
 	return m, nil, false
+}
+
+// cycleFilter rotates the value of the filter row under the cursor.
+func (m *SearchModel) cycleFilter(delta int) {
+	cycle := func(value, n int) int { return (value + delta + n) % n }
+	switch m.filterCursor {
+	case 0:
+		m.filterStatus = cycle(m.filterStatus, len(filterStatusOptions))
+	case 1:
+		m.filterSort = cycle(m.filterSort, len(filterSortOptions))
+	case 2:
+		m.filterGenre = cycle(m.filterGenre, len(filterGenreOptions))
+	}
 }

@@ -23,10 +23,6 @@ type ReadHistory struct {
 	UpdatedAt     int64  `json:"updated_at"`
 }
 
-type HistorySavedMsg struct {
-	Err error
-}
-
 var (
 	historyMu     sync.RWMutex
 	historyCache  map[string]ReadHistory
@@ -115,7 +111,8 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 
 func SaveHistoryCmd(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) tea.Cmd {
 	return func() tea.Msg {
-		return HistorySavedMsg{Err: SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber, pageIndex)}
+		_ = SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber, pageIndex)
+		return nil
 	}
 }
 
@@ -132,15 +129,7 @@ func GetHistory(mangaID string) (*ReadHistory, bool) {
 		return nil, false
 	}
 
-	return &ReadHistory{
-		MangaID:       h.MangaID,
-		MangaTitle:    h.MangaTitle,
-		Provider:      h.Provider,
-		ChapterID:     h.ChapterID,
-		ChapterNumber: h.ChapterNumber,
-		PageIndex:     h.PageIndex,
-		UpdatedAt:     h.UpdatedAt,
-	}, true
+	return &h, true
 }
 
 // LoadAllHistory returns all reading history records sorted newest first.
@@ -154,15 +143,7 @@ func LoadAllHistory() ([]ReadHistory, error) {
 
 	entries := make([]ReadHistory, 0, len(historyCache))
 	for _, e := range historyCache {
-		entries = append(entries, ReadHistory{
-			MangaID:       e.MangaID,
-			MangaTitle:    e.MangaTitle,
-			Provider:      e.Provider,
-			ChapterID:     e.ChapterID,
-			ChapterNumber: e.ChapterNumber,
-			PageIndex:     e.PageIndex,
-			UpdatedAt:     e.UpdatedAt,
-		})
+		entries = append(entries, e)
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -185,12 +166,7 @@ func FlushHistory() error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode history: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeJSON(path, snapshot); err != nil {
 		return fmt.Errorf("ghi file history: %w", err)
 	}
 	return nil
@@ -198,7 +174,8 @@ func FlushHistory() error {
 
 func FlushHistoryCmd() tea.Cmd {
 	return func() tea.Msg {
-		return HistorySavedMsg{Err: FlushHistory()}
+		_ = FlushHistory()
+		return nil
 	}
 }
 
@@ -221,7 +198,8 @@ func DeleteHistory(mangaID string) error {
 
 func DeleteHistoryCmd(mangaID string) tea.Cmd {
 	return func() tea.Msg {
-		return HistorySavedMsg{Err: DeleteHistory(mangaID)}
+		_ = DeleteHistory(mangaID)
+		return nil
 	}
 }
 

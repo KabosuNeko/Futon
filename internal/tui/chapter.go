@@ -64,7 +64,7 @@ func exportAllChaptersCmd(provider api.MangaProvider, mangaTitle string, chapter
 			if err != nil || len(urls) == 0 {
 				continue
 			}
-			_, err = export.ExportChapterURLsToCBZ(cleanTitle, ch.Number, urls, "", "", mangaDir)
+			_, err = export.ExportChapterURLsToCBZ(cleanTitle, ch.Number, urls, mangaDir)
 			if err == nil {
 				successCount++
 			}
@@ -85,7 +85,7 @@ func exportChapterCmd(provider api.MangaProvider, chapterID, mangaTitle, chapter
 		if err != nil {
 			return cbzExportedMsg{err: fmt.Errorf("lấy link ảnh: %w", err)}
 		}
-		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "", "", "")
+		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "")
 		return cbzExportedMsg{path: path, err: err}
 	}
 }
