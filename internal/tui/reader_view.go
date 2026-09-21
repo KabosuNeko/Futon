@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
 
-func (m ReaderModel) View() string {
+func (m ReaderModel) View() tea.View {
 	var b strings.Builder
 
 	b.WriteString("\x1b[H\x1b[2J")
@@ -17,7 +18,7 @@ func (m ReaderModel) View() string {
 	switch m.step {
 	case stepFetchURLs:
 		b.WriteString(m.centerText("Đang lấy danh sách ảnh..."))
-		return b.String()
+		return tea.NewView(b.String())
 
 	case stepDownload:
 		pct := 0
@@ -25,13 +26,13 @@ func (m ReaderModel) View() string {
 			pct = m.downloaded * 100 / m.total
 		}
 		b.WriteString(m.centerText(fmt.Sprintf("Đang tải trang %d/%d - %d%%", m.downloaded, m.total, pct)))
-		return b.String()
+		return tea.NewView(b.String())
 
 	case stepRead:
 		img, cached := m.getCached(m.currentIdx)
 		if m.isLoading || !cached {
 			b.WriteString(m.centerText("Đang render ảnh..."))
-			return b.String()
+			return tea.NewView(b.String())
 		}
 
 		b.WriteString(m.centeredImage(img))
@@ -75,18 +76,18 @@ func (m ReaderModel) View() string {
 			b.WriteString(fmt.Sprintf("\x1b[%d;%dH", flashRow, flashCol))
 			b.WriteString(styledFlash)
 		}
-		return b.String()
+		return tea.NewView(b.String())
 
 	case stepLoadingNext:
 		b.WriteString(m.centerText("Đang chuyển chapter..."))
-		return b.String()
+		return tea.NewView(b.String())
 
 	case stepError:
 		b.WriteString(m.centerText(fmt.Sprintf("Lỗi: %v", m.err)))
-		return b.String()
+		return tea.NewView(b.String())
 	}
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // Fall back to model dimensions if terminal query fails (e.g. non-TTY).

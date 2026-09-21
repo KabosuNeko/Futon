@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/updater"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ViewMangaMsg struct {
@@ -254,9 +254,9 @@ func (m *AppModel) findProvider(name string) api.MangaProvider {
 	return nil
 }
 
-func (m AppModel) View() string {
+func (m AppModel) View() tea.View {
 	if m.state == stateUpdating {
-		return "Đang cập nhật...\n"
+		return appView("Đang cập nhật...\n")
 	}
 
 	var updateBanner string
@@ -267,11 +267,11 @@ func (m AppModel) View() string {
 	view := ""
 	switch m.state {
 	case stateSearch:
-		view = m.search.View()
+		view = m.search.View().Content
 	case stateChapters:
-		view = m.chapter.View()
+		view = m.chapter.View().Content
 	case stateReader:
-		view = m.reader.View()
+		view = m.reader.View().Content
 	default:
 		view = "Unknown state"
 	}
@@ -284,5 +284,13 @@ func (m AppModel) View() string {
 		view = view + "\nCập nhật thành công! Vui lòng thoát (Ctrl+C) và mở lại futon."
 	}
 
-	return view
+	return appView(view)
+}
+
+// appView wraps rendered content with the terminal features every futon screen needs.
+func appView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
 }

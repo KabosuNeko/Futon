@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/models"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func globalCmd(providers []MangaProvider, fetch func(MangaProvider) ([]models.Manga, error)) tea.Cmd {

@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestTypingUpdatesInput(t *testing.T) {
 	m := testSearchModel()
 
 	for _, r := range "naruto" {
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		newM, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = newM.(SearchModel)
 	}
 
@@ -36,40 +36,40 @@ func TestSourceCommandToggles(t *testing.T) {
 	}
 
 	for _, r := range "/src" {
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		newM, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = newM.(SearchModel)
 	}
-	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = newM.(SearchModel)
 	if !m.showingSources {
 		t.Fatalf("expected showingSources after /src")
 	}
 
-	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	m = newM.(SearchModel)
 	if m.providerToggles[0] {
 		t.Errorf("expected provider 0 to be toggled off after space")
 	}
 
-	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	m = newM.(SearchModel)
 	if !m.providerToggles[0] {
 		t.Errorf("expected provider 0 to be toggled on after second space")
 	}
 
-	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = newM.(SearchModel)
 	if m.sourceCursor != 1 {
 		t.Errorf("expected sourceCursor 1, got %d", m.sourceCursor)
 	}
 
-	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	m = newM.(SearchModel)
 	if m.providerToggles[1] {
 		t.Errorf("expected provider 1 to be toggled off")
 	}
 
-	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = newM.(SearchModel)
 	if m.showingSources {
 		t.Errorf("expected showingSources false after ESC")
@@ -102,7 +102,7 @@ func TestSearchViewportScrollsWithCursor(t *testing.T) {
 
 	target := visible + 3
 	for i := 0; i < target; i++ {
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = newM.(SearchModel)
 	}
 
@@ -113,13 +113,13 @@ func TestSearchViewportScrollsWithCursor(t *testing.T) {
 		t.Errorf("expected viewportStart > 0 after scrolling down, got %d", m.viewportStart)
 	}
 
-	view := m.View()
+	view := m.View().Content
 	if strings.Contains(view, m.results[0].Title) {
 		t.Errorf("first result should be scrolled out of view")
 	}
 
 	for i := 0; i < target; i++ {
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+		newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 		m = newM.(SearchModel)
 	}
 
@@ -160,7 +160,7 @@ func TestSearchViewFitsTerminalHeight(t *testing.T) {
 		m.results = append(m.results, models.Manga{ID: fmt.Sprintf("m%d", i), Title: fmt.Sprintf("UniqueMangaTitle%d", i)})
 	}
 
-	view := m.View()
+	view := m.View().Content
 	plain := stripANSI(view)
 	lines := strings.Count(plain, "\n")
 	if lines > m.height {

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/export"
 	"github.com/KabosuNeko/Futon/internal/storage"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 const preloadTriggerOffset = 3
@@ -119,16 +119,17 @@ func (m ReaderModel) handleMouseMsg(msg tea.MouseMsg) (ReaderModel, tea.Cmd) {
 	if m.step != stepRead {
 		return m, nil
 	}
-	switch msg.Button {
-	case tea.MouseButtonWheelDown:
+	mouse := msg.Mouse()
+	switch mouse.Button {
+	case tea.MouseWheelDown:
 		return m.handleNextPage()
-	case tea.MouseButtonWheelUp:
+	case tea.MouseWheelUp:
 		return m.handlePrevPage()
-	case tea.MouseButtonLeft:
-		if msg.Action != tea.MouseActionPress {
+	case tea.MouseLeft:
+		if _, ok := msg.(tea.MouseClickMsg); !ok {
 			return m, nil
 		}
-		if msg.X > m.width/2 {
+		if mouse.X > m.width/2 {
 			return m.handleNextPage()
 		}
 		return m.handlePrevPage()

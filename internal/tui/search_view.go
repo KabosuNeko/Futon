@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
 
-func (m SearchModel) View() string {
+func (m SearchModel) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return "Loading..."
+		return tea.NewView("Loading...")
 	}
 
 	boxStyle := lipgloss.NewStyle().
@@ -200,7 +201,7 @@ func (m SearchModel) View() string {
 		placed = placed + "\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\"
 	}
 
-	return placed
+	return tea.NewView(placed)
 }
 
 func (m SearchModel) renderPreviewPane() string {

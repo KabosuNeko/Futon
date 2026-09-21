@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
@@ -200,7 +200,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		}
 		return m, nil, true
 
-	case " ":
+	case "space":
 		if m.showingSources {
 			m.toggleCurrentSource()
 			return m, nil, true

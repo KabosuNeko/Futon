@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 const searchUIOffset = 9
@@ -68,7 +68,7 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 	ti.Placeholder = "Nhập tên manga cần tìm..."
 	ti.Focus()
 	ti.CharLimit = 156
-	ti.Width = 40
+	ti.SetWidth(40)
 
 	toggles := loadSourceToggles(providers)
 
@@ -181,8 +181,9 @@ func (m SearchModel) Init() tea.Cmd {
 }
 
 func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, bool) {
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
+	mouse := msg.Mouse()
+	switch mouse.Button {
+	case tea.MouseWheelUp:
 		if m.showingFilters {
 			if m.filterCursor > 0 {
 				m.filterCursor--
@@ -200,7 +201,7 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 		}
 		return m, nil, true
 
-	case tea.MouseButtonWheelDown:
+	case tea.MouseWheelDown:
 		if m.showingFilters {
 			if m.filterCursor < 4 {
 				m.filterCursor++
@@ -218,12 +219,12 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 		}
 		return m, nil, true
 
-	case tea.MouseButtonLeft:
-		if msg.Action != tea.MouseActionPress {
+	case tea.MouseLeft:
+		if _, ok := msg.(tea.MouseClickMsg); !ok {
 			return m, nil, false
 		}
 
-		itemIdx := m.viewportStart + (msg.Y - searchUIOffset)
+		itemIdx := m.viewportStart + (mouse.Y - searchUIOffset)
 		if itemIdx >= 0 && itemIdx < m.currentListLen() {
 			if m.showingSources {
 				m.sourceCursor = itemIdx

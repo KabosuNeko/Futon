@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func testSearchModel() SearchModel {
@@ -30,7 +30,7 @@ func TestSearchViewShowsResults(t *testing.T) {
 	m.currentQuery = "shonen"
 	m.cursor = 1
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Kết quả cho") {
 		t.Errorf("expected result title in view")
 	}
@@ -51,7 +51,7 @@ func TestSearchViewShowsFavorites(t *testing.T) {
 		{MangaID: "m1", Title: "Bleach"},
 	}
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Truyện Yêu Thích") {
 		t.Errorf("expected favorites title in view")
 	}
@@ -69,7 +69,7 @@ func TestSearchViewShowsHistory(t *testing.T) {
 		{MangaID: "m1", MangaTitle: "Doraemon", ChapterNumber: "1", PageIndex: 3},
 	}
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Lịch Sử Đọc") {
 		t.Errorf("expected history title in view")
 	}
@@ -85,7 +85,7 @@ func TestSearchViewEmptyResults(t *testing.T) {
 	m.currentQuery = "xyz"
 	m.results = []models.Manga{}
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Không tìm thấy kết quả") {
 		t.Errorf("expected no-result message in view")
 	}
@@ -108,7 +108,7 @@ func TestSearchSlashCommands(t *testing.T) {
 	for _, tc := range cases {
 		m := testSearchModel()
 		m.input.SetValue(tc.input)
-		newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 		rm := newM.(SearchModel)
 
 		if rm.showingFavorites != tc.wantFavorites {
@@ -146,7 +146,7 @@ func TestSearchViewSplitLayoutAndPreview(t *testing.T) {
 	m.currentQuery = "shonen"
 	m.cursor = 0
 
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Chi tiết manga") {
 		t.Errorf("expected preview pane header in split view")
 	}
@@ -232,7 +232,7 @@ func TestSearchWithNoActiveSourceUsesErrNoSource(t *testing.T) {
 	m.providerToggles = []bool{false, false}
 	m.input.SetValue("naruto")
 
-	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm := newM.(SearchModel)
 	if rm.err != errNoSource {
 		t.Fatalf("expected errNoSource, got %v", rm.err)
