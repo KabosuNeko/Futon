@@ -1,14 +1,11 @@
 # Binaries
 futon
-futon.exe
 main
-main.exe
 *.exe
 
 # Build output
 /bin/
 /dist/
-/tmp/
 
 # IDE
 .vscode/

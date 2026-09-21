@@ -13,7 +13,7 @@ Read only what the task needs; do not load docs speculatively.
 
 Futon is a terminal manga reader. It searches multiple manga sources, lists chapters, and renders pages inline using Kitty graphics or Sixel.
 
-- Language: Go 1.26.5
+- Language: Go 1.26.0
 - Module: `github.com/KabosuNeko/Futon`
 - Entrypoint: `cmd/main.go` → `internal/tui.NewAppModel()`
 - Build: `go build ./...`
@@ -27,7 +27,7 @@ cmd/main.go          # entrypoint: starts the Bubble Tea program
 internal/
   api/               # provider interface and HTTP implementations
     provider.go      # MangaProvider interface + shared helpers, tea.Msg types
-    source.go        # tea.Cmd wrappers: SearchCmd, GlobalSearchCmd, FetchChaptersCmd, FetchPagesCmd
+    source.go        # tea.Cmd wrappers: GlobalSearchCmd, GlobalLatestCmd, GlobalFilterCmd, FetchChaptersCmd, FetchPagesCmd
     mangadex.go      # MangaDex provider
     otruyen.go       # OTruyen provider
     truyenqq.go      # TruyenQQ provider
@@ -37,9 +37,7 @@ internal/
     chapter.go
     manga.go
   storage/           # local JSON persistence
-    userdata.go      # UserData struct (favorites + sources merged), LoadUserData, SaveUserData, migrateOldData
-    sources.go       # LoadSources/SaveSources → delegates to userdata
-    favorites.go     # Load/Save/Add/RemoveFavorite → delegates to userdata
+    userdata.go      # UserData + favorites/sources API, LoadUserData, SaveUserData, migrateOldData
     history.go       # per-manga reading history with debounced flush
     *_test.go        # storage regression tests
   tui/               # Bubble Tea screens (split by responsibility)
