@@ -18,7 +18,7 @@ func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 	}
 	m.isLoading = true
 	if m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0 {
-		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter)}
+		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.imageRows())}
 	}
 	return m, nil
 }
@@ -186,7 +186,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		m.hideFooter = !m.hideFooter
 		m.resetImageCache()
 		m.isLoading = true
-		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter)
+		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.imageRows())
 
 	case "ctrl+d":
 		if m.step == stepRead && m.validCurrentImage() {

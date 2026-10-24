@@ -17,10 +17,7 @@ func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Imag
 	}
 
 	bounds := img.Bounds()
-	imgW := bounds.Dx()
-	imgH := bounds.Dy()
-
-	if imgW <= 0 || imgH <= 0 {
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
 		return img, nil
 	}
 
@@ -28,6 +25,10 @@ func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Imag
 	if err != nil {
 		ts = TerminalSize{Cols: 80, Rows: 24, PxW: 80 * 8, PxH: 24 * 16}
 	}
+	return scaleImageInBox(img, ts, targetCols, targetRows), nil
+}
+
+func scaleImageInBox(img image.Image, ts TerminalSize, targetCols, targetRows int) image.Image {
 	if ts.Cols <= 0 {
 		ts.Cols = 80
 	}
@@ -41,9 +42,6 @@ func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Imag
 		ts.PxH = ts.Rows * 16
 	}
 
-	cellW := max(1, ts.PxW/ts.Cols)
-	cellH := max(1, ts.PxH/ts.Rows)
-
 	if targetCols <= 0 {
 		targetCols = ts.Cols
 	}
@@ -53,18 +51,33 @@ func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Imag
 		targetRows = max(1, ts.Rows-2)
 	}
 
-	maxPxW := targetCols * cellW
-	maxPxH := targetRows * cellH
-
-	targetW := uint(maxPxW)
-	scaledH := int(targetW) * imgH / imgW
-	if scaledH > maxPxH {
-		targetW = uint(maxPxH * imgW / imgH)
+	bounds := img.Bounds()
+	imgW := bounds.Dx()
+	imgH := bounds.Dy()
+	if imgW <= 0 || imgH <= 0 {
+		return img
 	}
 
+	// Use the exact pixel span of the requested cell area. Multiplying a
+	// floored cell size would drop the remainder pixels and leave a thin strip
+	// at the bottom when the image should fill the terminal.
+	maxPxW := targetCols * ts.PxW / ts.Cols
+	maxPxH := targetRows * ts.PxH / ts.Rows
+
+	targetW := uint(maxPxW)
+	targetH := int(targetW) * imgH / imgW
+	if targetH > maxPxH {
+		targetH = maxPxH
+		targetW = uint(targetH * imgW / imgH)
+	}
 	if targetW == 0 {
 		targetW = 1
 	}
+	if targetH < 1 {
+		targetH = 1
+	}
 
-	return resize.Resize(targetW, 0, img, resize.Lanczos3), nil
+	// Pass both dimensions: letting Resize derive the height can round down a
+	// pixel, which drops a whole terminal row and leaves a gap at the bottom.
+	return resize.Resize(targetW, uint(targetH), img, resize.Lanczos3)
 }

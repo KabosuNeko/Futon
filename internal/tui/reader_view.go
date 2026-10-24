@@ -130,6 +130,18 @@ func (m ReaderModel) centerText(text string) string {
 	return fmt.Sprintf("\x1b[%d;%dH%s", row, col, text)
 }
 
+// imageRows returns 0 for the default size that reserves footer/flash rows, or
+// the full terminal height when the footer is hidden.
+func (m ReaderModel) imageRows() int {
+	if !m.hideFooter {
+		return 0
+	}
+	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Rows > 0 {
+		return ts.Rows
+	}
+	return max(1, m.height)
+}
+
 // Convert image pixel size to terminal cell count — Kitty/Sixel geometry math.
 func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY int) {
 	ts, err := imgrender.GetTerminalSize()
@@ -145,8 +157,8 @@ func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY in
 
 	cellW := max(1, ts.PxW/ts.Cols)
 	cellH := max(1, ts.PxH/ts.Rows)
-	cellsW := max(1, img.WidthPx/cellW)
-	cellsH := max(1, img.HeightPx/cellH)
+	cellsW := max(1, (img.WidthPx+cellW-1)/cellW)
+	cellsH := max(1, (img.HeightPx+cellH-1)/cellH)
 	offsetX = max(0, (ts.Cols-cellsW)/2)
 	reservedRows := 2
 	if m.hideFooter {
