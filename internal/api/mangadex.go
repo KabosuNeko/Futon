@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 )
 
 type MangaDexProvider struct {
+	mu   sync.RWMutex
 	lang string
 }
 
@@ -29,7 +31,15 @@ func (m *MangaDexProvider) Name() string {
 }
 
 func (m *MangaDexProvider) SetLang(lang string) {
+	m.mu.Lock()
 	m.lang = lang
+	m.mu.Unlock()
+}
+
+func (m *MangaDexProvider) language() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lang
 }
 
 func mangadexList(resp *http.Response) ([]models.Manga, int, error) {
@@ -161,11 +171,12 @@ func (m *MangaDexProvider) FetchChapters(mangaID string) ([]models.Chapter, erro
 	const limit = 500
 	var all []models.Chapter
 	offset := 0
+	lang := m.language()
 
 	for {
 		endpoint := fmt.Sprintf(
-			"https://api.mangadex.org/manga/%s/feed?translatedLanguage[]=%s&order[chapter]=asc&limit=%d&offset=%d",
-			url.PathEscape(mangaID), m.lang, limit, offset,
+			"%s/manga/%s/feed?translatedLanguage[]=%s&order[chapter]=asc&limit=%d&offset=%d",
+			mangadexBaseURL, url.PathEscape(mangaID), lang, limit, offset,
 		)
 
 		resp, err := httpGet(http.DefaultClient, endpoint, defaultUserAgent)
@@ -198,7 +209,8 @@ func (m *MangaDexProvider) FetchChapters(mangaID string) ([]models.Chapter, erro
 
 func (m *MangaDexProvider) FetchPages(chapterID string) ([]string, error) {
 	endpoint := fmt.Sprintf(
-		"https://api.mangadex.org/at-home/server/%s",
+		"%s/at-home/server/%s",
+		mangadexBaseURL,
 		url.PathEscape(chapterID),
 	)
 

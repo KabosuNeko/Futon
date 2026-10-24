@@ -126,3 +126,52 @@ func TestChapterListViewCardAndFooter(t *testing.T) {
 		t.Errorf("expected matched footer keys in chapter view, got:\n%s", view)
 	}
 }
+
+func TestJumpToChapterMatchesTitleWhenNumberDoesNot(t *testing.T) {
+	m := NewChapterListModel("m1", "Title", nil)
+	m.chapters = []models.Chapter{
+		{ID: "c1", Number: "10", Title: "Main story"},
+		{ID: "c2", Number: "20", Title: "Bonus 202"},
+	}
+
+	if !m.jumpToChapter("202") {
+		t.Fatal("expected a title match when no chapter number contains the query")
+	}
+	if m.cursor != 1 {
+		t.Errorf("cursor = %d, want 1 (title match)", m.cursor)
+	}
+}
+
+func TestChapterLabelFallsBackToTitle(t *testing.T) {
+	cases := []struct {
+		chapter models.Chapter
+		want    string
+	}{
+		{models.Chapter{Number: "12", Title: "Ignored"}, "12"},
+		{models.Chapter{Title: "Chương 3"}, "Chương 3"},
+		{models.Chapter{}, "unknown"},
+	}
+	for _, tc := range cases {
+		if got := chapterLabel(tc.chapter); got != tc.want {
+			t.Errorf("chapterLabel(%+v) = %q, want %q", tc.chapter, got, tc.want)
+		}
+	}
+}
+
+func TestChapterListShowsTitleWhenNumberMissing(t *testing.T) {
+	m := NewChapterListModel("m1", "Title", nil)
+	m.width = 80
+	m.height = 24
+	m.chapters = []models.Chapter{
+		{ID: "c1", Title: "Chương đặc biệt"},
+	}
+	m.loading = false
+
+	view := m.View().Content
+	if !strings.Contains(view, "Chương đặc biệt") {
+		t.Fatalf("expected chapter title in view, got:\n%s", view)
+	}
+	if strings.Contains(view, "Ch.  -") {
+		t.Errorf("chapter without a number must not render an empty Ch. label:\n%s", view)
+	}
+}

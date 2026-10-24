@@ -2,7 +2,6 @@ package tui
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func (m ReaderModel) hasNextChapter() bool {
@@ -25,8 +24,10 @@ func (m ReaderModel) validCurrentImage() bool {
 const maxConcurrentDownloads = 4
 
 func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
+	if m.step == stepError {
+		return nil
+	}
 	var cmds []tea.Cmd
-	isMangaDex := m.provider != nil && m.provider.Name() == "MangaDex"
 	for len(m.downloading) < maxConcurrentDownloads && m.downloadPos < len(m.downloadOrder) {
 		idx := m.downloadOrder[m.downloadPos]
 		m.downloadPos++
@@ -34,14 +35,7 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 			continue
 		}
 		m.downloading[idx] = struct{}{}
-
-		var referer, userAgent string
-		if isMangaDex {
-			userAgent = mangaDexImageUserAgent
-		} else {
-			referer = m.chapterID
-		}
-		cmds = append(cmds, downloadOne(m.urls[idx], idx, referer, userAgent))
+		cmds = append(cmds, downloadOne(m.urls[idx], idx, m.chapterID, m.providerName()))
 	}
 	return cmds
 }
@@ -89,8 +83,7 @@ func (m *ReaderModel) applyPreloadedChapter(nextID string) {
 	m.urls = m.preloadedURLs
 	m.total = len(m.preloadedURLs)
 	m.imageData = make([][]byte, m.total)
-	m.imageCache = make(map[int]imgrender.RenderedImage)
-	m.cacheOrder = nil
+	m.resetImageCache()
 	m.downloading = make(map[int]struct{})
 	copy(m.imageData, m.preloadedImages)
 	m.downloaded = len(m.preloadedImages)

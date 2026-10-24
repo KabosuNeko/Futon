@@ -16,6 +16,8 @@ type MangaSearchResultMsg struct {
 	Err            error
 	ProviderCounts map[string]int
 	ProviderErrors map[string]string
+	// RequestID lets the caller discard snapshots from a superseded request.
+	RequestID int
 	// Stream is non-nil while more snapshots for this request are coming. The
 	// final snapshot carries a nil Stream.
 	Stream *SearchStream
@@ -69,9 +71,7 @@ func ensureClient(client *http.Client) *http.Client {
 }
 
 func httpGet(client *http.Client, endpoint, userAgent string) (*http.Response, error) {
-	client = ensureClient(client)
-	var lastErr error
-	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
+	return httpDo(client, func() (*http.Request, error) {
 		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 		if err != nil {
 			return nil, fmt.Errorf("tạo request: %w", err)
@@ -79,6 +79,20 @@ func httpGet(client *http.Client, endpoint, userAgent string) (*http.Response, e
 		req.Header.Set("User-Agent", userAgent)
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 		req.Header.Set("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+		return req, nil
+	})
+}
+
+// httpDo retries network errors and 5xx responses with incremental backoff.
+// The builder runs per attempt so POST bodies and headers are rebuilt fresh.
+func httpDo(client *http.Client, build func() (*http.Request, error)) (*http.Response, error) {
+	client = ensureClient(client)
+	var lastErr error
+	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
+		req, err := build()
+		if err != nil {
+			return nil, err
+		}
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -138,10 +152,10 @@ func FetchCoverBytes(coverURL, provider string) ([]byte, error) {
 
 	pLower := strings.ToLower(provider)
 	switch {
+	case strings.Contains(pLower, "truyengg"):
+		req.Header.Set("Referer", truyenggBaseURL)
 	case strings.Contains(pLower, "truyenqq") || strings.Contains(coverURL, "hinhhinh.com"):
 		req.Header.Set("Referer", "https://truyenqqko.com")
-	case strings.Contains(pLower, "foxtruyen") || strings.Contains(coverURL, "hinhgg.com") || strings.Contains(coverURL, "foxtruyen"):
-		req.Header.Set("Referer", "https://foxtruyen2.com")
 	case strings.Contains(pLower, "baotangtruyen") || strings.Contains(coverURL, "baotangtruyen"):
 		req.Header.Set("Referer", "https://www.baotangtruyen.vip")
 	case strings.Contains(pLower, "mangadex") || strings.Contains(coverURL, "mangadex.org"):

@@ -42,8 +42,20 @@ type batchExportProgressMsg struct {
 	current int
 	total   int
 	err     error
-	done    bool
 	destDir string
+}
+
+// chapterLabel names an export when the provider omits chapter numbers
+// (TruyenQQ returns titles only); without it every chapter exports to the same
+// "Untitled" file.
+func chapterLabel(ch models.Chapter) string {
+	if ch.Number != "" {
+		return ch.Number
+	}
+	if ch.Title != "" {
+		return ch.Title
+	}
+	return "unknown"
 }
 
 func exportAllChaptersCmd(provider api.MangaProvider, mangaTitle string, chapters []models.Chapter) tea.Cmd {
@@ -55,7 +67,7 @@ func exportAllChaptersCmd(provider api.MangaProvider, mangaTitle string, chapter
 		}
 		mangaDir := filepath.Join(baseDir, cleanTitle)
 		if err := os.MkdirAll(mangaDir, 0755); err != nil {
-			return batchExportProgressMsg{err: fmt.Errorf("tạo thư mục truyện: %w", err), done: true}
+			return batchExportProgressMsg{err: fmt.Errorf("tạo thư mục truyện: %w", err)}
 		}
 
 		successCount := 0
@@ -64,14 +76,13 @@ func exportAllChaptersCmd(provider api.MangaProvider, mangaTitle string, chapter
 			if err != nil || len(urls) == 0 {
 				continue
 			}
-			_, err = export.ExportChapterURLsToCBZ(cleanTitle, ch.Number, urls, mangaDir)
+			_, err = export.ExportChapterURLsToCBZ(cleanTitle, chapterLabel(ch), urls, mangaDir, provider.Name(), ch.ID)
 			if err == nil {
 				successCount++
 			}
 		}
 
 		return batchExportProgressMsg{
-			done:    true,
 			destDir: mangaDir,
 			total:   len(chapters),
 			current: successCount,
@@ -85,7 +96,7 @@ func exportChapterCmd(provider api.MangaProvider, chapterID, mangaTitle, chapter
 		if err != nil {
 			return cbzExportedMsg{err: fmt.Errorf("lấy link ảnh: %w", err)}
 		}
-		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "")
+		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "", provider.Name(), chapterID)
 		return cbzExportedMsg{path: path, err: err}
 	}
 }
@@ -197,8 +208,8 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+e":
 			if len(m.chapters) > 0 && m.cursor >= 0 && m.cursor < len(m.chapters) {
 				ch := m.chapters[m.cursor]
-				m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", ch.Number)
-				return m, exportChapterCmd(m.provider, ch.ID, m.mangaTitle, ch.Number)
+				m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", chapterLabel(ch))
+				return m, exportChapterCmd(m.provider, ch.ID, m.mangaTitle, chapterLabel(ch))
 			}
 			return m, nil
 

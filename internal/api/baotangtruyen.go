@@ -32,9 +32,9 @@ func (p *BaoTangTruyenProvider) Name() string {
 	return "BaoTangTruyen"
 }
 
-func parseBaoTangList(doc *goquery.Document) []models.Manga {
+func parseBaoTangList(doc *goquery.Document, selector string) []models.Manga {
 	var mangas []models.Manga
-	doc.Find("div.items > div.row > div.item, .list-stories .item, .items .item").Each(func(i int, s *goquery.Selection) {
+	doc.Find(selector).Each(func(i int, s *goquery.Selection) {
 		linkEl := s.Find("figcaption h3 a, h3 a, a.title").First()
 		if linkEl.Length() == 0 {
 			linkEl = s.Find("a").First()
@@ -82,34 +82,7 @@ func (p *BaoTangTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	var mangas []models.Manga
-	doc.Find("div.items > div.row > div.item").Each(func(i int, s *goquery.Selection) {
-		linkEl := s.Find("figcaption h3 a")
-		href, exists := linkEl.Attr("href")
-		if !exists || href == "" {
-			return
-		}
-
-		title := strings.TrimSpace(linkEl.Text())
-		if title == "" {
-			return
-		}
-
-		cover := ""
-		s.Find(".image a img").Each(func(_ int, img *goquery.Selection) {
-			if v, ok := imageSrc(img); ok {
-				cover = v
-			}
-		})
-
-		mangas = append(mangas, models.Manga{
-			ID:       href,
-			Title:    title,
-			CoverURL: cover,
-		})
-	})
-
-	return mangas, nil
+	return parseBaoTangList(doc, "div.items > div.row > div.item"), nil
 }
 
 func (p *BaoTangTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
@@ -132,7 +105,7 @@ func (p *BaoTangTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	mangas := parseBaoTangList(doc)
+	mangas := parseBaoTangList(doc, "div.items > div.row > div.item, .list-stories .item, .items .item")
 	if len(mangas) == 0 {
 		return p.Search("")
 	}
@@ -170,7 +143,7 @@ func (p *BaoTangTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, erro
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	mangas := parseBaoTangList(doc)
+	mangas := parseBaoTangList(doc, "div.items > div.row > div.item, .list-stories .item, .items .item")
 	if len(mangas) == 0 {
 		return p.FetchLatest(page)
 	}
@@ -220,7 +193,7 @@ func (p *BaoTangTruyenProvider) FetchChapters(mangaURL string) ([]models.Chapter
 				continue
 			}
 			chapters = append(chapters, models.Chapter{
-				ID:    strings.TrimSpace(item.URL),
+				ID:    resolveURL(p.baseURL, strings.TrimSpace(item.URL)),
 				Title: strings.TrimSpace(item.Name),
 			})
 		}

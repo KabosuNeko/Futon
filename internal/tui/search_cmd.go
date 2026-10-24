@@ -20,6 +20,25 @@ type searchTriggerMsg struct {
 	query string
 }
 
+// searchRequestCmd stamps every snapshot from one result request so the model
+// can drop messages that belong to a query the user has already replaced.
+func searchRequestCmd(requestID int, cmd tea.Cmd) tea.Cmd {
+	return func() tea.Msg {
+		msg := cmd()
+		if result, ok := msg.(api.MangaSearchResultMsg); ok {
+			result.RequestID = requestID
+			return result
+		}
+		return msg
+	}
+}
+
+// newSearchCmd starts a new request generation.
+func (m *SearchModel) newSearchCmd(cmd tea.Cmd) tea.Cmd {
+	m.pendingSeq++
+	return searchRequestCmd(m.pendingSeq, cmd)
+}
+
 type favoritesLoadedMsg struct {
 	favorites []storage.FavoriteManga
 	err       error

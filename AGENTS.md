@@ -30,9 +30,10 @@ internal/
     source.go        # tea.Cmd wrappers: GlobalSearchCmd, GlobalLatestCmd, GlobalFilterCmd, FetchChaptersCmd, FetchPagesCmd
     mangadex.go      # MangaDex provider
     otruyen.go       # OTruyen provider
-    truyenqq.go      # TruyenQQ provider
+    truyenqq.go      # TruyenQQ constructor
+    truyengg.go      # TruyenGG constructor
+    truyenhtml.go    # shared HTML scraping for TruyenQQ/TruyenGG
     baotangtruyen.go # BaoTangTruyen provider
-    foxtruyen.go     # FoxTruyen provider
   models/            # response and domain structs
     chapter.go
     manga.go
@@ -40,6 +41,10 @@ internal/
     userdata.go      # UserData + favorites/sources API, LoadUserData, SaveUserData, migrateOldData
     history.go       # per-manga reading history with debounced flush
     *_test.go        # storage regression tests
+  export/            # CBZ export (ComicInfo.xml + pages) and filename/download helpers
+    cbz.go
+  updater/           # GitHub release check + install.sh invocation
+    updater.go
   tui/               # Bubble Tea screens (split by responsibility)
     app.go           # router: search → chapters → reader
     search.go        # SearchModel, New, Init, Update dispatcher
@@ -98,12 +103,15 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 - MangaDex: `api.mangadex.org`
 - OTruyen: `otruyenapi.com`
-- API requests default to `User-Agent: Futon-App/1.0`; TruyenQQ sends a full browser UA to bypass bot detection.
+- TruyenQQ: `truyenqqko.com` (fallback `metruyenqq.net`)
+- TruyenGG: `truyenggvn.com`
+- API requests default to `User-Agent: Futon-App/1.0`; the HTML providers send a full browser UA to bypass bot detection.
 
 ## Image Downloads
 
 - MangaDex image requests use `User-Agent: Futon-App/1.0 (https://github.com/KabosuNeko/Futon)` and **no** `Referer` header to avoid placeholder responses.
 - Other providers may send a chapter-scoped `Referer` when required by their CDN.
+- Reader downloads and CBZ export share `export.DownloadImage`, so both paths send the same headers.
 - Download URLs are logged for debugging.
 
 ## Concurrency
@@ -113,10 +121,15 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 ## UI Conventions
 
-- Slash commands on the search screen: `/fav`, `/his`, `/lang vi|en`, `/src`.
+- Slash commands on the search screen: `/fav`, `/his`, `/feed`, `/filter` (`/f`), `/lang vi|en`, `/src`, `/update`.
+- `tab` cycles feed → favorites → history → sources → filters and back; `shift+tab` cycles backward.
 - `esc` in `/fav`, `/his`, or `/src` returns to the search screen.
 - `ctrl+d` in `/fav` removes a favorite; `ctrl+d` in `/his` removes a history entry.
+- `ctrl+h` in the reader toggles the footer/hint row.
+- `ctrl+e` exports the focused/current chapter to CBZ; `ctrl+a` in the chapter list exports every chapter.
+- `g`/`home` and `G`/`end` jump to the first/last chapter.
 - `h`/`l` for page navigation are **only** active in Reader mode (not caught by other screens).
+- `j`/`k` (and `↓`/`↑`) in Reader mode jump to the next/previous chapter.
 - `q` is **not** a keybinding anywhere — use `ctrl+c` to quit, `esc` to go back.
 - The search screen does **not** show cover images.
 - When in `/fav`, `/his`, or `/src`, typing filters the list in real-time (case-insensitive substring match).
@@ -126,3 +139,4 @@ The reader uses ANSI cursor positioning and explicit clear sequences (`\x1b_Ga=d
 
 - Add regression tests for observable behavior before refactoring TUI/storage code.
 - Run `go test ./...` and `go test -race ./...` before declaring changes complete.
+- Live provider export smoke test (opt-in, hits the network): `FUTON_LIVE_EXPORT=1 go test ./internal/export -run TestLiveProviderExports -v -timeout 10m`.

@@ -48,7 +48,9 @@ func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Imag
 		targetCols = ts.Cols
 	}
 	if targetRows <= 0 {
-		targetRows = ts.Rows - 2
+		// A terminal with one row would otherwise make maxPxH negative and
+		// underflow the uint width below.
+		targetRows = max(1, ts.Rows-2)
 	}
 
 	maxPxW := targetCols * cellW

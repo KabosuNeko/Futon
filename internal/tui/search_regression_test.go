@@ -173,3 +173,75 @@ var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*[a-zA-Z]|\x1b_G[^\x1b]*\x1b\\\\")
 func stripANSI(s string) string {
 	return ansiRe.ReplaceAllString(s, "")
 }
+
+func TestSearchRequestCmdStampsRequestID(t *testing.T) {
+	cmd := searchRequestCmd(7, func() tea.Msg { return api.MangaSearchResultMsg{} })
+	msg, ok := cmd().(api.MangaSearchResultMsg)
+	if !ok {
+		t.Fatalf("unexpected message type")
+	}
+	if msg.RequestID != 7 {
+		t.Errorf("RequestID = %d, want 7", msg.RequestID)
+	}
+}
+
+func TestStaleSearchSnapshotIgnored(t *testing.T) {
+	m := testSearchModel()
+	m.currentQuery = "new"
+	m.isSearching = true
+	m.pendingSeq = 2
+	m.results = []models.Manga{{ID: "keep", Title: "Keep"}}
+
+	updated, _ := m.Update(api.MangaSearchResultMsg{
+		Manga:     []models.Manga{{ID: "old", Title: "Old"}},
+		RequestID: 1,
+	})
+	sm := updated.(SearchModel)
+	if len(sm.results) != 1 || sm.results[0].ID != "keep" {
+		t.Fatalf("stale snapshot replaced results: %+v", sm.results)
+	}
+	if !sm.isSearching {
+		t.Error("stale final snapshot must not clear isSearching")
+	}
+
+	updated, _ = sm.Update(api.MangaSearchResultMsg{RequestID: 1})
+	if !updated.(SearchModel).isSearching {
+		t.Error("stale final snapshot cleared isSearching")
+	}
+
+	updated, _ = sm.Update(api.MangaSearchResultMsg{
+		Manga:     []models.Manga{{ID: "new", Title: "New"}},
+		RequestID: 2,
+	})
+	fresh := updated.(SearchModel)
+	if len(fresh.results) != 1 || fresh.results[0].ID != "new" {
+		t.Fatalf("current snapshot not applied: %+v", fresh.results)
+	}
+	if fresh.isSearching {
+		t.Error("current final snapshot must clear isSearching")
+	}
+}
+
+func TestInitWithNoEnabledSourceShowsError(t *testing.T) {
+	m := testSearchModel()
+	m.providerToggles = []bool{false, false}
+
+	var init searchInitMsg
+	for _, msg := range drainBatch(t, m.Init()) {
+		if got, ok := msg.(searchInitMsg); ok {
+			init = got
+		}
+	}
+	if init.err != errNoSource {
+		t.Fatalf("searchInitMsg.err = %v, want errNoSource", init.err)
+	}
+
+	updated, _ := m.Update(init)
+	sm := updated.(SearchModel)
+	if sm.err != errNoSource {
+		t.Errorf("err = %v, want errNoSource", sm.err)
+	}
+	if sm.isSearching {
+		t.Error("no-source init must not show a loading state")
+	}
+}

@@ -134,3 +134,27 @@ func TestChapterListMouseAndExportKey(t *testing.T) {
 		t.Errorf("expected cursor 0 after wheel up, got %d", cm2.cursor)
 	}
 }
+
+func TestSearchShiftTabCyclesBackward(t *testing.T) {
+	m := NewSearchModel([]api.MangaProvider{api.NewOTruyenProvider()})
+	m.showingFeed = true
+
+	checks := []struct {
+		name  string
+		check func(SearchModel) bool
+	}{
+		{"filters", func(s SearchModel) bool { return s.showingFilters }},
+		{"sources", func(s SearchModel) bool { return s.showingSources }},
+		{"history", func(s SearchModel) bool { return s.showingHistory && s.loadingHistory }},
+		{"favorites", func(s SearchModel) bool { return s.showingFavorites && s.loadingFavorites }},
+		{"feed", func(s SearchModel) bool { return s.showingFeed }},
+	}
+
+	for _, tc := range checks {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		m = updated.(SearchModel)
+		if !tc.check(m) {
+			t.Fatalf("shift+tab did not open %s", tc.name)
+		}
+	}
+}

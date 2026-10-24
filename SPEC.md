@@ -25,7 +25,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - Continuous-scroll manga reading (infinite scroll) — page-by-page reading only.
 - Windows support (build targets are Linux + macOS only; Windows code merely compiles, it does not run).
 - Offline library management (downloading full series, reading offline).
-- Manual bulk page downloads (only 1 page per `ctrl+d`).
+- Manual bulk page downloads (only 1 page per `ctrl+d`; CBZ export is per chapter, not arbitrary page selection).
 - User accounts, cloud sync, follow/notifications.
 - Comments, ratings, in-app reviews.
 
@@ -40,13 +40,13 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-S5**: If **no source is enabled**, every search action shows the error "Chọn ít nhất một nguồn trong /src".
 - **FR-S6**: Input starting with `/` resets previous results and does not search (reserved for slash commands).
 - **FR-S7**: Stale search results are discarded if the query has changed (stale-response guard).
-- **FR-S8**: Until the first results arrive, the status line shows the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ..."); partial results appear as each source completes; after completion a subtle warning lists any failed providers with counts.
+- **FR-S8**: Until the first results arrive, searches show the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ...") and the initial feed shows its loading text; partial results appear as each source completes; after completion a subtle warning lists the failed providers plus a healthy/total source count.
 - **FR-S9**: Provider HTTP calls have a **10s timeout** and retry up to **2 times** on network errors or 5xx responses with incremental backoff.
 
 #### Per-provider limits
-- **MangaDex**: search is **paginated** — each request uses `limit=100`, looping by offset until `total` is reached (following the `FetchChapters` pattern); no longer capped at 5 results. Title priority `en` → `ja-ro` → any language, fallback "Không rõ tiêu đề".
-- **OTruyen**: returns results without cover images (empty CoverURL).
-- **TruyenQQ / FoxTruyen / BaoTangTruyen**: HTML scraping, requires a browser UA (Chrome 127) due to bot detection.
+- **MangaDex**: search is **paginated** — each request uses `limit=100`, looping by offset until `total` is reached (following the `FetchChapters` pattern); no longer capped at 5 results. Title priority `vi` → `en` → `ja-ro` → any language, fallback "Không rõ tiêu đề".
+- **OTruyen**: cover URLs are built from the API's `APP_DOMAIN_CDN_IMAGE` when `thumb_url` is relative.
+- **TruyenQQ / TruyenGG / BaoTangTruyen**: HTML scraping, requires a browser UA (Chrome 127) due to bot detection.
 
 ### 4.2 Slash commands
 
@@ -85,12 +85,14 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 
 - **FR-R1**: Page navigation: `→`/`l` next page, `←`/`h` previous page. **Only active in the reader** (not swallowed by other screens).
 - **FR-R2**: **Continuous chapter switching**: on the last page, `→` goes to the next chapter; on the first page, `←` goes to the previous chapter — no need to return to the list.
-- **FR-R3**: Chapter preload: reaching page `total-3` automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
+- **FR-R10**: **Fast chapter jump**: `j`/`↓` switches to the next chapter from any page; `k`/`↑` switches to the previous chapter from any page. Both open the target chapter at its first page and use the preloaded next chapter when available.
+- **FR-R3**: Chapter preload: reaching 3 pages before the end (0-based index `total-3`) automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
 - **FR-R4**: LRU image cache of **20 rendered images** (key = page index), evicts the oldest page; reset when entering a new chapter. Pre-renders at most 3 pages ahead that are not yet cached.
 - **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon/`, filename `{Title}_Ch{ChapterNumber}_Pg{page}.jpg`, sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
 - **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind.
 - **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`).
 - **FR-R8**: Terminal resize → re-render the current page.
+- **FR-R9**: `ctrl+h` toggles the reader footer/hint row. Hidden, the page is re-rendered to use the freed row; rendered cache is cleared so pages are not reused at the old size.
 
 ### 4.7 Image rendering
 
@@ -103,7 +105,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 
 - **FR-U1**: On startup, checks GitHub `releases/latest` (5s timeout) in the background; `dev` version (built from source) **does not check**.
 - **FR-U2**: If a new version exists → banner `"[!] Đã có bản cập nhật {version}. Nhấn Ctrl+u để tự động cài đặt."` (actual key: `ctrl+u`).
-- **FR-U3**: `ctrl+u` (only on search, when banner visible) → runs `install.sh` from the GitHub main branch (via `curl|bash`, includes `sudo`), shows "Đang cập nhật..."; then forces exit to apply. **Why `ctrl+u` not `U`:** the search input is always focused, so a single-letter `U` would be typed into the search box; a `ctrl` combo avoids conflict.
+- **FR-U3**: `ctrl+u` (only on search, when banner visible) → runs `install.sh` from the GitHub main branch (via `curl|bash`, includes `sudo`), shows "Đang cập nhật..."; then forces exit to apply. If the install command fails, returns to search with "Cập nhật lỗi: ..." instead of exiting. **Why `ctrl+u` not `U`:** the search input is always focused, so a single-letter `U` would be typed into the search box; a `ctrl` combo avoids conflict.
 - **FR-U4**: Alternative triggers (same install path, no conflict with typing):
   - **`/update`** slash command in search (enter) → checks version first: if outdated → installs immediately; if up-to-date → systemMsg "Đã là bản mới nhất."; if check fails → error shown.
   - **`futon update`** CLI (also `futon --update`, `futon self-update`): run outside TUI, prints status to stdout/stderr and exits.
@@ -112,6 +114,13 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 ### 4.9 Keybinding summary
 
 The keybindings table in `README.md` is the user-facing source of truth; FR-R1/FR-H8/FR-U3 above are the normative requirements.
+`tab` cycles search screens forward and `shift+tab` cycles them backward.
+
+### 4.10 CBZ export
+
+- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_Chap_{Number}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader.
+- **FR-E2**: `ctrl+a` in the chapter list exports every chapter into `~/Downloads/Futon/{Title}/`; chapters that fail to download are skipped, and the final flash reports `{success}/{total}`.
+- **FR-E3**: Each CBZ contains `ComicInfo.xml` (series/title/number/page count, XML-escaped) and zero-padded page entries named `001.<ext>`, `002.<ext>`, ...
 
 ## 5. Non-Functional Requirements
 
@@ -126,7 +135,7 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 | What | Path | Format |
 |---|---|---|
 | Favorites + source toggles | `~/.config/futon/userdata.json` | JSON: `sources[]`, `favorites[]` |
-| Reading history | `~/.config/futon/history.json` | JSON: map by MangaID |
+| Reading history | `~/.config/futon/history.json` | JSON array of records (`manga_id` key in memory) |
 | Downloaded images | `~/Downloads/Futon/` | JPG |
 
 - **Migration**: on first run after upgrade, if `userdata.json` does not exist, old `favorites.json` + `sources.json` are auto-merged into `userdata.json` and the 2 old files are deleted (one-time).

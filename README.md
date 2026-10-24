@@ -79,9 +79,13 @@ futon update       # kiểm tra & cài bản mới (không cần mở TUI)
 | `ctrl+u` | Cài bản cập nhật (khi có banner) |
 | `enter` | Search / mở truyện đang chọn |
 | `↑` / `↓` | Di chuyển list |
+| `tab` | Chuyển tab (feed → yêu thích → lịch sử → nguồn → bộ lọc) |
+| `shift+tab` | Chuyển tab ngược (bộ lọc → nguồn → lịch sử → yêu thích → feed) |
 | `/fav` | Xem favorites |
 | `/his` | Xem history |
 | `/src` | Chọn nguồn (space để toggle) |
+| `/feed` | Quay lại danh sách truyện mới cập nhật |
+| `/filter` (`/f`) | Mở bộ lọc |
 | `/update` | Kiểm tra & cài cập nhật |
 | `/lang vi\|en` | Set ngôn ngữ chapter (MangaDex) |
 
@@ -100,7 +104,11 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 | Key | Action |
 |-----|--------|
 | `↑` / `↓` | Browse chapters |
-| `ctrl+f` | Toggle favorite |
+| `g` / `home` | Về chapter đầu |
+| `G` / `end` | Đến chapter cuối |
+| `ctrl+f` | Thêm truyện vào Yêu thích |
+| `ctrl+e` | Xuất chapter đang chọn ra CBZ |
+| `ctrl+a` | Xuất toàn bộ chapter ra CBZ |
 | `enter` | Mở chapter |
 | `[number]` + `enter` | Jump tới chapter |
 | `esc` | Quay lại search |
@@ -112,7 +120,11 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 |-----|--------|
 | `→` / `l` | Trang tiếp |
 | `←` / `h` | Trang trước |
+| `j` / `↓` | Nhảy sang chapter tiếp theo |
+| `k` / `↑` | Về chapter trước |
 | `ctrl+d` | Save trang hiện tại |
+| `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng) |
+| `ctrl+e` | Xuất chapter hiện tại ra CBZ |
 | `esc` | Về chapter list |
 | `ctrl+c` | Thoát |
 
@@ -123,6 +135,7 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 | Favorites + Sources | `~/.config/futon/userdata.json` |
 | Reading history | `~/.config/futon/history.json` |
 | Ảnh đã download | `~/Downloads/Futon/` |
+| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file, `ctrl+a` tạo thư mục riêng) |
 
 ## Architecture
 

@@ -128,7 +128,11 @@ func (m ChapterListModel) View() tea.View {
 				badge = " [Đang đọc]"
 				truncW = max(10, maxLineW-runewidth.StringWidth(badge))
 			}
-			line := runewidth.Truncate(fmt.Sprintf("%sCh. %s - %s", prefix, ch.Number, title), truncW, "...")
+			label := title
+			if ch.Number != "" {
+				label = fmt.Sprintf("Ch. %s - %s", ch.Number, title)
+			}
+			line := runewidth.Truncate(prefix+label, truncW, "...")
 			if isCursor {
 				line = selectedStyle.Render(line)
 			} else {
@@ -229,7 +233,7 @@ func (m *ChapterListModel) jumpToChapter(number string) bool {
 	}
 	lowerQ := strings.ToLower(q)
 	for i, ch := range m.chapters {
-		if ch.Number == "" && strings.Contains(strings.ToLower(ch.Title), lowerQ) {
+		if strings.Contains(strings.ToLower(ch.Title), lowerQ) {
 			m.cursor = i
 			m.adjustViewport()
 			return true

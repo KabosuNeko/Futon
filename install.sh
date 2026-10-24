@@ -23,6 +23,13 @@ if [ "${1:-}" = "uninstall" ] || [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
+# ---- Isolated work directory ----
+# Never download or extract in the caller's cwd: the archive contains an
+# assets/ directory and cleaning it up there would delete user files.
+WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR"' EXIT
+cd "$WORKDIR"
+
 # ---- OS detection ----
 case "$(uname -s)" in
   Linux)  OS="linux"  ;;
@@ -121,10 +128,6 @@ if [ "$OS" = "linux" ]; then
     sudo gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
   fi
 fi
-
-# ---- Cleanup ----
-rm -f "$FILENAME" checksums.txt
-rm -rf assets 2>/dev/null || true
 
 echo ""
 echo "Futon $VERSION installed successfully!"

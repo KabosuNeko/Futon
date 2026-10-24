@@ -58,38 +58,45 @@ func (m ReaderModel) frameContent() string {
 
 		b.WriteString(m.centeredImage(img))
 
-		var footerParts []string
-		footerParts = append(footerParts, fmt.Sprintf("[󰈙 Trang %d/%d]", m.currentIdx+1, m.total))
-		footerParts = append(footerParts, "[󰁕/h] [󰁖/l] Trang")
-		if m.hasPreviousChapter() && m.currentIdx == 0 {
-			footerParts = append(footerParts, "[󰁕] Chap trước")
-		}
-		if m.hasNextChapter() && m.currentIdx == m.total-1 {
-			footerParts = append(footerParts, "[󰁖] Chap tiếp")
-		}
-		footerParts = append(footerParts, "[ctrl+e] Xuất CBZ")
-		footerParts = append(footerParts, "[esc] Thoát")
-		footerParts = append(footerParts, "[ctrl+d] Lưu ảnh")
-
-		rawFooter := strings.Join(footerParts, "  ")
-
 		w, h := m.width, m.height
 		if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
 			w, h = ts.Cols, ts.Rows
 		}
-		footerRow := max(1, h)
-		footerCol := max(1, (w-runewidth.StringWidth(rawFooter))/2)
 
-		styledFooter := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Render(rawFooter)
+		if !m.hideFooter {
+			var footerParts []string
+			footerParts = append(footerParts, fmt.Sprintf("[󰈙 Trang %d/%d]", m.currentIdx+1, m.total))
+			footerParts = append(footerParts, "[←/h] [→/l] Trang")
+			footerParts = append(footerParts, "[↑/k] [↓/j] Chap")
+			if m.hasPreviousChapter() && m.currentIdx == 0 {
+				footerParts = append(footerParts, "[←] Chap trước")
+			}
+			if m.hasNextChapter() && m.currentIdx == m.total-1 {
+				footerParts = append(footerParts, "[→] Chap tiếp")
+			}
+			footerParts = append(footerParts, "[ctrl+e] Xuất CBZ")
+			footerParts = append(footerParts, "[ctrl+d] Lưu ảnh")
+			footerParts = append(footerParts, "[ctrl+h] Ẩn gợi ý")
+			footerParts = append(footerParts, "[esc] Thoát")
 
-		b.WriteString(fmt.Sprintf("\x1b[%d;%dH", footerRow, footerCol))
-		b.WriteString(styledFooter)
+			rawFooter := strings.Join(footerParts, "  ")
+			footerRow := max(1, h)
+			footerCol := max(1, (w-runewidth.StringWidth(rawFooter))/2)
+
+			styledFooter := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("8")).
+				Render(rawFooter)
+
+			b.WriteString(fmt.Sprintf("\x1b[%d;%dH", footerRow, footerCol))
+			b.WriteString(styledFooter)
+		}
 
 		if m.flashMsg != "" {
 			flashCol := max(1, (w-runewidth.StringWidth(m.flashMsg))/2)
-			flashRow := max(1, footerRow-1)
+			flashRow := max(1, h-1)
+			if m.hideFooter {
+				flashRow = max(1, h)
+			}
 			styledFlash := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("3")).
 				Bold(true).
@@ -141,7 +148,11 @@ func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY in
 	cellsW := max(1, img.WidthPx/cellW)
 	cellsH := max(1, img.HeightPx/cellH)
 	offsetX = max(0, (ts.Cols-cellsW)/2)
-	offsetY = max(0, (ts.Rows-2-cellsH)/2)
+	reservedRows := 2
+	if m.hideFooter {
+		reservedRows = 0
+	}
+	offsetY = max(0, (ts.Rows-reservedRows-cellsH)/2)
 	return
 }
 

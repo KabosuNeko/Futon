@@ -76,6 +76,79 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 	return m, nil, false
 }
 
+type searchView int
+
+const (
+	viewFeed searchView = iota
+	viewFavorites
+	viewHistory
+	viewSources
+	viewFilters
+)
+
+func (m SearchModel) currentView() searchView {
+	switch {
+	case m.showingFilters:
+		return viewFilters
+	case m.showingSources:
+		return viewSources
+	case m.showingFavorites:
+		return viewFavorites
+	case m.showingHistory:
+		return viewHistory
+	default:
+		return viewFeed
+	}
+}
+
+// cycleView moves through the search tabs; delta=1 is tab, delta=-1 is shift+tab.
+func (m SearchModel) cycleView(delta int) (SearchModel, tea.Cmd, bool) {
+	views := []searchView{viewFeed, viewFavorites, viewHistory, viewSources, viewFilters}
+	next := (int(m.currentView()) + delta + len(views)) % len(views)
+
+	m.filterQuery = ""
+	m.input.SetValue("")
+	m.cursor = 0
+	m.viewportStart = 0
+	m.showingFeed = false
+	m.showingFavorites = false
+	m.showingHistory = false
+	m.showingSources = false
+	m.showingFilters = false
+
+	switch views[next] {
+	case viewFavorites:
+		m.showingFavorites = true
+		m.loadingFavorites = true
+		m.input.Placeholder = "Lọc truyện yêu thích..."
+		return m, loadFavoritesCmd(), true
+	case viewHistory:
+		m.showingHistory = true
+		m.loadingHistory = true
+		m.input.Placeholder = "Lọc lịch sử đọc..."
+		return m, loadHistoryCmd(), true
+	case viewSources:
+		m.showingSources = true
+		m.sourceCursor = 0
+		m.input.Placeholder = "Lọc nguồn..."
+		return m, nil, true
+	case viewFilters:
+		m.showingFilters = true
+		m.filterCursor = 0
+		return m, nil, true
+	default:
+		m.showingFeed = true
+		m.isSearching = true
+		m.input.Placeholder = "Nhập tên manga cần tìm..."
+		m.currentQuery = ""
+		active, ok := m.activeOrError()
+		if !ok {
+			return m, nil, true
+		}
+		return m, m.newSearchCmd(api.GlobalLatestCmd(active, 1)), true
+	}
+}
+
 func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 	switch msg.String() {
 	case "esc":
@@ -102,55 +175,19 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.filterQuery = ""
 			m.input.SetValue("")
 			m.input.Placeholder = "Nhập tên manga cần tìm..."
-			active := m.activeProviders()
-			if len(active) == 0 {
-				active = m.providers
+			m.currentQuery = ""
+			active, ok := m.activeOrError()
+			if !ok {
+				return m, nil, true
 			}
-			return m, api.GlobalLatestCmd(active, 1), true
+			return m, m.newSearchCmd(api.GlobalLatestCmd(active, 1)), true
 		}
 
 	case "tab":
-		m.filterQuery = ""
-		m.input.SetValue("")
-		m.cursor = 0
-		m.viewportStart = 0
-		if m.showingFeed && !m.showingFavorites && !m.showingHistory && !m.showingSources && !m.showingFilters {
-			m.showingFeed = false
-			m.showingFavorites = true
-			m.loadingFavorites = true
-			m.input.Placeholder = "Lọc truyện yêu thích..."
-			return m, loadFavoritesCmd(), true
-		} else if m.showingFavorites {
-			m.showingFavorites = false
-			m.showingHistory = true
-			m.loadingHistory = true
-			m.input.Placeholder = "Lọc lịch sử đọc..."
-			return m, loadHistoryCmd(), true
-		} else if m.showingHistory {
-			m.showingHistory = false
-			m.showingSources = true
-			m.sourceCursor = 0
-			m.input.Placeholder = "Lọc nguồn..."
-			return m, nil, true
-		} else if m.showingSources {
-			m.showingSources = false
-			m.showingFilters = true
-			m.filterCursor = 0
-			return m, nil, true
-		} else {
-			m.showingFilters = false
-			m.showingSources = false
-			m.showingFavorites = false
-			m.showingHistory = false
-			m.showingFeed = true
-			m.isSearching = true
-			m.input.Placeholder = "Nhập tên manga cần tìm..."
-			active := m.activeProviders()
-			if len(active) == 0 {
-				active = m.providers
-			}
-			return m, api.GlobalLatestCmd(active, 1), true
-		}
+		return m.cycleView(1)
+
+	case "shift+tab":
+		return m.cycleView(-1)
 
 	case "left":
 		if m.showingFilters {
@@ -254,9 +291,9 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.results = nil
 			m.cursor = 0
 			m.viewportStart = 0
-			active := m.activeProviders()
-			if len(active) == 0 {
-				active = m.providers
+			active, ok := m.activeOrError()
+			if !ok {
+				return m, nil, true
 			}
 			opts := api.FilterOptions{
 				Status: m.filterStatus,
@@ -264,7 +301,7 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 				Genre:  m.filterGenre,
 				Page:   1,
 			}
-			return m, api.GlobalFilterCmd(active, opts), true
+			return m, m.newSearchCmd(api.GlobalFilterCmd(active, opts)), true
 		}
 
 		val := strings.TrimSpace(m.input.Value())
@@ -306,11 +343,12 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 			m.isSearching = true
 			m.input.SetValue("")
 			m.input.Placeholder = "Nhập tên manga cần tìm..."
-			active := m.activeProviders()
-			if len(active) == 0 {
-				active = m.providers
+			m.currentQuery = ""
+			active, ok := m.activeOrError()
+			if !ok {
+				return m, nil, true
 			}
-			return m, api.GlobalLatestCmd(active, 1), true
+			return m, m.newSearchCmd(api.GlobalLatestCmd(active, 1)), true
 		}
 
 		if val == "/fav" {
@@ -387,13 +425,11 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m.viewportStart = 0
 		m.err = nil
 		m.isSearching = true
-		active := m.activeProviders()
-		if len(active) == 0 {
-			m.err = errNoSource
-			m.isSearching = false
+		active, ok := m.activeOrError()
+		if !ok {
 			return m, nil, true
 		}
-		return m, api.GlobalSearchCmd(active, val), true
+		return m, m.newSearchCmd(api.GlobalSearchCmd(active, val)), true
 	}
 	return m, nil, false
 }

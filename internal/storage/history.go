@@ -154,12 +154,18 @@ func LoadAllHistory() ([]ReadHistory, error) {
 }
 
 func FlushHistory() error {
-	historyMu.RLock()
+	historyMu.Lock()
+	// Flushing before anything has read the file must not overwrite it with a
+	// snapshot of the still-empty cache.
+	if err := loadHistory(); err != nil {
+		historyMu.Unlock()
+		return err
+	}
 	snapshot := make([]ReadHistory, 0, len(historyCache))
 	for _, e := range historyCache {
 		snapshot = append(snapshot, e)
 	}
-	historyMu.RUnlock()
+	historyMu.Unlock()
 
 	path, err := historyPath()
 	if err != nil {
