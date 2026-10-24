@@ -24,14 +24,8 @@ func downloadOne(url string, index int, chapterID, providerName string) tea.Cmd 
 	}
 }
 
-func renderPage(r imgrender.Renderer, imgData []byte, index int, chapterID string, fullHeight bool) tea.Cmd {
+func renderPage(r imgrender.Renderer, imgData []byte, index int, chapterID string, rows int) tea.Cmd {
 	return func() tea.Msg {
-		rows := 0
-		if fullHeight {
-			if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Rows > 0 {
-				rows = ts.Rows
-			}
-		}
 		img, err := r.RenderInBox(imgData, 0, rows)
 		if err != nil {
 			return renderDoneMsg{index: index, chapterID: chapterID, err: fmt.Errorf("render trang %d: %w", index+1, err)}

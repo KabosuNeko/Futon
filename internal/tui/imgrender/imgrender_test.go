@@ -46,6 +46,32 @@ func TestDecodeAndScaleInBoxPreservesAspectRatio(t *testing.T) {
 	}
 }
 
+func TestScaleImageInBoxFillsRequestedHeight(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 900, 3001))
+	ts := TerminalSize{Cols: 80, Rows: 24, PxW: 640, PxH: 384}
+
+	scaled := scaleImageInBox(img, ts, 10, 10)
+	b := scaled.Bounds()
+	if b.Dy() != 160 {
+		t.Errorf("scaled height = %d, want 160 (10 rows * 16px)", b.Dy())
+	}
+	if b.Dx() <= 0 || b.Dx() > 80 {
+		t.Errorf("scaled width = %d, want within 80px", b.Dx())
+	}
+}
+
+func TestScaleImageInBoxUsesExactTerminalHeight(t *testing.T) {
+	// Pixel height is not divisible by the row count; a floored cell height
+	// would leave the remainder as a strip at the bottom.
+	img := image.NewRGBA(image.Rect(0, 0, 900, 3001))
+	ts := TerminalSize{Cols: 80, Rows: 33, PxW: 800, PxH: 1035}
+
+	scaled := scaleImageInBox(img, ts, 0, 33)
+	if got := scaled.Bounds().Dy(); got != 1035 {
+		t.Errorf("scaled height = %d, want full terminal height 1035", got)
+	}
+}
+
 func TestSplitChunks(t *testing.T) {
 	chunks := splitChunks("abcdef", 4)
 	if len(chunks) != 2 || chunks[0] != "abcd" || chunks[1] != "ef" {
