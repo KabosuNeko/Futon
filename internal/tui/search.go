@@ -51,6 +51,10 @@ type SearchModel struct {
 	chapterLanguage string
 	systemMsg       string
 
+	// pendingSeq identifies the newest result request; snapshots from older
+	// requests are ignored (stale-response guard).
+	pendingSeq int
+
 	providers       []api.MangaProvider
 	providerToggles []bool
 	showingSources  bool
@@ -113,6 +117,10 @@ func loadSourceToggles(providers []api.MangaProvider) []bool {
 	}
 	savedSet := make(map[string]bool, len(saved))
 	for _, name := range saved {
+		// FoxTruyen's domain is parked; keep existing users on the successor.
+		if name == "FoxTruyen" {
+			name = "TruyenGG"
+		}
 		savedSet[name] = true
 	}
 	for i, p := range providers {
@@ -131,6 +139,18 @@ func (m SearchModel) activeProviderNames() []string {
 		}
 	}
 	return names
+}
+
+// activeOrError returns the enabled providers, or records errNoSource when the
+// user has switched every source off.
+func (m *SearchModel) activeOrError() ([]api.MangaProvider, bool) {
+	active := m.activeProviders()
+	if len(active) == 0 {
+		m.err = errNoSource
+		m.isSearching = false
+		return nil, false
+	}
+	return active, true
 }
 
 // filteredIndices returns the indices of n items whose key contains the
@@ -173,19 +193,24 @@ func (m SearchModel) filteredProviderIndices() []int {
 func (m SearchModel) Init() tea.Cmd {
 	active := m.activeProviders()
 	if len(active) == 0 {
-		active = m.providers
+		return tea.Batch(
+			textinput.Blink,
+			func() tea.Msg { return searchInitMsg{err: errNoSource} },
+		)
 	}
 	return tea.Batch(
 		textinput.Blink,
 		func() tea.Msg { return searchInitMsg{} },
-		api.GlobalLatestCmd(active, 1),
+		searchRequestCmd(0, api.GlobalLatestCmd(active, 1)),
 	)
 }
 
 // searchInitMsg marks the initial feed load as in progress once the model is
 // running; the constructor stays quiet so tests can build a SearchModel without
 // a pending search.
-type searchInitMsg struct{}
+type searchInitMsg struct {
+	err error
+}
 
 func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, bool) {
 	mouse := msg.Mouse()
@@ -349,15 +374,19 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		return m, nil
 
 	case searchInitMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.isSearching = false
+			return m, nil
+		}
 		m.isSearching = true
 		m.searchingProviders = m.activeProviderNames()
 		return m, nil
 
 	case searchTriggerMsg:
 		if msg.query == m.currentQuery && len(strings.TrimSpace(msg.query)) >= 3 {
-			active := m.activeProviders()
-			if len(active) == 0 {
-				m.err = errNoSource
+			active, ok := m.activeOrError()
+			if !ok {
 				return m, nil
 			}
 			m.isSearching = true
@@ -365,31 +394,30 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 			m.searchingProviders = m.activeProviderNames()
 			m.providerCounts = nil
 			m.providerErrors = nil
-			return m, tea.Batch(cmd, api.GlobalSearchCmd(active, msg.query))
+			return m, tea.Batch(cmd, m.newSearchCmd(api.GlobalSearchCmd(active, msg.query)))
 		}
 		return m, nil
 
 	case api.MangaSearchResultMsg:
-		applicable := m.showingFeed || len(strings.TrimSpace(m.currentQuery)) >= 3
+		if msg.RequestID != m.pendingSeq {
+			return m, nil
+		}
 		m.providerCounts = msg.ProviderCounts
 		m.providerErrors = msg.ProviderErrors
 
 		if msg.Stream != nil {
-			if applicable && len(msg.Manga) > 0 {
+			if len(msg.Manga) > 0 {
 				m.results = msg.Manga
 				m.cursor = 0
 				m.viewportStart = 0
 				m.err = nil
-				return m, tea.Batch(msg.Stream.Next(), m.updateFocusedCover())
+				return m, tea.Batch(searchRequestCmd(msg.RequestID, msg.Stream.Next()), m.updateFocusedCover())
 			}
-			return m, msg.Stream.Next()
+			return m, searchRequestCmd(msg.RequestID, msg.Stream.Next())
 		}
 
 		m.isSearching = false
 		m.searchingProviders = nil
-		if !applicable {
-			return m, nil
-		}
 		if len(msg.Manga) == 0 && msg.Err != nil {
 			m.results = nil
 			m.err = msg.Err
@@ -475,6 +503,8 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 	}
 
 	if oldVal != newVal {
+		// Any change makes in-flight results belong to an older request.
+		m.pendingSeq++
 		trimmed := strings.TrimSpace(newVal)
 		m.systemMsg = ""
 

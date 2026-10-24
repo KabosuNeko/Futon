@@ -132,6 +132,12 @@ func TestReaderFrameRendersFooterInStepRead(t *testing.T) {
 	if !strings.Contains(frame, "[ctrl+e] Xuất CBZ") {
 		t.Errorf("expected reader footer cbz hint, got:\n%q", frame)
 	}
+	if !strings.Contains(frame, "[↑/k] [↓/j] Chap") {
+		t.Errorf("expected reader footer chapter-jump hint, got:\n%q", frame)
+	}
+	if !strings.Contains(frame, "[←/h] [→/l] Trang") {
+		t.Errorf("expected matching page arrows in reader footer, got:\n%q", frame)
+	}
 }
 
 func TestClampCurrentIndex(t *testing.T) {
@@ -148,5 +154,67 @@ func TestClampCurrentIndex(t *testing.T) {
 	m.clampCurrentIndex()
 	if m.currentIdx != 2 {
 		t.Errorf("expected clamp to 2, got %d", m.currentIdx)
+	}
+}
+
+func TestReaderExportLabelFallsBackToChapterID(t *testing.T) {
+	m := NewReaderModel("m1", "Title", "https://example.com/ch/1", "12", nil, 0, -1, nil)
+	if got := m.exportLabel(); got != "12" {
+		t.Errorf("exportLabel = %q, want the chapter number", got)
+	}
+
+	m.chapterNumber = ""
+	if got := m.exportLabel(); got != "https://example.com/ch/1" {
+		t.Errorf("exportLabel = %q, want the chapter ID fallback", got)
+	}
+}
+
+func TestReaderCtrlHTogglesFooterHints(t *testing.T) {
+	m := NewReaderModel("m1", "Title", "c1", "1", nil, 0, -1, nil)
+	m.step = stepRead
+	m.total = 1
+	m.currentIdx = 0
+	m.imageData = [][]byte{{1}}
+	rendered := imgrender.RenderedImage{EscapeSequence: "\x1b_Gimg\x1b\\", WidthPx: 80, HeightPx: 80}
+	m.setCached(0, rendered)
+
+	if !strings.Contains(m.frameContent(), "[esc] Thoát") {
+		t.Fatal("expected footer hints while the footer is visible")
+	}
+
+	hidden, cmd := m.update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	if !hidden.hideFooter {
+		t.Fatal("ctrl+h did not hide the footer")
+	}
+	if cmd == nil {
+		t.Fatal("hiding the footer must re-render the current page")
+	}
+	if len(hidden.imageCache) != 0 {
+		t.Error("layout toggle must drop rendered pages")
+	}
+	if !hidden.isLoading {
+		t.Error("expected the reader to show the loading state after a re-render")
+	}
+
+	hidden.setCached(0, rendered)
+	hidden.isLoading = false
+	frame := hidden.frameContent()
+	for _, hint := range []string{"[esc] Thoát", "[ctrl+d]", "[ctrl+h]"} {
+		if strings.Contains(frame, hint) {
+			t.Errorf("hidden footer still contains %q", hint)
+		}
+	}
+	if !strings.Contains(frame, rendered.EscapeSequence) {
+		t.Error("image missing from the hidden-footer frame")
+	}
+
+	shown, _ := hidden.update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	if shown.hideFooter {
+		t.Fatal("second ctrl+h did not show the footer")
+	}
+	shown.setCached(0, rendered)
+	shown.isLoading = false
+	if !strings.Contains(shown.frameContent(), "[esc] Thoát") {
+		t.Error("footer hints did not come back")
 	}
 }

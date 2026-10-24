@@ -18,7 +18,7 @@ func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 	}
 	m.isLoading = true
 	if m.currentIdx >= 0 && m.currentIdx < len(m.imageData) && len(m.imageData[m.currentIdx]) > 0 {
-		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx)}
+		return m, []tea.Cmd{renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter)}
 	}
 	return m, nil
 }
@@ -30,7 +30,7 @@ func (m ReaderModel) providerName() string {
 	return ""
 }
 
-func exportReaderCBZCmd(mangaTitle, chapterNumber string, images [][]byte, urls []string) tea.Cmd {
+func exportReaderCBZCmd(mangaTitle, chapterNumber string, images [][]byte, urls []string, providerName, chapterURL string) tea.Cmd {
 	return func() tea.Msg {
 		hasAll := true
 		for _, img := range images {
@@ -43,7 +43,7 @@ func exportReaderCBZCmd(mangaTitle, chapterNumber string, images [][]byte, urls 
 			path, err := export.ExportImagesToCBZ(mangaTitle, chapterNumber, images, "")
 			return cbzExportedMsg{path: path, err: err}
 		}
-		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "")
+		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "", providerName, chapterURL)
 		return cbzExportedMsg{path: path, err: err}
 	}
 }
@@ -65,26 +65,7 @@ func (m ReaderModel) handleNextPage() (ReaderModel, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 	} else if m.hasNextChapter() {
-		nextID := m.allChapterIDs[m.chapterIndex+1]
-		saveCmd := storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx)
-
-		if m.preloadedChapID == nextID && len(m.preloadedURLs) > 0 {
-			m.applyPreloadedChapter(nextID)
-			return m, tea.Sequence(
-				saveCmd,
-				storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, 0),
-				clearGraphicsCmd(),
-				func() tea.Msg { return preloadTransitionReadyMsg{} },
-			)
-		}
-
-		m.clearPreloaded()
-		m.step = stepLoadingNext
-		return m, tea.Sequence(
-			saveCmd,
-			clearScreenCmd(),
-			chapterNavCmd(nextID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.allChapterNumbers, m.chapterIndex+1, 0),
-		)
+		return m.jumpChapter(1, 0)
 	}
 	return m, nil
 }
@@ -101,18 +82,43 @@ func (m ReaderModel) handlePrevPage() (ReaderModel, tea.Cmd) {
 		cmds = append(cmds, storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
 		return m, tea.Batch(cmds...)
 	} else if m.hasPreviousChapter() {
-		prevID := m.allChapterIDs[m.chapterIndex-1]
-		saveCmd := storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx)
-
-		m.clearPreloaded()
-		m.step = stepLoadingNext
-		return m, tea.Sequence(
-			saveCmd,
-			clearScreenCmd(),
-			chapterNavCmd(prevID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.allChapterNumbers, m.chapterIndex-1, -2),
-		)
+		return m.jumpChapter(-1, -2)
 	}
 	return m, nil
+}
+
+// jumpChapter switches chapters immediately. startPage: 0 = first page,
+// -2 = last page. The next chapter is applied without a fetch when preloaded.
+func (m ReaderModel) jumpChapter(delta, startPage int) (ReaderModel, tea.Cmd) {
+	if m.step != stepRead {
+		return m, nil
+	}
+	m.clampCurrentIndex()
+	target := m.chapterIndex + delta
+	if target < 0 || target >= len(m.allChapterIDs) {
+		return m, nil
+	}
+
+	saveCmd := storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx)
+	targetID := m.allChapterIDs[target]
+
+	if delta > 0 && m.preloadedChapID == targetID && len(m.preloadedURLs) > 0 {
+		m.applyPreloadedChapter(targetID)
+		return m, tea.Sequence(
+			saveCmd,
+			storage.SaveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, 0),
+			clearGraphicsCmd(),
+			func() tea.Msg { return preloadTransitionReadyMsg{} },
+		)
+	}
+
+	m.clearPreloaded()
+	m.step = stepLoadingNext
+	return m, tea.Sequence(
+		saveCmd,
+		clearScreenCmd(),
+		chapterNavCmd(targetID, m.mangaID, m.mangaTitle, m.allChapterIDs, m.allChapterNumbers, target, startPage),
+	)
 }
 
 func (m ReaderModel) handleMouseMsg(msg tea.MouseMsg) (ReaderModel, tea.Cmd) {
@@ -137,6 +143,15 @@ func (m ReaderModel) handleMouseMsg(msg tea.MouseMsg) (ReaderModel, tea.Cmd) {
 	return m, nil
 }
 
+// exportLabel names the reader export; HTML providers have no chapter numbers,
+// so fall back to the chapter ID instead of the shared "Untitled" filename.
+func (m ReaderModel) exportLabel() string {
+	if m.chapterNumber != "" {
+		return m.chapterNumber
+	}
+	return m.chapterID
+}
+
 func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -159,10 +174,19 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 
 	case "ctrl+e":
 		if m.step == stepRead && m.total > 0 {
-			m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", m.chapterNumber)
-			return m, exportReaderCBZCmd(m.mangaTitle, m.chapterNumber, m.imageData, m.urls)
+			m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", m.exportLabel())
+			return m, exportReaderCBZCmd(m.mangaTitle, m.exportLabel(), m.imageData, m.urls, m.providerName(), m.chapterID)
 		}
 		return m, nil
+
+	case "ctrl+h":
+		if m.step != stepRead || !m.validCurrentImage() {
+			return m, nil
+		}
+		m.hideFooter = !m.hideFooter
+		m.resetImageCache()
+		m.isLoading = true
+		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter)
 
 	case "ctrl+d":
 		if m.step == stepRead && m.validCurrentImage() {
@@ -179,6 +203,12 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 
 	case "left", "h":
 		return m.handlePrevPage()
+
+	case "j", "down":
+		return m.jumpChapter(1, 0)
+
+	case "k", "up":
+		return m.jumpChapter(-1, 0)
 	}
 	return m, nil
 }

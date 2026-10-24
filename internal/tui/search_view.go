@@ -416,10 +416,10 @@ func providerBadge(provider string) string {
 		color = "3"
 	case strings.Contains(p, "otruyen"):
 		color = "2"
+	case strings.Contains(p, "truyengg"):
+		color = "5"
 	case strings.Contains(p, "truyenqq"):
 		color = "6"
-	case strings.Contains(p, "foxtruyen"):
-		color = "5"
 	case strings.Contains(p, "baotang"):
 		color = "4"
 	default:

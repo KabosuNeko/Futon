@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/storage"
-	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
 func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel, tea.Cmd) {
@@ -23,8 +22,7 @@ func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel,
 	m.urls = msg.URLs
 	m.total = len(msg.URLs)
 	m.imageData = make([][]byte, m.total)
-	m.imageCache = make(map[int]imgrender.RenderedImage)
-	m.cacheOrder = nil
+	m.resetImageCache()
 	m.downloaded = 0
 	m.downloadPos = 0
 	m.downloading = make(map[int]struct{})
@@ -50,6 +48,10 @@ func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel,
 }
 
 func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderModel, tea.Cmd) {
+	// A download from the chapter we just left must not fill this chapter's pages.
+	if msg.chapterID != m.chapterID {
+		return m, nil
+	}
 	if msg.err != nil {
 		m.step = stepError
 		m.err = msg.err
@@ -79,10 +81,13 @@ func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderMode
 func (m *ReaderModel) startReading() tea.Cmd {
 	m.step = stepRead
 	m.isLoading = true
-	return renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx)
+	return renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter)
 }
 
 func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) {
+	if msg.chapterID != m.chapterID {
+		return m, nil
+	}
 	if msg.err != nil {
 		m.step = stepError
 		m.err = msg.err
@@ -97,7 +102,7 @@ func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) 
 
 	cmds := m.scheduleDownloads()
 	if nextIdx := m.nextRenderIndex(); nextIdx >= 0 && nextIdx < len(m.imageData) {
-		cmds = append(cmds, renderPage(m.renderer, m.imageData[nextIdx], nextIdx))
+		cmds = append(cmds, renderPage(m.renderer, m.imageData[nextIdx], nextIdx, m.chapterID, m.hideFooter))
 	}
 	if len(cmds) == 0 {
 		return m, nil
@@ -118,7 +123,7 @@ func (m ReaderModel) handlePreloadComplete(msg PreloadCompleteMsg) (ReaderModel,
 func (m ReaderModel) handlePreloadTransitionReady(_ preloadTransitionReadyMsg) (ReaderModel, tea.Cmd) {
 	cmds := m.scheduleDownloads()
 	if m.step == stepRead && m.validCurrentImage() {
-		cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx))
+		cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter))
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -137,7 +142,7 @@ func (m ReaderModel) handleWindowSize(msg tea.WindowSizeMsg) (ReaderModel, tea.C
 	m.height = msg.Height
 	if m.step == stepRead && m.validCurrentImage() {
 		m.isLoading = true
-		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx)
+		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.hideFooter)
 	}
 	return m, nil
 }

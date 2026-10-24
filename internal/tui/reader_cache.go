@@ -31,3 +31,10 @@ func (m *ReaderModel) getCached(idx int) (imgrender.RenderedImage, bool) {
 	m.cacheOrder = append(m.cacheOrder, idx)
 	return img, true
 }
+
+// resetImageCache drops every rendered page, e.g. after a resize or a layout
+// toggle changes the target image size.
+func (m *ReaderModel) resetImageCache() {
+	m.imageCache = make(map[int]imgrender.RenderedImage)
+	m.cacheOrder = nil
+}

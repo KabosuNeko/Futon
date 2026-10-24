@@ -10,15 +10,17 @@ import (
 )
 
 type downloadProgressMsg struct {
-	index int
-	err   error
-	data  []byte
+	index     int
+	chapterID string
+	err       error
+	data      []byte
 }
 
 type renderDoneMsg struct {
-	index int
-	img   imgrender.RenderedImage
-	err   error
+	index     int
+	chapterID string
+	img       imgrender.RenderedImage
+	err       error
 }
 
 type PreloadCompleteMsg struct {
@@ -62,6 +64,7 @@ type ReaderModel struct {
 	preloadedURLs     []string
 	preloadedImages   [][]byte
 	flashMsg          string
+	hideFooter        bool
 	err               error
 	width             int
 	height            int

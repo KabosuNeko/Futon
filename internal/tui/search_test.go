@@ -317,3 +317,26 @@ func drainBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	}
 	return []tea.Msg{msg}
 }
+
+func TestSourceTogglesMigrateFoxTruyenToTruyenGG(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := storage.SaveSources([]string{"TruyenQQ", "FoxTruyen"}); err != nil {
+		t.Fatalf("SaveSources: %v", err)
+	}
+
+	m := NewSearchModel([]api.MangaProvider{
+		api.NewTruyenQQProvider(),
+		api.NewTruyenGGProvider(),
+		api.NewBaoTangTruyenProvider(),
+	})
+
+	if !m.providerToggles[0] {
+		t.Error("TruyenQQ toggle should stay enabled")
+	}
+	if !m.providerToggles[1] {
+		t.Error("FoxTruyen source should migrate to TruyenGG being enabled")
+	}
+	if m.providerToggles[2] {
+		t.Error("BaoTangTruyen was not in saved sources and should stay disabled")
+	}
+}

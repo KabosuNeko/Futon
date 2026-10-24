@@ -71,7 +71,6 @@ type AppModel struct {
 	appVersion      string
 	updateAvailable bool
 	updateVersion   string
-	updateSuccess   bool
 }
 
 func NewAppModel(version string) AppModel {
@@ -79,7 +78,7 @@ func NewAppModel(version string) AppModel {
 		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
 		api.NewTruyenQQProvider(),
-		api.NewFoxTruyenProvider(),
+		api.NewTruyenGGProvider(),
 		api.NewBaoTangTruyenProvider(),
 	}
 
@@ -204,8 +203,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runInstallScriptCmd()
 
 	case UpdateReadyMsg:
-		m.updateSuccess = true
-		m.updateAvailable = false
+		if msg.Err != nil {
+			m.state = stateSearch
+			m.search.systemMsg = fmt.Sprintf("Cập nhật lỗi: %v", msg.Err)
+			return m, nil
+		}
 		return m, tea.Quit
 
 	case tea.KeyMsg:
@@ -291,10 +293,6 @@ func (m AppModel) View() tea.View {
 
 	if updateBanner != "" {
 		view = view + "\n" + updateBanner
-	}
-
-	if m.updateSuccess {
-		view = view + "\nCập nhật thành công! Vui lòng thoát (Ctrl+C) và mở lại futon."
 	}
 
 	return appView(view)

@@ -196,3 +196,73 @@ func TestFetchCoverBytes(t *testing.T) {
 		t.Errorf("got %q, want 'fake-image-bytes'", string(data))
 	}
 }
+
+func TestFetchCoverBytesTruyenGGReferer(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Referer"); got != truyenggBaseURL {
+			t.Errorf("Referer = %q, want %q", got, truyenggBaseURL)
+		}
+		w.Write([]byte("cover"))
+	}))
+	defer ts.Close()
+
+	// TruyenGG covers are served from hinhhinh.com; the provider check must win
+	// over the generic TruyenQQ host rule.
+	if _, err := FetchCoverBytes(ts.URL+"?host=hinhhinh.com", "TruyenGG"); err != nil {
+		t.Fatalf("FetchCoverBytes failed: %v", err)
+	}
+}
+
+func TestMangaDexFetchChaptersUsesBaseURLAndLanguage(t *testing.T) {
+	newMangaDexTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/manga/manga-1/feed" {
+			t.Errorf("path = %q, want /manga/manga-1/feed", r.URL.Path)
+		}
+		if got := r.URL.Query()["translatedLanguage[]"]; len(got) != 1 || got[0] != "en" {
+			t.Errorf("translatedLanguage[] = %v, want [en]", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"data": [{"id": "ch-1", "attributes": {"chapter": "12", "title": "Opening"}}],
+			"total": 1
+		}`))
+	})
+
+	p := NewMangaDexProvider()
+	p.SetLang("en")
+	chapters, err := p.FetchChapters("manga-1")
+	if err != nil {
+		t.Fatalf("FetchChapters error: %v", err)
+	}
+	if len(chapters) != 1 || chapters[0].ID != "ch-1" || chapters[0].Number != "12" {
+		t.Fatalf("unexpected chapters: %+v", chapters)
+	}
+}
+
+func TestMangaDexFetchPagesUsesBaseURL(t *testing.T) {
+	newMangaDexTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/at-home/server/ch-1" {
+			t.Errorf("path = %q, want /at-home/server/ch-1", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"baseUrl": "https://cdn.example",
+			"chapter": {"hash": "abc", "data": ["1.jpg", "2.png"]}
+		}`))
+	})
+
+	p := NewMangaDexProvider()
+	urls, err := p.FetchPages("ch-1")
+	if err != nil {
+		t.Fatalf("FetchPages error: %v", err)
+	}
+	want := []string{"https://cdn.example/data/abc/1.jpg", "https://cdn.example/data/abc/2.png"}
+	if len(urls) != len(want) {
+		t.Fatalf("urls = %v, want %v", urls, want)
+	}
+	for i := range want {
+		if urls[i] != want[i] {
+			t.Errorf("urls[%d] = %q, want %q", i, urls[i], want[i])
+		}
+	}
+}

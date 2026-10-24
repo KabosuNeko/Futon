@@ -2,6 +2,8 @@ package storage
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -157,5 +159,40 @@ func TestLoadAllHistoryReturnsCopy(t *testing.T) {
 	}
 	if again[0].PageIndex != 5 {
 		t.Errorf("mutating returned entries changed the cache: PageIndex = %d, want 5", again[0].PageIndex)
+	}
+}
+
+func resetHistoryForTest() {
+	historyMu.Lock()
+	historyCache = nil
+	historyLoaded = false
+	historyMu.Unlock()
+}
+
+func TestFlushHistoryLoadsExistingFileBeforeWriting(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	defer resetHistoryForTest()
+
+	dir := filepath.Join(os.Getenv("HOME"), ".config", "futon")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, "history.json")
+	existing := `[{"manga_id":"existing-1","chapter_id":"c1","page_index":4,"updated_at":1}]`
+	if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write history: %v", err)
+	}
+
+	if err := FlushHistory(); err != nil {
+		t.Fatalf("FlushHistory error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if !strings.Contains(string(data), "existing-1") {
+		t.Fatalf("flush before load wiped existing history: %s", data)
 	}
 }

@@ -2,6 +2,8 @@ package api
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -82,5 +84,27 @@ func TestGlobalCmdAllFailuresCombinedError(t *testing.T) {
 	}
 	if msg.Err == nil || msg.Err.Error() != "A: x; B: y" {
 		t.Errorf("combined error = %v, want A: x; B: y", msg.Err)
+	}
+}
+
+func TestHTTPGetRetriesServerErrors(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	resp, err := httpGet(http.DefaultClient, srv.URL, "test")
+	if err != nil {
+		t.Fatalf("httpGet error: %v", err)
+	}
+	resp.Body.Close()
+	if attempts != 2 {
+		t.Errorf("attempts = %d, want 2 (one retry)", attempts)
 	}
 }
