@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
@@ -14,6 +13,9 @@ type ViewMangaMsg struct {
 	MangaID      string
 	Title        string
 	ProviderName string
+	// ResumeChapterID opens this chapter in the reader as soon as the
+	// chapter list loads (used when continuing from history).
+	ResumeChapterID string
 }
 
 type BackToSearchMsg struct{}
@@ -35,10 +37,9 @@ type UpdateAvailableMsg struct {
 	Version string
 }
 
-type UpdateReadyMsg struct {
-	Err error
-}
-
+// RequestUpdateMsg asks for a manual update check (/update). Installing is
+// left to the `futon update` CLI: it may prompt for sudo, which does not
+// belong inside the TUI.
 type RequestUpdateMsg struct{}
 
 // chaptersReadyMsg switches the app to the chapter list after the search
@@ -57,7 +58,6 @@ const (
 	stateSearch appState = iota
 	stateChapters
 	stateReader
-	stateUpdating
 )
 
 type AppModel struct {
@@ -71,23 +71,39 @@ type AppModel struct {
 	appVersion      string
 	updateAvailable bool
 	updateVersion   string
+
+	// Last known terminal size, handed to screens created after the resize.
+	width, height int
+	// readerFitWidth is the saved webtoon-mode choice for the first reader.
+	readerFitWidth bool
 }
 
 func NewAppModel(version string) AppModel {
 	providers := []api.MangaProvider{
-		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
 		api.NewTruyenQQProvider(),
-		api.NewTruyenGGProvider(),
 		api.NewBaoTangTruyenProvider(),
+		api.NewCuuTruyenProvider(),
 	}
+
+	// Fold entries of merged sources into their successor before anything
+	// reads them; failing here only means old entries stay as they were.
+	_ = storage.MigrateEntries(migrateLegacyEntry)
+
+	search := NewSearchModel(providers)
+	// Restore the /lang choice; a read error just keeps the default.
+	if lang, err := storage.LoadChapterLang(); err == nil && lang != "" {
+		search.setChapterLanguage(lang)
+	}
+	fitWidth, _ := storage.LoadReaderFitWidth()
 
 	return AppModel{
 		state:           stateSearch,
-		search:          NewSearchModel(providers),
+		search:          search,
 		providers:       providers,
 		currentProvider: providers[0],
 		appVersion:      version,
+		readerFitWidth:  fitWidth,
 	}
 }
 
@@ -118,19 +134,10 @@ func checkUpdateForManualCmd(currentVersion string) tea.Cmd {
 	}
 }
 
-func runInstallScriptCmd() tea.Cmd {
-	c := updater.InstallScriptCommand()
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return UpdateReadyMsg{Err: err}
-	})
-}
-
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
 		sm, sc := m.search.Update(msg)
 		m.search = sm.(SearchModel)
 		cm, cc := m.chapter.Update(msg)
@@ -140,8 +147,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(sc, cc, rc)
 
 	case ViewMangaMsg:
-		m.currentProvider = m.findProvider(msg.ProviderName)
+		provider, ok := m.findProvider(msg.ProviderName)
+		if !ok {
+			// A favorite/history entry from a source that was removed (e.g.
+			// OTruyen): its ID means nothing to the remaining providers.
+			m.search.systemMsg = fmt.Sprintf("Nguồn %s không còn được hỗ trợ.", msg.ProviderName)
+			return m, nil
+		}
+		m.currentProvider = provider
 		m.chapter = NewChapterListModel(msg.MangaID, msg.Title, m.currentProvider)
+		m.chapter.setSize(m.width, m.height)
+		m.chapter.resumeChapterID = msg.ResumeChapterID
 		// Clear the preview cover while the search view is still current, then
 		// switch state: a clear emitted after the switch would sit on top of the
 		// freshly rendered chapter list.
@@ -159,13 +175,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.search.repaintCoverCmd()
 
 	case ViewChapterMsg:
+		// Keep the reading mode across chapters: the previous reader holds
+		// the latest choice (w may have been pressed since launch).
+		if m.reader.renderer != nil {
+			m.readerFitWidth = m.reader.fitWidth
+		}
 		m.state = stateReader
 		m.reader = NewReaderModel(msg.MangaID, msg.MangaTitle, msg.ChapterID, msg.ChapterNumber, msg.AllChapterIDs, msg.ChapterIndex, msg.StartPageIndex, m.currentProvider)
 		m.reader.allChapterNumbers = msg.AllChapterNumbers
+		m.reader.fitWidth = m.readerFitWidth
+		if m.width > 0 && m.height > 0 {
+			m.reader.width, m.reader.height = m.width, m.height
+		}
 		return m, m.reader.Init()
 
 	case BackToChaptersMsg:
 		m.state = stateChapters
+		m.chapter.reloadHistory() // the reader just saved a new position
 		return m, nil
 
 	case UpdateAvailableMsg:
@@ -177,13 +203,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state != stateSearch {
 			return m, nil
 		}
-		if m.updateAvailable {
-			m.state = stateUpdating
-			return m, runInstallScriptCmd()
-		}
 		if m.appVersion == "dev" {
-			m.state = stateUpdating
-			return m, runInstallScriptCmd()
+			m.search.systemMsg = "Bản dev (build từ source): chạy `futon update` để cài bản release mới nhất."
+			return m, nil
 		}
 		m.search.systemMsg = "Đang kiểm tra cập nhật..."
 		return m, checkUpdateForManualCmd(m.appVersion)
@@ -199,42 +221,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateAvailable = true
 		m.updateVersion = msg.Version
-		m.state = stateUpdating
-		return m, runInstallScriptCmd()
-
-	case UpdateReadyMsg:
-		if msg.Err != nil {
-			m.state = stateSearch
-			m.search.systemMsg = fmt.Sprintf("Cập nhật lỗi: %v", msg.Err)
-			return m, nil
-		}
-		return m, tea.Quit
+		m.search.systemMsg = fmt.Sprintf("Có bản %s. Thoát rồi chạy `futon update` để cài.", msg.Version)
+		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
-			if m.state == stateReader && m.reader.mangaID != "" && m.reader.chapterID != "" {
-				providerName := ""
-				if m.reader.provider != nil {
-					providerName = m.reader.provider.Name()
-				}
-				return m, tea.Sequence(
-					storage.SaveHistoryCmd(m.reader.mangaID, m.reader.mangaTitle, providerName, m.reader.chapterID, m.reader.chapterNumber, m.reader.currentIdx),
-					storage.FlushHistoryCmd(),
-					tea.Quit,
-				)
+			// The reader owns its quit path (save + flush history first).
+			if m.state == stateReader {
+				rm, cmd := m.reader.Update(msg)
+				m.reader = rm.(ReaderModel)
+				return m, cmd
 			}
 			return m, tea.Quit
-		case "ctrl+u":
-			if m.state == stateSearch {
-				return m.Update(RequestUpdateMsg{})
-			}
-			return m, nil
 		}
-	}
-
-	if m.state == stateUpdating {
-		return m, nil
 	}
 
 	var newModel tea.Model
@@ -257,26 +257,48 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m *AppModel) findProvider(name string) api.MangaProvider {
+// mergedSources maps source names that were folded into another source.
+// TruyenGG is a mirror of TruyenQQ (same catalog and paths); FoxTruyen's
+// domain was parked and its users had been moved to TruyenGG.
+var mergedSources = map[string]string{
+	"TruyenGG":  "TruyenQQ",
+	"FoxTruyen": "TruyenQQ",
+}
+
+// migrateLegacyEntry moves TruyenGG entries to TruyenQQ and turns the
+// absolute, mirror-specific URLs that TruyenQQ-family entries used to store
+// into the mirror-independent path IDs. FoxTruyen entries are left alone:
+// its IDs belong to a different site.
+func migrateLegacyEntry(provider, mangaID, chapterID string) (string, string, string) {
+	switch provider {
+	case "TruyenGG", "TruyenQQ":
+		return "TruyenQQ", api.TruyenQQPath(mangaID), api.TruyenQQPath(chapterID)
+	}
+	return provider, mangaID, chapterID
+}
+
+// findProvider resolves a provider by name. An empty name (entries saved
+// before the provider was recorded) falls back to the first provider; an
+// unknown name is a source that no longer exists and is reported as missing.
+func (m *AppModel) findProvider(name string) (api.MangaProvider, bool) {
+	if successor, merged := mergedSources[name]; merged {
+		name = successor
+	}
 	for _, p := range m.providers {
 		if p.Name() == name {
-			return p
+			return p, true
 		}
 	}
-	if len(m.providers) > 0 {
-		return m.providers[0]
+	if name == "" && len(m.providers) > 0 {
+		return m.providers[0], true
 	}
-	return nil
+	return nil, false
 }
 
 func (m AppModel) View() tea.View {
-	if m.state == stateUpdating {
-		return appView("Đang cập nhật...\n")
-	}
-
 	var updateBanner string
 	if m.updateAvailable && m.state == stateSearch {
-		updateBanner = fmt.Sprintf("[!] Đã có bản cập nhật %s. Nhấn Ctrl+u để tự động cài đặt.", m.updateVersion)
+		updateBanner = fmt.Sprintf("[!] Đã có bản cập nhật %s. Thoát rồi chạy `futon update` để cài.", m.updateVersion)
 	}
 
 	view := ""

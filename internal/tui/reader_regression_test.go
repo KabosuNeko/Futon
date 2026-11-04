@@ -93,7 +93,7 @@ func TestReaderFrameRendersFooterInStepRead(t *testing.T) {
 	m.step = stepRead
 	m.total = 3
 	m.currentIdx = 1
-	m.width = 80
+	m.width = 200 // wide enough for every hint; narrow screens drop some
 	m.height = 24
 
 	img := image.NewRGBA(image.Rect(0, 0, 1, 1))

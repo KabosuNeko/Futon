@@ -10,9 +10,9 @@ import (
 )
 
 func TestSearchMouseWheelAndClick(t *testing.T) {
-	provider := api.NewOTruyenProvider()
+	provider := api.NewBaoTangTruyenProvider()
 	m := NewSearchModel([]api.MangaProvider{provider})
-	m.showingFeed = false
+	m.listMode = resultsSearch
 	m.results = []models.Manga{
 		{ID: "1", Title: "Manga 1"},
 		{ID: "2", Title: "Manga 2"},
@@ -32,8 +32,8 @@ func TestSearchMouseWheelAndClick(t *testing.T) {
 		t.Errorf("expected cursor 0 after wheel up, got %d", sm2.cursor)
 	}
 
-	// Mouse click item index 2 (msg.Y = searchUIOffset + 2)
-	newM3, _ := sm2.Update(tea.MouseClickMsg{Button: tea.MouseLeft, Y: searchUIOffset + 2})
+	// Mouse click item index 2 (two rows below the first list item)
+	newM3, _ := sm2.Update(tea.MouseClickMsg{Button: tea.MouseLeft, Y: sm2.listTopRow() + 2})
 	sm3 := newM3.(SearchModel)
 	if sm3.cursor != 2 {
 		t.Errorf("expected cursor 2 after click item 2, got %d", sm3.cursor)
@@ -41,31 +41,31 @@ func TestSearchMouseWheelAndClick(t *testing.T) {
 }
 
 func TestSearchTabCycleAndFilterModal(t *testing.T) {
-	provider := api.NewOTruyenProvider()
+	provider := api.NewBaoTangTruyenProvider()
 	m := NewSearchModel([]api.MangaProvider{provider})
-	m.showingFeed = true
+	m.view = viewFeed
 
 	newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	sm := newM.(SearchModel)
-	if !sm.showingFavorites {
+	if sm.view != viewFavorites {
 		t.Errorf("expected showingFavorites after tab 1")
 	}
 
 	newM, _ = sm.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	sm = newM.(SearchModel)
-	if !sm.showingHistory {
+	if sm.view != viewHistory {
 		t.Errorf("expected showingHistory after tab 2")
 	}
 
 	newM, _ = sm.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	sm = newM.(SearchModel)
-	if !sm.showingSources {
+	if sm.view != viewSources {
 		t.Errorf("expected showingSources after tab 3")
 	}
 
 	newM, _ = sm.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	sm = newM.(SearchModel)
-	if !sm.showingFilters {
+	if sm.view != viewFilters {
 		t.Errorf("expected showingFilters after tab 4")
 	}
 
@@ -112,7 +112,7 @@ func TestReaderMouseClicks(t *testing.T) {
 }
 
 func TestChapterListMouseAndExportKey(t *testing.T) {
-	provider := api.NewOTruyenProvider()
+	provider := api.NewBaoTangTruyenProvider()
 	m := NewChapterListModel("m1", "Title", provider)
 	m.loading = false
 	m.chapters = []models.Chapter{
@@ -136,18 +136,18 @@ func TestChapterListMouseAndExportKey(t *testing.T) {
 }
 
 func TestSearchShiftTabCyclesBackward(t *testing.T) {
-	m := NewSearchModel([]api.MangaProvider{api.NewOTruyenProvider()})
-	m.showingFeed = true
+	m := NewSearchModel([]api.MangaProvider{api.NewBaoTangTruyenProvider()})
+	m.view = viewFeed
 
 	checks := []struct {
 		name  string
 		check func(SearchModel) bool
 	}{
-		{"filters", func(s SearchModel) bool { return s.showingFilters }},
-		{"sources", func(s SearchModel) bool { return s.showingSources }},
-		{"history", func(s SearchModel) bool { return s.showingHistory && s.loadingHistory }},
-		{"favorites", func(s SearchModel) bool { return s.showingFavorites && s.loadingFavorites }},
-		{"feed", func(s SearchModel) bool { return s.showingFeed }},
+		{"filters", func(s SearchModel) bool { return (s.view == viewFilters) }},
+		{"sources", func(s SearchModel) bool { return (s.view == viewSources) }},
+		{"history", func(s SearchModel) bool { return (s.view == viewHistory) && s.loadingHistory }},
+		{"favorites", func(s SearchModel) bool { return (s.view == viewFavorites) && s.loadingFavorites }},
+		{"feed", func(s SearchModel) bool { return (s.view == viewFeed) }},
 	}
 
 	for _, tc := range checks {
@@ -156,5 +156,17 @@ func TestSearchShiftTabCyclesBackward(t *testing.T) {
 		if !tc.check(m) {
 			t.Fatalf("shift+tab did not open %s", tc.name)
 		}
+	}
+}
+
+func TestChapterClickUsesLayout(t *testing.T) {
+	m := NewChapterListModel("m1", "Title", nil)
+	m.setSize(100, 30)
+	m.loading = false
+	m.chapters = []models.Chapter{{ID: "c1", Number: "1"}, {ID: "c2", Number: "2"}, {ID: "c3", Number: "3"}}
+
+	updated, _ := m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, Y: m.listTopRow() + 2})
+	if got := updated.(ChapterListModel).cursor; got != 2 {
+		t.Errorf("click on third chapter selected %d, want 2", got)
 	}
 }

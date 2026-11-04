@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/png"
@@ -89,12 +90,14 @@ func startProgram(t *testing.T, m tea.Model, width, height int) (*tea.Program, *
 // image without the network.
 type urlProvider struct{ urls []string }
 
-func (urlProvider) Name() string                                     { return "Stub" }
-func (urlProvider) Search(string) ([]models.Manga, error)            { return nil, nil }
-func (urlProvider) FetchLatest(int) ([]models.Manga, error)          { return nil, nil }
-func (urlProvider) Filter(api.FilterOptions) ([]models.Manga, error) { return nil, nil }
-func (urlProvider) FetchChapters(string) ([]models.Chapter, error)   { return nil, nil }
-func (p urlProvider) FetchPages(string) ([]string, error)            { return p.urls, nil }
+func (urlProvider) Name() string                                             { return "Stub" }
+func (urlProvider) Search(context.Context, string) ([]models.Manga, error)   { return nil, nil }
+func (urlProvider) FetchLatest(context.Context, int) ([]models.Manga, error) { return nil, nil }
+func (urlProvider) Filter(context.Context, api.FilterOptions) ([]models.Manga, error) {
+	return nil, nil
+}
+func (urlProvider) FetchChapters(context.Context, string) ([]models.Chapter, error) { return nil, nil }
+func (p urlProvider) FetchPages(context.Context, string) ([]string, error)          { return p.urls, nil }
 
 // TestReaderRawFrameOrderingEndToEnd drives a real bubbletea v2 program and
 // checks the reader frame is painted via tea.Raw, survives the renderer's diff,
@@ -166,9 +169,9 @@ func TestSearchCoverDrawAfterPaneEndToEnd(t *testing.T) {
 	probe := coverProbeModel{SearchModel: m}
 	p, out := startProgram(t, probe, 100, 24)
 
-	p.Send(api.MangaSearchResultMsg{
+	p.Send(resultsMsg{
 		Manga: []models.Manga{
-			{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "OTruyen"},
+			{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "MangaDex"},
 		},
 	})
 
@@ -188,7 +191,7 @@ func TestSearchCoverDrawAfterPaneEndToEnd(t *testing.T) {
 
 	// Hiding the cover must emit the delete sequences. The draw sequence also
 	// starts with a delete, so wait for the second (bare clear) occurrence.
-	p.Send(api.MangaSearchResultMsg{Err: errors.New("boom")})
+	p.Send(resultsMsg{Err: errors.New("boom")})
 	deleteSeq := "\x1b_Ga=d,d=A,q=2\x1b\\"
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) && strings.Count(out.String(), deleteSeq) < 2 {

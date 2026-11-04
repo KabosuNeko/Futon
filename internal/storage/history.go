@@ -9,8 +9,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 type ReadHistory struct {
@@ -25,12 +23,19 @@ type ReadHistory struct {
 
 var (
 	historyMu     sync.RWMutex
-	historyCache  map[string]ReadHistory
+	historyCache  map[string]ReadHistory // keyed by historyKey
 	historyLoaded bool
 	flushTimer    *time.Timer
 )
 
 const flushDelay = 2 * time.Second
+
+// historyKey identifies a manga across sources: manga IDs are only unique
+// within one provider. Entries written before the provider was recorded have
+// an empty provider and are found through the legacy key.
+func historyKey(mangaID, provider string) string {
+	return provider + "\x00" + mangaID
+}
 
 func historyPath() (string, error) {
 	dir, err := ConfigDir()
@@ -67,7 +72,7 @@ func loadHistory() error {
 
 	historyCache = make(map[string]ReadHistory, len(entries))
 	for _, e := range entries {
-		historyCache[e.MangaID] = e
+		historyCache[historyKey(e.MangaID, e.Provider)] = e
 	}
 	historyLoaded = true
 	return nil
@@ -86,7 +91,7 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		return err
 	}
 
-	if old, ok := historyCache[mangaID]; ok {
+	if old, ok := lookupHistory(mangaID, provider); ok {
 		if mangaTitle == "" {
 			mangaTitle = old.MangaTitle
 		}
@@ -94,8 +99,10 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 			chapterNumber = old.ChapterNumber
 		}
 	}
+	// Re-key a legacy provider-less entry now that the provider is known.
+	delete(historyCache, historyKey(mangaID, ""))
 
-	historyCache[mangaID] = ReadHistory{
+	historyCache[historyKey(mangaID, provider)] = ReadHistory{
 		MangaID:       mangaID,
 		MangaTitle:    mangaTitle,
 		Provider:      provider,
@@ -109,14 +116,17 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 	return nil
 }
 
-func SaveHistoryCmd(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) tea.Cmd {
-	return func() tea.Msg {
-		_ = SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber, pageIndex)
-		return nil
+// lookupHistory finds the entry for (mangaID, provider), falling back to a
+// legacy entry saved without a provider. Callers hold historyMu.
+func lookupHistory(mangaID, provider string) (ReadHistory, bool) {
+	if h, ok := historyCache[historyKey(mangaID, provider)]; ok {
+		return h, true
 	}
+	h, ok := historyCache[historyKey(mangaID, "")]
+	return h, ok
 }
 
-func GetHistory(mangaID string) (*ReadHistory, bool) {
+func GetHistory(mangaID, provider string) (*ReadHistory, bool) {
 	historyMu.Lock()
 	defer historyMu.Unlock()
 
@@ -124,7 +134,7 @@ func GetHistory(mangaID string) (*ReadHistory, bool) {
 		return nil, false
 	}
 
-	h, ok := historyCache[mangaID]
+	h, ok := lookupHistory(mangaID, provider)
 	if !ok {
 		return nil, false
 	}
@@ -141,16 +151,23 @@ func LoadAllHistory() ([]ReadHistory, error) {
 		return nil, err
 	}
 
+	return sortedHistory(), nil
+}
+
+// sortedHistory returns the cache newest first, with a stable tie-break so
+// the file on disk does not reshuffle on every flush. Callers hold historyMu.
+func sortedHistory() []ReadHistory {
 	entries := make([]ReadHistory, 0, len(historyCache))
 	for _, e := range historyCache {
 		entries = append(entries, e)
 	}
-
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].UpdatedAt > entries[j].UpdatedAt
+		if entries[i].UpdatedAt != entries[j].UpdatedAt {
+			return entries[i].UpdatedAt > entries[j].UpdatedAt
+		}
+		return historyKey(entries[i].MangaID, entries[i].Provider) < historyKey(entries[j].MangaID, entries[j].Provider)
 	})
-
-	return entries, nil
+	return entries
 }
 
 func FlushHistory() error {
@@ -161,10 +178,7 @@ func FlushHistory() error {
 		historyMu.Unlock()
 		return err
 	}
-	snapshot := make([]ReadHistory, 0, len(historyCache))
-	for _, e := range historyCache {
-		snapshot = append(snapshot, e)
-	}
+	snapshot := sortedHistory()
 	historyMu.Unlock()
 
 	path, err := historyPath()
@@ -178,14 +192,7 @@ func FlushHistory() error {
 	return nil
 }
 
-func FlushHistoryCmd() tea.Cmd {
-	return func() tea.Msg {
-		_ = FlushHistory()
-		return nil
-	}
-}
-
-func DeleteHistory(mangaID string) error {
+func DeleteHistory(mangaID, provider string) error {
 	if mangaID == "" {
 		return nil
 	}
@@ -196,17 +203,10 @@ func DeleteHistory(mangaID string) error {
 		return err
 	}
 
-	delete(historyCache, mangaID)
+	delete(historyCache, historyKey(mangaID, provider))
 	historyMu.Unlock()
 
 	return FlushHistory()
-}
-
-func DeleteHistoryCmd(mangaID string) tea.Cmd {
-	return func() tea.Msg {
-		_ = DeleteHistory(mangaID)
-		return nil
-	}
 }
 
 // Debounce disk writes: restart timer on every call, write 2s after the last update.

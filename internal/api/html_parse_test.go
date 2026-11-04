@@ -36,7 +36,7 @@ func TestParseBaoTangList(t *testing.T) {
 	}
 }
 
-func TestParseTruyenQQList(t *testing.T) {
+func TestParseTruyenQQListMarkup(t *testing.T) {
 	doc := testDocument(t, `
 		<ul class="list_grid">
 			<li>
@@ -45,7 +45,7 @@ func TestParseTruyenQQList(t *testing.T) {
 			</li>
 		</ul>`)
 
-	mangas := parseTruyenHTMLList(doc)
+	mangas := parseTruyenQQList(doc)
 	if len(mangas) != 1 {
 		t.Fatalf("mangas = %d, want 1", len(mangas))
 	}

@@ -34,31 +34,25 @@ func main() {
 }
 
 func runUpdateCLI(currentVersion string) {
+	ref := ""
 	if currentVersion == "dev" {
 		fmt.Println("Dev build: installing latest release...")
-		fmt.Println("Running install.sh...")
-		c := updater.InstallScriptCommand()
-		c.Stdin = os.Stdin
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		if err := c.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
+	} else {
+		available, version, err := updater.CheckForUpdate(currentVersion)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Update check failed: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Update done. Restart futon to use the new version.")
-		return
+		if !available {
+			fmt.Printf("Already up to date (%s)\n", currentVersion)
+			return
+		}
+		fmt.Printf("New version %s available — installing...\n", version)
+		ref = version
 	}
-	available, version, err := updater.CheckForUpdate(currentVersion)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Update check failed: %v\n", err)
-		os.Exit(1)
-	}
-	if !available {
-		fmt.Printf("Already up to date (%s)\n", currentVersion)
-		return
-	}
-	fmt.Printf("New version %s available — installing...\n", version)
-	c := updater.InstallScriptCommand()
+
+	fmt.Println("Running install.sh...")
+	c := updater.InstallScriptCommand(ref)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

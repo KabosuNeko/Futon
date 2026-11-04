@@ -2,40 +2,28 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
+	"path"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/mattn/go-runewidth"
 )
-
-// coverPaintKey captures everything that determines the out-of-band cover
-// paint: the pane geometry, whether an image is drawn, and a generation
-// counter bumped whenever the cover changes.
-type coverPaintKey struct {
-	gen       int
-	isSplit   bool
-	draw      bool
-	clearFrom int
-	clearTo   int
-	eraseCol  int
-	eraseW    int
-	imgRow    int
-	imgCol    int
-}
 
 func (m SearchModel) View() tea.View {
 	content, _ := m.buildContent()
 	return tea.NewView(content)
 }
 
-// buildContent renders the search screen and computes the cover geometry.
-// Cover escape sequences are not part of the returned content; they are painted
+// buildContent renders the search screen and computes its geometry. Cover
+// escape sequences are not part of the returned content; they are painted
 // out-of-band with tea.Raw because the v2 cell renderer strips them.
-func (m SearchModel) buildContent() (string, coverPaintKey) {
+func (m SearchModel) buildContent() (string, searchLayout) {
 	if m.width == 0 || m.height == 0 {
-		return "Loading...", coverPaintKey{}
+		return "Loading...", searchLayout{}
 	}
 
 	boxStyle := lipgloss.NewStyle().
@@ -54,18 +42,9 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 
+	// Same order as the searchView constants.
 	tabLabels := []string{tabFeed, tabFav, tabHis, tabSrc, tabFlt}
-	activeTab := 0
-	switch {
-	case m.showingFilters:
-		activeTab = 4
-	case m.showingSources:
-		activeTab = 3
-	case m.showingFavorites:
-		activeTab = 1
-	case m.showingHistory:
-		activeTab = 2
-	}
+	activeTab := int(m.view)
 
 	tabs := make([]string, len(tabLabels))
 	for i, label := range tabLabels {
@@ -85,7 +64,7 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 			Foreground(lipgloss.Color("6")).
 			MarginTop(1)
 		headerParts = append(headerParts, sysStyle.Render(m.systemMsg))
-	} else if len(m.providerErrors) > 0 && !m.isSearching && !m.showingSources && !m.showingFavorites && !m.showingHistory && m.err == nil && len(m.results) > 0 {
+	} else if len(m.providerErrors) > 0 && !m.isSearching && (m.view == viewFeed || m.view == viewFilters) && m.err == nil && len(m.results) > 0 {
 		warnStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("3")).
 			MarginTop(1)
@@ -113,16 +92,20 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 
 	var listContent string
 
-	if m.showingFilters {
+	if m.view == viewFilters {
 		listContent = m.renderFilterModal()
+	} else if m.view == viewSources {
+		// Always reachable: a feed error is often fixed by changing sources.
+		listContent = m.renderSources()
 	} else if m.err != nil {
 		errStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("1")).
-			MarginTop(1)
+			MarginTop(1).
+			Width(min(m.width-4, 100))
 		listContent = errStyle.Render(fmt.Sprintf("󰅚 Lỗi: %v", m.err))
 	} else if m.isSearching && len(m.results) == 0 {
 		msg := " Đang tìm kiếm..."
-		if m.showingFeed {
+		if m.listMode != resultsSearch {
 			msg = "󰑓 Đang nạp danh sách truyện mới..."
 		} else if len(m.searchingProviders) > 0 {
 			msg = fmt.Sprintf(" Đang tìm trên %s...", strings.Join(m.searchingProviders, ", "))
@@ -132,11 +115,9 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 		listContent = statusStyle.Render(" Đang tải danh sách yêu thích...")
 	} else if m.loadingHistory {
 		listContent = statusStyle.Render(" Đang tải lịch sử đọc...")
-	} else if m.showingSources {
-		listContent = m.renderSources()
-	} else if m.showingFavorites {
+	} else if m.view == viewFavorites {
 		listContent = m.renderFavorites()
-	} else if m.showingHistory {
+	} else if m.view == viewHistory {
 		listContent = m.renderHistory()
 	} else if len(m.currentQuery) >= 3 && len(m.results) == 0 {
 		listContent = subtleStyle.Render("Không tìm thấy kết quả.")
@@ -144,12 +125,12 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 		listContent = m.renderSearchResults()
 	}
 
-	hasItems := (len(m.results) > 0 && !m.showingFavorites && !m.showingHistory && !m.showingSources && !m.showingFilters) ||
-		(m.showingFavorites && len(m.filteredFavIndices()) > 0) ||
-		(m.showingHistory && len(m.filteredHistoryIndices()) > 0)
+	hasItems := (m.view == viewFeed && len(m.results) > 0) ||
+		(m.view == viewFavorites && len(m.filteredFavIndices()) > 0) ||
+		(m.view == viewHistory && len(m.filteredHistoryIndices()) > 0)
 
 	var listPaneW, previewPaneW int
-	isSplit := m.width >= 80 && m.height >= 16 && hasItems && !m.showingSources
+	isSplit := m.listIsCard() && hasItems
 
 	var body string
 	if isSplit {
@@ -188,15 +169,18 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
 	}
 
+	headerH := lipgloss.Height(headerNode)
+	// 1-based row where the body starts (header, then a blank line).
+	bodyRow := topRow + headerH + 1
+	layout := searchLayout{listTop: bodyRow - 1 + m.listItemOffset()}
+
 	key := coverPaintKey{gen: m.coverGen}
 	if isSplit {
-		headerH := lipgloss.Height(headerNode)
-		bodyRow := topRow + headerH + 1
 
 		actualListW := listPaneW + 3
 		previewCol := leftCol + actualListW
 
-		imgRow := bodyRow + 9
+		imgRow := bodyRow + previewImageRowOffset
 		boxH := m.listVisibleItems() + 4
 		previewInnerW := previewPaneW - 4
 
@@ -220,27 +204,8 @@ func (m SearchModel) buildContent() (string, coverPaintKey) {
 		}
 	}
 
-	return placed, key
-}
-
-// coverSequence mirrors the sequences the pre-v2 View appended for the preview
-// cover, including the save/restore cursor wrapper.
-func (m SearchModel) coverSequence(key coverPaintKey) string {
-	const deleteAll = "\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\"
-	if !key.isSplit {
-		return deleteAll
-	}
-
-	var clearSeq strings.Builder
-	clearSeq.WriteString(deleteAll)
-	for r := key.clearFrom; r <= key.clearTo; r++ {
-		clearSeq.WriteString(fmt.Sprintf("\x1b[%d;%dH\x1b[%dX", r, key.eraseCol, key.eraseW))
-	}
-
-	if !key.draw {
-		return fmt.Sprintf("\x1b[s%s\x1b[u", clearSeq.String())
-	}
-	return fmt.Sprintf("\x1b[s%s\x1b[%d;%dH%s\x1b[u", clearSeq.String(), key.imgRow, key.imgCol, m.currentCover.EscapeSequence)
+	layout.cover = key
+	return placed, layout
 }
 
 func (m SearchModel) renderPreviewPane() string {
@@ -283,7 +248,12 @@ func (m SearchModel) renderPreviewPane() string {
 
 	if focused.Provider != "" {
 		sourceLabel := metaLabelStyle.Render("Nguồn: ")
-		contentLines = append(contentLines, sourceLabel+providerBadge(focused.Provider))
+		line := sourceLabel + providerBadge(focused.Provider)
+		if row, ok := m.focusedRow(); ok && m.view == viewFeed && len(row.variants) > 1 {
+			_, sel := m.selectedVariant(row)
+			line += metaLabelStyle.Render(fmt.Sprintf(" %d/%d · ⇧←/→ đổi", sel+1, len(row.variants)))
+		}
+		contentLines = append(contentLines, line)
 	} else {
 		contentLines = append(contentLines, "")
 	}
@@ -414,10 +384,8 @@ func providerBadge(provider string) string {
 	switch {
 	case strings.Contains(p, "mangadex"):
 		color = "3"
-	case strings.Contains(p, "otruyen"):
+	case strings.Contains(p, "cuutruyen"):
 		color = "2"
-	case strings.Contains(p, "truyengg"):
-		color = "5"
 	case strings.Contains(p, "truyenqq"):
 		color = "6"
 	case strings.Contains(p, "baotang"):
@@ -433,7 +401,7 @@ func providerBadge(provider string) string {
 
 func (m SearchModel) renderList(title, emptyMsg string, items []string, cursor int) string {
 	w := m.listPaneWidth()
-	isSplit := m.width >= 80 && m.height >= 16 && !m.showingSources
+	isSplit := m.listIsCard()
 
 	visible := m.listVisibleItems()
 	viewportEnd := m.viewportStart + visible
@@ -476,7 +444,7 @@ func (m SearchModel) renderList(title, emptyMsg string, items []string, cursor i
 	if boxH < 8 {
 		boxH = 8
 	}
-	maxBoxH := m.height - searchUIOffset
+	maxBoxH := m.height - 9 // header, tabs, footer and spacing
 	if boxH > maxBoxH {
 		boxH = maxBoxH
 	}
@@ -608,19 +576,19 @@ func (m SearchModel) renderFilterModal() string {
 		return "   " + line
 	}
 
-	b.WriteString(filterRow(0, "Trạng thái:  ", filterStatusOptions[m.filterStatus]))
+	b.WriteString(filterRow(filterRowStatus, "Trạng thái:  ", filterStatusOptions[m.filterStatus]))
 	b.WriteString("\n")
-	b.WriteString(filterRow(1, "Sắp xếp:     ", filterSortOptions[m.filterSort]))
+	b.WriteString(filterRow(filterRowSort, "Sắp xếp:     ", filterSortOptions[m.filterSort]))
 	b.WriteString("\n")
-	b.WriteString(filterRow(2, "Thể loại:    ", filterGenreOptions[m.filterGenre]))
+	b.WriteString(filterRow(filterRowGenre, "Thể loại:    ", filterGenreOptions[m.filterGenre]))
 	b.WriteString("\n\n")
 
 	btnApply := "[ Áp dụng (Enter) ]"
 	btnReset := "[ Đặt lại (Reset) ]"
-	if m.filterCursor == 3 {
+	if m.filterCursor == filterRowApply {
 		btnApply = activeStyle.Render("[ Áp dụng (Enter) ]")
 	}
-	if m.filterCursor == 4 {
+	if m.filterCursor == filterRowReset {
 		btnReset = activeStyle.Render("[ Đặt lại (Reset) ]")
 	}
 	b.WriteString(fmt.Sprintf("  %s    %s\n\n", btnApply, btnReset))
@@ -631,18 +599,35 @@ func (m SearchModel) renderFilterModal() string {
 }
 
 func (m SearchModel) renderSearchResults() string {
-	items := make([]string, len(m.results))
-	for i, manga := range m.results {
+	rows := m.resultRows()
+	items := make([]string, len(rows))
+	for i, row := range rows {
+		manga, sel := m.selectedVariant(row)
 		t := cleanTitle(manga.Title, manga.Provider)
-		if manga.Provider != "" {
-			items[i] = fmt.Sprintf("%s (%s)", t, strings.ToLower(manga.Provider))
-		} else {
+		if manga.Provider == "" {
 			items[i] = t
+			continue
 		}
+		// The picked source first, then the other sources with the title.
+		sources := []string{strings.ToLower(manga.Provider)}
+		for j, v := range row.variants {
+			if j != sel {
+				sources = append(sources, strings.ToLower(v.Provider))
+			}
+		}
+		items[i] = fmt.Sprintf("%s (%s)", t, strings.Join(sources, " · "))
 	}
-	title := fmt.Sprintf("Kết quả cho \"%s\" (%d/%d):", m.currentQuery, m.cursor+1, len(m.results))
-	if m.showingFeed && len(m.currentQuery) == 0 {
-		title = fmt.Sprintf("󰑓 Truyện Mới Cập Nhật (%d/%d):", m.cursor+1, len(m.results))
+	var title string
+	switch m.listMode {
+	case resultsLatest:
+		title = fmt.Sprintf("󰑓 Truyện Mới Cập Nhật (%d/%d):", m.cursor+1, len(rows))
+	case resultsFilter:
+		title = fmt.Sprintf("󰈲 Kết quả lọc (%d/%d):", m.cursor+1, len(rows))
+	default:
+		title = fmt.Sprintf("Kết quả cho \"%s\" (%d/%d):", m.currentQuery, m.cursor+1, len(rows))
+	}
+	if m.loadingMore {
+		title += " đang tải thêm..."
 	}
 	res := m.renderList(title, "", items, m.cursor)
 	return res
@@ -683,14 +668,7 @@ func (m SearchModel) renderHistory() string {
 		if title == "" {
 			title = h.MangaID
 		}
-		chLabel := h.ChapterNumber
-		if chLabel == "" {
-			chLabel = h.ChapterID
-			if len(chLabel) > 8 {
-				chLabel = chLabel[:8]
-			}
-		}
-		items[i] = fmt.Sprintf("%s - Ch. %s (Trang %d)", title, chLabel, h.PageIndex+1)
+		items[i] = fmt.Sprintf("%s - %s (Trang %d)", title, historyChapterLabel(h), h.PageIndex+1)
 	}
 	var emptyMsg string
 	if m.filterQuery != "" {
@@ -717,8 +695,8 @@ func (m SearchModel) renderFooter() string {
 		return "[" + kStyle.Render(key) + "] " + dStyle.Render(desc)
 	}
 
-	switch {
-	case m.showingFilters:
+	switch m.view {
+	case viewFilters:
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("←/→", "Đổi giá trị"),
 			pill("↑/↓", "Chọn dòng"),
@@ -726,14 +704,14 @@ func (m SearchModel) renderFooter() string {
 			pill("esc", "Đóng"),
 			pill("^c", "Thoát"),
 		)
-	case m.showingSources:
+	case viewSources:
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("space", "Bật/Tắt"),
 			pill("↑/↓", "Di chuyển"),
 			pill("esc", "Quay lại"),
 			pill("^c", "Thoát"),
 		)
-	case m.showingFavorites:
+	case viewFavorites:
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
@@ -742,7 +720,7 @@ func (m SearchModel) renderFooter() string {
 			pill("esc", "Quay lại"),
 			pill("^c", "Thoát"),
 		)
-	case m.showingHistory:
+	case viewHistory:
 		return lipgloss.JoinHorizontal(lipgloss.Center,
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
@@ -761,4 +739,29 @@ func (m SearchModel) renderFooter() string {
 			pill("^c", "Thoát"),
 		)
 	}
+}
+
+func boxColor(val string) color.Color {
+	if strings.HasPrefix(strings.TrimSpace(val), "/") {
+		return lipgloss.Color("5")
+	}
+	return lipgloss.Color("6")
+}
+
+// historyChapterLabel names the chapter of a history entry: "Ch. 12" for a
+// bare number, the stored label as is ("Chương 12"), or, for old entries
+// saved without one, the last segment of the chapter ID (a path or URL).
+func historyChapterLabel(h storage.ReadHistory) string {
+	label := strings.TrimSpace(h.ChapterNumber)
+	if label == "" {
+		label = path.Base(strings.TrimRight(h.ChapterID, "/"))
+		if label == "." || label == "/" {
+			label = h.ChapterID
+		}
+		return runewidth.Truncate(label, 30, "...")
+	}
+	if r := []rune(label)[0]; r >= '0' && r <= '9' {
+		return "Ch. " + label
+	}
+	return label
 }

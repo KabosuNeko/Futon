@@ -7,17 +7,26 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/storage"
-	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/mattn/go-runewidth"
 )
 
 func (m ChapterListModel) View() tea.View {
+	content, _ := m.buildContent()
+	return tea.NewView(content)
+}
+
+// listTopRow is the 0-based terminal row of the first visible chapter.
+func (m ChapterListModel) listTopRow() int {
+	_, top := m.buildContent()
+	return top
+}
+
+// buildContent renders the chapter list and returns the 0-based row of its
+// first item, for mapping mouse clicks.
+func (m ChapterListModel) buildContent() (string, int) {
 	w, h := m.width, m.height
-	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
-		w, h = ts.Cols, ts.Rows
-	}
 	if w == 0 || h == 0 {
-		return tea.NewView("Loading...")
+		return "Loading...", 0
 	}
 
 	boxW := min(76, max(36, w-8))
@@ -99,7 +108,7 @@ func (m ChapterListModel) View() tea.View {
 			Italic(true)
 		contentLines = append(contentLines, emptyStyle.Render("󰅚 Không có chapter nào."))
 	} else {
-		history, hasHistory := storage.GetHistory(m.mangaID)
+		history, hasHistory := m.history, m.history != nil
 
 		viewportEnd := m.viewportStart + visible
 		if viewportEnd > len(m.chapters) {
@@ -173,7 +182,7 @@ func (m ChapterListModel) View() tea.View {
 	if m.inputBuffer != "" {
 		footer = "[enter] Nhảy đến chapter  [esc] Hủy  [^c] Thoát"
 	} else {
-		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất chap  [ctrl+a] Xuất cả bộ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
+		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất CBZ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
 	}
 
 	footerNode := lipgloss.NewStyle().
@@ -189,6 +198,8 @@ func (m ChapterListModel) View() tea.View {
 
 	contentH := lipgloss.Height(content)
 	topPad := max(0, (h-contentH)/2)
+	// Card border, card header and divider sit above the first chapter.
+	listTop := topPad + lipgloss.Height(headerNode) + 3
 
 	placed := lipgloss.PlaceHorizontal(w, lipgloss.Center, content)
 	if topPad > 0 {
@@ -202,7 +213,7 @@ func (m ChapterListModel) View() tea.View {
 		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
 	}
 
-	return tea.NewView(placed)
+	return placed, listTop
 }
 
 func (m *ChapterListModel) jumpToChapter(number string) bool {
@@ -242,16 +253,28 @@ func (m *ChapterListModel) jumpToChapter(number string) bool {
 	return false
 }
 
-func (m *ChapterListModel) restoreHistoryPosition() {
-	if m.mangaID == "" || len(m.chapters) == 0 {
+// reloadHistory refreshes the cached reading position (after the chapter list
+// loads and whenever the reader hands control back).
+func (m *ChapterListModel) reloadHistory() {
+	m.history = nil
+	if m.mangaID == "" {
 		return
 	}
-	history, ok := storage.GetHistory(m.mangaID)
-	if !ok {
+	providerName := ""
+	if m.provider != nil {
+		providerName = m.provider.Name()
+	}
+	if h, ok := storage.GetHistory(m.mangaID, providerName); ok {
+		m.history = h
+	}
+}
+
+func (m *ChapterListModel) restoreHistoryPosition() {
+	if m.history == nil || len(m.chapters) == 0 {
 		return
 	}
 	for i, ch := range m.chapters {
-		if ch.ID == history.ChapterID {
+		if ch.ID == m.history.ChapterID {
 			m.cursor = i
 			m.adjustViewport()
 			return
@@ -260,11 +283,7 @@ func (m *ChapterListModel) restoreHistoryPosition() {
 }
 
 func (m ChapterListModel) visibleItems() int {
-	h := m.height
-	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Rows > 0 {
-		h = ts.Rows
-	}
-	visible := h - 10
+	visible := m.height - 10
 	if m.inputBuffer != "" {
 		visible -= 3
 	}
@@ -275,6 +294,12 @@ func (m ChapterListModel) visibleItems() int {
 		visible = 18
 	}
 	return visible
+}
+
+func (m *ChapterListModel) setSize(w, h int) {
+	if w > 0 && h > 0 {
+		m.width, m.height = w, h
+	}
 }
 
 func (m *ChapterListModel) adjustViewport() {
