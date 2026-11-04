@@ -2,8 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 	"unicode"
 
@@ -27,78 +25,11 @@ type ChapterListModel struct {
 	err           error
 	width         int
 	height        int
-}
-
-type favoriteSavedMsg struct {
-	err error
-}
-
-type cbzExportedMsg struct {
-	path string
-	err  error
-}
-
-type batchExportProgressMsg struct {
-	current int
-	total   int
-	err     error
-	destDir string
-}
-
-// chapterLabel names an export when the provider omits chapter numbers
-// (TruyenQQ returns titles only); without it every chapter exports to the same
-// "Untitled" file.
-func chapterLabel(ch models.Chapter) string {
-	if ch.Number != "" {
-		return ch.Number
-	}
-	if ch.Title != "" {
-		return ch.Title
-	}
-	return "unknown"
-}
-
-func exportAllChaptersCmd(provider api.MangaProvider, mangaTitle string, chapters []models.Chapter) tea.Cmd {
-	return func() tea.Msg {
-		cleanTitle := export.SanitizeFilename(mangaTitle)
-		baseDir, err := export.GetDefaultExportDir()
-		if err != nil {
-			baseDir = "."
-		}
-		mangaDir := filepath.Join(baseDir, cleanTitle)
-		if err := os.MkdirAll(mangaDir, 0755); err != nil {
-			return batchExportProgressMsg{err: fmt.Errorf("tạo thư mục truyện: %w", err)}
-		}
-
-		successCount := 0
-		for _, ch := range chapters {
-			urls, err := provider.FetchPages(ch.ID)
-			if err != nil || len(urls) == 0 {
-				continue
-			}
-			_, err = export.ExportChapterURLsToCBZ(cleanTitle, chapterLabel(ch), urls, mangaDir, provider.Name(), ch.ID)
-			if err == nil {
-				successCount++
-			}
-		}
-
-		return batchExportProgressMsg{
-			destDir: mangaDir,
-			total:   len(chapters),
-			current: successCount,
-		}
-	}
-}
-
-func exportChapterCmd(provider api.MangaProvider, chapterID, mangaTitle, chapterNumber string) tea.Cmd {
-	return func() tea.Msg {
-		urls, err := provider.FetchPages(chapterID)
-		if err != nil {
-			return cbzExportedMsg{err: fmt.Errorf("lấy link ảnh: %w", err)}
-		}
-		path, err := export.ExportChapterURLsToCBZ(mangaTitle, chapterNumber, urls, "", provider.Name(), chapterID)
-		return cbzExportedMsg{path: path, err: err}
-	}
+	// history is the reading position for this manga, loaded with the
+	// chapter list and refreshed when the reader returns, so View stays pure.
+	history *storage.ReadHistory
+	// resumeChapterID, when set, opens that chapter once the list loads.
+	resumeChapterID string
 }
 
 func NewChapterListModel(mangaID, mangaTitle string, provider api.MangaProvider) ChapterListModel {
@@ -113,7 +44,7 @@ func NewChapterListModel(mangaID, mangaTitle string, provider api.MangaProvider)
 }
 
 func (m ChapterListModel) Init() tea.Cmd {
-	return api.FetchChaptersCmd(m.provider, m.mangaID)
+	return fetchChaptersCmd(m.provider, m.mangaID)
 }
 
 func (m ChapterListModel) selectCurrentChapter() (ChapterListModel, tea.Cmd) {
@@ -123,14 +54,16 @@ func (m ChapterListModel) selectCurrentChapter() (ChapterListModel, tea.Cmd) {
 		allNumbers := make([]string, len(m.chapters))
 		for i, c := range m.chapters {
 			allIDs[i] = c.ID
-			allNumbers[i] = c.Number
+			// HTML sources have no chapter numbers; the label keeps the
+			// reader, history and exports readable for them.
+			allNumbers[i] = chapterLabel(c)
 		}
 		return m, func() tea.Msg {
 			return ViewChapterMsg{
 				MangaID:           m.mangaID,
 				MangaTitle:        m.mangaTitle,
 				ChapterID:         ch.ID,
-				ChapterNumber:     ch.Number,
+				ChapterNumber:     chapterLabel(ch),
 				AllChapterIDs:     allIDs,
 				AllChapterNumbers: allNumbers,
 				ChapterIndex:      m.cursor,
@@ -162,8 +95,7 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, ok := msg.(tea.MouseClickMsg); !ok {
 				return m, nil
 			}
-			// Header/margin offset in chapter list card is ~6 lines
-			itemIdx := m.viewportStart + (mouse.Y - 6)
+			itemIdx := m.viewportStart + (mouse.Y - m.listTopRow())
 			if itemIdx >= 0 && itemIdx < len(m.chapters) {
 				if itemIdx == m.cursor {
 					return m.selectCurrentChapter()
@@ -178,9 +110,6 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s := msg.String()
 
 		switch s {
-		case "ctrl+c":
-			return m, tea.Quit
-
 		case "esc":
 			if m.inputBuffer != "" {
 				m.inputBuffer = ""
@@ -200,7 +129,7 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Title:    m.mangaTitle,
 						Provider: m.provider.Name(),
 					})
-					return favoriteSavedMsg{err: err}
+					return storageSavedMsg{err: err}
 				},
 				clearFlashAfter(2*time.Second),
 			)
@@ -210,13 +139,6 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ch := m.chapters[m.cursor]
 				m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", chapterLabel(ch))
 				return m, exportChapterCmd(m.provider, ch.ID, m.mangaTitle, chapterLabel(ch))
-			}
-			return m, nil
-
-		case "ctrl+a":
-			if len(m.chapters) > 0 {
-				m.flashMsg = fmt.Sprintf("Đang tải & xuất toàn bộ %d Chapters ra CBZ...", len(m.chapters))
-				return m, exportAllChaptersCmd(m.provider, m.mangaTitle, m.chapters)
 			}
 			return m, nil
 
@@ -278,19 +200,11 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.flashMsg = fmt.Sprintf("Lỗi xuất CBZ: %v", msg.err)
 		} else {
-			m.flashMsg = fmt.Sprintf("Đã xuất CBZ: %s", msg.path)
+			m.flashMsg = fmt.Sprintf("Đã xuất CBZ: %s", export.ShortPath(msg.path))
 		}
 		return m, clearFlashAfter(3 * time.Second)
 
-	case batchExportProgressMsg:
-		if msg.err != nil {
-			m.flashMsg = fmt.Sprintf("Lỗi xuất toàn bộ CBZ: %v", msg.err)
-		} else {
-			m.flashMsg = fmt.Sprintf("Đã xuất %d/%d chapters vào %s", msg.current, msg.total, msg.destDir)
-		}
-		return m, clearFlashAfter(5 * time.Second)
-
-	case favoriteSavedMsg:
+	case storageSavedMsg:
 		if msg.err != nil {
 			m.flashMsg = fmt.Sprintf("Lỗi lưu yêu thích: %v", msg.err)
 		}
@@ -300,7 +214,7 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flashMsg = ""
 		return m, nil
 
-	case api.ChapterListMsg:
+	case chaptersLoadedMsg:
 		m.loading = false
 		if msg.Err != nil {
 			m.err = msg.Err
@@ -310,7 +224,15 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.viewportStart = 0
 		m.err = nil
+		m.reloadHistory()
 		m.restoreHistoryPosition()
+		// Continuing from history: go straight to the reader when the saved
+		// chapter still exists (the reader resumes the saved page itself).
+		resume := m.resumeChapterID
+		m.resumeChapterID = ""
+		if resume != "" && m.cursor < len(m.chapters) && m.chapters[m.cursor].ID == resume {
+			return m.selectCurrentChapter()
+		}
 		return m, nil
 
 	case tea.WindowSizeMsg:

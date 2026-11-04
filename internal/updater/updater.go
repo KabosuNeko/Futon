@@ -37,12 +37,29 @@ const (
 	repoName  = "Futon"
 )
 
-const installScript = "curl -sSL https://raw.githubusercontent.com/KabosuNeko/Futon/main/install.sh -o /tmp/futon_install.sh && bash /tmp/futon_install.sh && rm /tmp/futon_install.sh"
+// installScript downloads install.sh to a private temp file and runs it. The
+// URL arrives as $1 so it is never spliced into shell source. curl -f makes an
+// HTTP error fail the command instead of executing the error page as bash.
+const installScript = `set -eu
+tmp=$(mktemp "${TMPDIR:-/tmp}/futon-install.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+curl -fsSL "$1" -o "$tmp"
+bash "$tmp"`
+
+// installScriptURL returns install.sh at ref: the release tag being installed,
+// or main when no tag is known (dev builds).
+func installScriptURL(ref string) string {
+	if ref == "" {
+		ref = "main"
+	}
+	return "https://raw.githubusercontent.com/" + repoOwner + "/" + repoName + "/" + ref + "/install.sh"
+}
 
 // InstallScriptCommand returns the install.sh invocation shared by the CLI
-// updater and the TUI update flow. Callers wire stdin/stdout/stderr.
-func InstallScriptCommand() *exec.Cmd {
-	return exec.Command("bash", "-c", installScript)
+// updater and the TUI update flow. ref is the release tag to take install.sh
+// from ("" for main). Callers wire stdin/stdout/stderr.
+func InstallScriptCommand(ref string) *exec.Cmd {
+	return exec.Command("bash", "-c", installScript, "futon-install", installScriptURL(ref))
 }
 
 var apiURL = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/releases/latest"

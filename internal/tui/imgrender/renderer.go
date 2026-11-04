@@ -3,7 +3,6 @@ package imgrender
 import (
 	"image"
 	"os"
-	"strings"
 )
 
 type RenderedImage struct {
@@ -17,6 +16,9 @@ type Renderer interface {
 	RenderImage(img image.Image) (RenderedImage, error)
 }
 
+// New picks the renderer: FUTON_RENDERER=kitty|sixel overrides detection;
+// Kitty for terminals known to implement its graphics protocol (kitty,
+// Ghostty, WezTerm), since it is faster; Sixel otherwise.
 func New() Renderer {
 	term := os.Getenv("TERM")
 
@@ -30,8 +32,12 @@ func New() Renderer {
 	if term == "xterm-kitty" || os.Getenv("KITTY_WINDOW_ID") != "" {
 		return kittyRenderer{}
 	}
-
-	if strings.HasPrefix(term, "st-") {
+	// Ghostty has no Sixel at all; WezTerm has both and Kitty is faster.
+	switch os.Getenv("TERM_PROGRAM") {
+	case "ghostty", "WezTerm":
+		return kittyRenderer{}
+	}
+	if term == "xterm-ghostty" {
 		return kittyRenderer{}
 	}
 

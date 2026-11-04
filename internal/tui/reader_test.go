@@ -1,11 +1,15 @@
 package tui
 
 import (
+	"errors"
 	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
+	"github.com/mattn/go-runewidth"
 )
 
 // collectMessages runs a command tree and returns every non-nil message.
@@ -302,5 +306,221 @@ func TestReaderChapterJumpUsesPreloadedNextChapter(t *testing.T) {
 	}
 	if rm.step != stepRead {
 		t.Errorf("step = %v, want stepRead after applying preload", rm.step)
+	}
+}
+
+func newReadingModel(total int) ReaderModel {
+	m := NewReaderModel("m1", "Title", "c1", "1", []string{"c1", "c2"}, 0, 0, nil)
+	m.step = stepRead
+	m.total = total
+	m.urls = make([]string, total)
+	m.imageData = make([][]byte, total)
+	return m
+}
+
+func TestReaderPageFailureDoesNotEndChapter(t *testing.T) {
+	m := newReadingModel(3)
+	m.currentIdx = 1
+	m.isLoading = true
+	m.downloading[1] = struct{}{}
+
+	rm, _ := m.update(downloadProgressMsg{index: 1, chapterID: "c1", err: errors.New("HTTP 503")})
+	if rm.step == stepError {
+		t.Fatal("one failed page put the whole chapter into the error state")
+	}
+	if rm.isLoading {
+		t.Error("reader keeps waiting for a page that failed")
+	}
+	if !strings.Contains(rm.frameContent(), "[r] Thử lại") {
+		t.Errorf("failed page does not offer a retry:\n%q", rm.frameContent())
+	}
+
+	// Navigation still works past the failed page.
+	rm.imageData[2] = []byte{1}
+	next, _ := rm.handleNextPage()
+	if next.currentIdx != 2 {
+		t.Errorf("currentIdx = %d, want 2", next.currentIdx)
+	}
+}
+
+func TestReaderRetryRedownloadsFailedPage(t *testing.T) {
+	m := newReadingModel(2)
+	m.failed[0] = errors.New("boom")
+
+	rm, cmd := m.update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	if cmd == nil {
+		t.Fatal("r did not start a download")
+	}
+	if _, still := rm.failed[0]; still || !rm.isLoading {
+		t.Errorf("retry state: failed=%v isLoading=%v", rm.failed, rm.isLoading)
+	}
+}
+
+func TestReaderPreloadsWhenResumingPastTrigger(t *testing.T) {
+	m := newReadingModel(10)
+	m.currentIdx = 9 // resumed on the last page: total-3 was never visited
+
+	if m.maybePreloadNext() == nil || !m.isPreloadingNext {
+		t.Fatal("no preload when the chapter opens past the trigger page")
+	}
+}
+
+func TestReaderPreloadsShortChapter(t *testing.T) {
+	m := newReadingModel(2)
+	if m.maybePreloadNext() == nil {
+		t.Fatal("a chapter shorter than the trigger offset never preloads")
+	}
+}
+
+func TestReaderDoesNotRetryFailedPreloadOnEveryFlip(t *testing.T) {
+	m := newReadingModel(5)
+	m.currentIdx = 3
+	if m.maybePreloadNext() == nil {
+		t.Fatal("expected a preload near the end")
+	}
+	m, _ = m.handlePreloadComplete(PreloadCompleteMsg{ChapID: "c2"}) // failed: no URLs
+	m.currentIdx = 4
+	if m.maybePreloadNext() != nil {
+		t.Error("a failed preload is retried on every page flip")
+	}
+}
+
+func TestReaderFlashStaysOnOneRow(t *testing.T) {
+	m := newReadingModel(2)
+	m.width, m.height = 60, 20
+	m.flashMsg = "Đã lưu ảnh: " + strings.Repeat("rất-dài/", 20) + "x.jpg"
+	m.failed[0] = errors.New("x") // render the error frame so no image is needed
+	frame := m.frameContent()
+	i := strings.Index(frame, "Đã lưu ảnh")
+	if i < 0 {
+		t.Fatal("flash not drawn")
+	}
+	if w := runewidth.StringWidth(ansiStrip(frame[i:])); w > m.width {
+		t.Errorf("flash is %d cells wide on a %d-cell row; it would wrap onto the footer", w, m.width)
+	}
+}
+
+// ansiStrip removes CSI escape sequences.
+func ansiStrip(s string) string {
+	return regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`).ReplaceAllString(s, "")
+}
+
+func TestReaderFooterFitsNarrowTerminal(t *testing.T) {
+	m := newReadingModel(3)
+	m.currentIdx = 1
+	foot := m.footerText(79)
+	if w := runewidth.StringWidth(foot); w > 79 {
+		t.Fatalf("footer is %d cells on an 80-column terminal: %q", w, foot)
+	}
+	for _, keep := range []string{"Trang 2/3", "[esc] Thoát", "[←/h] [→/l] Trang"} {
+		if !strings.Contains(foot, keep) {
+			t.Errorf("narrow footer dropped %q: %q", keep, foot)
+		}
+	}
+	if strings.Contains(foot, "…") {
+		t.Errorf("hints should be dropped whole, not cut mid-word: %q", foot)
+	}
+}
+
+func TestReaderFooterInWebtoonMode(t *testing.T) {
+	m := newReadingModel(3)
+	m.fitWidth = true
+	foot := m.footerText(200)
+	for _, want := range []string{"[↑/↓] Cuộn", "[k/j] Chap", "[w] Vừa màn hình"} {
+		if !strings.Contains(foot, want) {
+			t.Errorf("webtoon footer missing %q: %q", want, foot)
+		}
+	}
+}
+
+// webtoonModel is a reader in webtoon mode on page 0 of 3, whose current
+// page is known to be 100 rows tall.
+func webtoonModel() ReaderModel {
+	m := newReadingModel(3)
+	m.fitWidth = true
+	m.height = 24 // 22 image rows with the footer
+	for i := range m.imageData {
+		m.imageData[i] = []byte{1}
+	}
+	m.scaled = &scaledPage{idx: 0, chapterID: m.chapterID, rows: 100}
+	return m
+}
+
+func TestWebtoonScrollsWithinPageThenAdvances(t *testing.T) {
+	m := webtoonModel()
+	view := m.viewRows()
+
+	m, cmd := m.scrollPage(1)
+	if m.currentIdx != 0 || m.scrollRow != view/2 || cmd == nil || !m.isLoading {
+		t.Fatalf("first scroll: page %d row %d loading %v", m.currentIdx, m.scrollRow, m.isLoading)
+	}
+
+	// The window comes back clamped to the bottom of the page.
+	m, _ = m.update(renderDoneMsg{index: 0, chapterID: m.chapterID, windowed: true, requested: m.scrollRow, scroll: 100 - view, totalRows: 100})
+	if m.isLoading || m.scrollRow != 100-view {
+		t.Fatalf("after render: row %d loading %v", m.scrollRow, m.isLoading)
+	}
+
+	// At the bottom, the next scroll moves to the next page, at its top.
+	m, _ = m.scrollPage(1)
+	if m.currentIdx != 1 || m.scrollRow != 0 {
+		t.Errorf("past the bottom: page %d row %d, want page 1 row 0", m.currentIdx, m.scrollRow)
+	}
+}
+
+func TestWebtoonScrollUpEntersPreviousPageAtBottom(t *testing.T) {
+	m := webtoonModel()
+	m.currentIdx = 1
+	m.scaled = nil
+
+	m, cmd := m.scrollPage(-1)
+	if m.currentIdx != 0 || m.scrollRow != bottomOfPage || cmd == nil {
+		t.Fatalf("scroll up at top: page %d row %d, want page 0 at the bottom", m.currentIdx, m.scrollRow)
+	}
+}
+
+func TestWebtoonStaleWindowIsIgnored(t *testing.T) {
+	m := webtoonModel()
+	m.scrollRow = 22
+	m.isLoading = true
+	m, _ = m.update(renderDoneMsg{index: 0, chapterID: m.chapterID, windowed: true, requested: 11, scroll: 11, totalRows: 100})
+	if !m.isLoading || m.scrollRow != 22 {
+		t.Errorf("an older scroll's window replaced the newer request: row %d loading %v", m.scrollRow, m.isLoading)
+	}
+}
+
+func TestWebtoonKeysKeepChapterJumpsOnJK(t *testing.T) {
+	m := webtoonModel()
+	if m2, _ := m.update(tea.KeyPressMsg{Code: tea.KeyDown}); m2.chapterIndex != 0 || m2.scrollRow == 0 {
+		t.Error("down must scroll in webtoon mode")
+	}
+	if m2, _ := m.update(tea.KeyPressMsg{Code: 'j', Text: "j"}); m2.step != stepLoadingNext {
+		t.Error("j must still jump to the next chapter")
+	}
+}
+
+func TestToggleFitWidthRerendersAndSaves(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := newReadingModel(2)
+	m.imageData[0] = []byte{1}
+	m.setCached(0, imgrender.RenderedImage{EscapeSequence: "old"})
+
+	m, cmd := m.update(tea.KeyPressMsg{Code: 'w', Text: "w"})
+	if !m.fitWidth || !m.isLoading || cmd == nil {
+		t.Fatalf("w: fitWidth=%v loading=%v", m.fitWidth, m.isLoading)
+	}
+	if _, cached := m.imageCache[0]; cached {
+		t.Error("pages rendered for the other mode must be dropped")
+	}
+}
+
+func TestReaderModeCarriesAcrossChapters(t *testing.T) {
+	app := NewAppModel("dev")
+	app.reader = NewReaderModel("m", "T", "c1", "1", []string{"c1", "c2"}, 0, 0, nil)
+	app.reader.fitWidth = true
+
+	updated, _ := app.Update(ViewChapterMsg{MangaID: "m", ChapterID: "c2", AllChapterIDs: []string{"c1", "c2"}, ChapterIndex: 1})
+	if !updated.(AppModel).reader.fitWidth {
+		t.Error("the next chapter lost webtoon mode")
 	}
 }

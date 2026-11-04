@@ -6,12 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type UserData struct {
 	Sources   []string        `json:"sources,omitempty"`
 	Favorites []FavoriteManga `json:"favorites,omitempty"`
+	// ChapterLang is the MangaDex chapter language chosen with /lang.
+	ChapterLang string `json:"chapter_lang,omitempty"`
+	// ReaderFitWidth remembers the reader's webtoon (fit-width) mode.
+	ReaderFitWidth bool `json:"reader_fit_width,omitempty"`
 }
+
+// userdataMu serializes read-modify-write cycles: favorites and source
+// toggles are saved from concurrent tea.Cmds, and an unguarded update could
+// overwrite the other's change.
+var userdataMu sync.Mutex
 
 type FavoriteManga struct {
 	MangaID  string `json:"manga_id"`
@@ -65,6 +75,9 @@ func LoadUserData() (*UserData, error) {
 }
 
 func updateUserData(update func(*UserData)) error {
+	userdataMu.Lock()
+	defer userdataMu.Unlock()
+
 	ud, err := LoadUserData()
 	if err != nil {
 		return err
@@ -97,6 +110,32 @@ func SaveSources(names []string) error {
 	return updateUserData(func(ud *UserData) { ud.Sources = names })
 }
 
+// LoadChapterLang returns the saved MangaDex chapter language, or "" if unset.
+func LoadChapterLang() (string, error) {
+	ud, err := LoadUserData()
+	if err != nil {
+		return "", err
+	}
+	return ud.ChapterLang, nil
+}
+
+func SaveChapterLang(lang string) error {
+	return updateUserData(func(ud *UserData) { ud.ChapterLang = lang })
+}
+
+// LoadReaderFitWidth reports whether the reader opens in fit-width mode.
+func LoadReaderFitWidth() (bool, error) {
+	ud, err := LoadUserData()
+	if err != nil {
+		return false, err
+	}
+	return ud.ReaderFitWidth, nil
+}
+
+func SaveReaderFitWidth(on bool) error {
+	return updateUserData(func(ud *UserData) { ud.ReaderFitWidth = on })
+}
+
 func LoadFavorites() ([]FavoriteManga, error) {
 	ud, err := LoadUserData()
 	if err != nil {
@@ -105,10 +144,12 @@ func LoadFavorites() ([]FavoriteManga, error) {
 	return ud.Favorites, nil
 }
 
+// AddFavorite stores a manga once per (provider, ID): IDs are opaque strings
+// per source, so the same ID on two sources is two different manga.
 func AddFavorite(manga FavoriteManga) error {
 	return updateUserData(func(ud *UserData) {
 		for _, f := range ud.Favorites {
-			if f.MangaID == manga.MangaID {
+			if f.MangaID == manga.MangaID && f.Provider == manga.Provider {
 				return
 			}
 		}
@@ -116,10 +157,10 @@ func AddFavorite(manga FavoriteManga) error {
 	})
 }
 
-func RemoveFavorite(mangaID string) error {
+func RemoveFavorite(mangaID, provider string) error {
 	return updateUserData(func(ud *UserData) {
 		for i, f := range ud.Favorites {
-			if f.MangaID == mangaID {
+			if f.MangaID == mangaID && f.Provider == provider {
 				ud.Favorites = append(ud.Favorites[:i], ud.Favorites[i+1:]...)
 				return
 			}

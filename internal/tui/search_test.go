@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/storage"
@@ -14,7 +17,7 @@ import (
 
 func testSearchModel() SearchModel {
 	return NewSearchModel([]api.MangaProvider{
-		api.NewOTruyenProvider(),
+		api.NewBaoTangTruyenProvider(),
 		api.NewMangaDexProvider(),
 	})
 }
@@ -28,6 +31,7 @@ func TestSearchViewShowsResults(t *testing.T) {
 		{ID: "m2", Title: "One Piece"},
 	}
 	m.currentQuery = "shonen"
+	m.listMode = resultsSearch
 	m.cursor = 1
 
 	view := m.View().Content
@@ -46,7 +50,7 @@ func TestSearchViewShowsFavorites(t *testing.T) {
 	m := testSearchModel()
 	m.width = 80
 	m.height = 24
-	m.showingFavorites = true
+	m.view = viewFavorites
 	m.favorites = []storage.FavoriteManga{
 		{MangaID: "m1", Title: "Bleach"},
 	}
@@ -64,7 +68,7 @@ func TestSearchViewShowsHistory(t *testing.T) {
 	m := testSearchModel()
 	m.width = 80
 	m.height = 24
-	m.showingHistory = true
+	m.view = viewHistory
 	m.history = []storage.ReadHistory{
 		{MangaID: "m1", MangaTitle: "Doraemon", ChapterNumber: "1", PageIndex: 3},
 	}
@@ -111,11 +115,11 @@ func TestSearchSlashCommands(t *testing.T) {
 		newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 		rm := newM.(SearchModel)
 
-		if rm.showingFavorites != tc.wantFavorites {
-			t.Errorf("%q: showingFavorites = %v, want %v", tc.input, rm.showingFavorites, tc.wantFavorites)
+		if (rm.view == viewFavorites) != tc.wantFavorites {
+			t.Errorf("%q: showingFavorites = %v, want %v", tc.input, (rm.view == viewFavorites), tc.wantFavorites)
 		}
-		if rm.showingHistory != tc.wantHistory {
-			t.Errorf("%q: showingHistory = %v, want %v", tc.input, rm.showingHistory, tc.wantHistory)
+		if (rm.view == viewHistory) != tc.wantHistory {
+			t.Errorf("%q: showingHistory = %v, want %v", tc.input, (rm.view == viewHistory), tc.wantHistory)
 		}
 		if rm.chapterLanguage != tc.wantLang {
 			t.Errorf("%q: chapterLanguage = %v, want %v", tc.input, rm.chapterLanguage, tc.wantLang)
@@ -141,7 +145,7 @@ func TestSearchViewSplitLayoutAndPreview(t *testing.T) {
 			Status:   "ongoing",
 			Genres:   []string{"Action", "Adventure", "Comedy"},
 		},
-		{ID: "m2", Title: "Bleach", CoverURL: "https://example.com/bleach.jpg", Provider: "OTruyen"},
+		{ID: "m2", Title: "Bleach", CoverURL: "https://example.com/bleach.jpg", Provider: "MangaDex"},
 	}
 	m.currentQuery = "shonen"
 	m.cursor = 0
@@ -173,7 +177,7 @@ func TestSearchViewSplitLayoutAndPreview(t *testing.T) {
 func TestCoverDebounceAndRenderMsg(t *testing.T) {
 	m := testSearchModel()
 	m.results = []models.Manga{
-		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "OTruyen"},
+		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "MangaDex"},
 	}
 	m.cursor = 0
 
@@ -247,14 +251,18 @@ type streamProvider struct {
 	manga []models.Manga
 }
 
-func (p streamProvider) Name() string                            { return p.name }
-func (p streamProvider) Search(string) ([]models.Manga, error)   { return p.manga, nil }
-func (p streamProvider) FetchLatest(int) ([]models.Manga, error) { return p.manga, nil }
-func (p streamProvider) Filter(api.FilterOptions) ([]models.Manga, error) {
+func (p streamProvider) Name() string                                           { return p.name }
+func (p streamProvider) Search(context.Context, string) ([]models.Manga, error) { return p.manga, nil }
+func (p streamProvider) FetchLatest(context.Context, int) ([]models.Manga, error) {
 	return p.manga, nil
 }
-func (p streamProvider) FetchChapters(string) ([]models.Chapter, error) { return nil, nil }
-func (p streamProvider) FetchPages(string) ([]string, error)            { return nil, nil }
+func (p streamProvider) Filter(context.Context, api.FilterOptions) ([]models.Manga, error) {
+	return p.manga, nil
+}
+func (p streamProvider) FetchChapters(context.Context, string) ([]models.Chapter, error) {
+	return nil, nil
+}
+func (p streamProvider) FetchPages(context.Context, string) ([]string, error) { return nil, nil }
 
 func TestStreamedResultsApplyWhileSearching(t *testing.T) {
 	m := NewSearchModel([]api.MangaProvider{streamProvider{
@@ -262,12 +270,12 @@ func TestStreamedResultsApplyWhileSearching(t *testing.T) {
 		manga: []models.Manga{{ID: "m1", Title: "Naruto"}},
 	}})
 	m.width, m.height = 100, 24
-	m.showingFeed = false
+	m.listMode = resultsSearch
 	m.currentQuery = "naruto"
 	m.isSearching = true
 
-	cmd := api.GlobalSearchCmd(m.providers, "naruto")
-	msg := cmd().(api.MangaSearchResultMsg)
+	cmd := searchAllCmd(context.Background(), m.providers, "naruto")
+	msg := cmd().(resultsMsg)
 	if msg.Stream == nil {
 		t.Fatal("single-provider search should still stream a snapshot")
 	}
@@ -281,9 +289,9 @@ func TestStreamedResultsApplyWhileSearching(t *testing.T) {
 		t.Fatal("expected a command to await the next snapshot")
 	}
 
-	var final api.MangaSearchResultMsg
+	var final resultsMsg
 	for _, sub := range drainBatch(t, next) {
-		if m, ok := sub.(api.MangaSearchResultMsg); ok {
+		if m, ok := sub.(resultsMsg); ok {
 			final = m
 		}
 	}
@@ -318,25 +326,77 @@ func drainBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	return []tea.Msg{msg}
 }
 
-func TestSourceTogglesMigrateFoxTruyenToTruyenGG(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	if err := storage.SaveSources([]string{"TruyenQQ", "FoxTruyen"}); err != nil {
-		t.Fatalf("SaveSources: %v", err)
-	}
+func TestSourceTogglesMigrateMergedSourcesToTruyenQQ(t *testing.T) {
+	for _, saved := range []string{"TruyenGG", "FoxTruyen"} {
+		t.Setenv("HOME", t.TempDir())
+		if err := storage.SaveSources([]string{saved, "CuuTruyen"}); err != nil {
+			t.Fatalf("SaveSources: %v", err)
+		}
 
-	m := NewSearchModel([]api.MangaProvider{
-		api.NewTruyenQQProvider(),
-		api.NewTruyenGGProvider(),
-		api.NewBaoTangTruyenProvider(),
-	})
+		m := NewSearchModel([]api.MangaProvider{
+			api.NewTruyenQQProvider(),
+			api.NewBaoTangTruyenProvider(),
+			api.NewCuuTruyenProvider(),
+		})
 
-	if !m.providerToggles[0] {
-		t.Error("TruyenQQ toggle should stay enabled")
+		if !m.providerToggles[0] {
+			t.Errorf("saved %s should enable TruyenQQ, which it was merged into", saved)
+		}
+		if m.providerToggles[1] {
+			t.Error("BaoTangTruyen was not in saved sources and should stay disabled")
+		}
+		if !m.providerToggles[2] {
+			t.Error("CuuTruyen toggle should stay enabled")
+		}
 	}
-	if !m.providerToggles[1] {
-		t.Error("FoxTruyen source should migrate to TruyenGG being enabled")
+}
+
+func TestSearchInputKeepsKittyLikeText(t *testing.T) {
+	m := testSearchModel()
+	for _, r := range "_Gi=;OK" {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = updated.(SearchModel)
 	}
-	if m.providerToggles[2] {
-		t.Error("BaoTangTruyen was not in saved sources and should stay disabled")
+	if got := m.input.Value(); got != "_Gi=;OK" {
+		t.Errorf("input = %q, typed text was rewritten", got)
+	}
+}
+
+func TestFeedErrorWrapsToScreenWidth(t *testing.T) {
+	m := testSearchModel()
+	m.width, m.height = 80, 30
+	m.err = errors.New(strings.Repeat("rất dài ", 40))
+	for _, line := range strings.Split(m.View().Content, "\n") {
+		if w := lipgloss.Width(line); w > m.width {
+			t.Fatalf("line is %d cells wide on an %d-cell screen: %q", w, m.width, line)
+		}
+	}
+}
+
+func TestHistoryChapterLabel(t *testing.T) {
+	cases := []struct {
+		h    storage.ReadHistory
+		want string
+	}{
+		{storage.ReadHistory{ChapterNumber: "12"}, "Ch. 12"},
+		{storage.ReadHistory{ChapterNumber: "Chương 12"}, "Chương 12"},
+		{storage.ReadHistory{ChapterID: "/truyen-tranh/futari-bus-22373-chap-1"}, "futari-bus-22373-chap-1"},
+		{storage.ReadHistory{ChapterID: "/truyen/blue-lock/38"}, "38"},
+	}
+	for _, c := range cases {
+		if got := historyChapterLabel(c.h); got != c.want {
+			t.Errorf("historyChapterLabel(%+v) = %q, want %q", c.h, got, c.want)
+		}
+	}
+}
+
+func TestHTMLSourceChapterOpensWithReadableLabel(t *testing.T) {
+	m := NewChapterListModel("m1", "T", nil)
+	m.loading = false
+	m.chapters = []models.Chapter{{ID: "/truyen-tranh/x-chap-1", Title: "Chương 1"}}
+	_, cmd := m.selectCurrentChapter()
+	msg := cmd().(ViewChapterMsg)
+	if msg.ChapterNumber != "Chương 1" || msg.AllChapterNumbers[0] != "Chương 1" {
+		t.Errorf("chapter label = %q / %v, want the title", msg.ChapterNumber, msg.AllChapterNumbers)
 	}
 }

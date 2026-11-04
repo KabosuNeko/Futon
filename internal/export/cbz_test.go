@@ -3,8 +3,6 @@ package export
 import (
 	"archive/zip"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +60,7 @@ func TestExportImagesToCBZ(t *testing.T) {
 		t.Errorf("missing 002.png in cbz")
 	}
 
-	if !strings.Contains(comicInfoContent, "<Series>One - Piece- Test</Series>") {
+	if !strings.Contains(comicInfoContent, "<Series>One / Piece: Test</Series>") {
 		t.Errorf("ComicInfo missing series title, got:\n%s", comicInfoContent)
 	}
 	if !strings.Contains(comicInfoContent, "<PageCount>2</PageCount>") {
@@ -112,8 +110,8 @@ func TestDetectImageExt(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		if got := detectImageExt(c.data); got != c.want {
-			t.Errorf("detectImageExt(%s) = %q, want %q", c.name, got, c.want)
+		if got := DetectImageExt(c.data); got != c.want {
+			t.Errorf("DetectImageExt(%s) = %q, want %q", c.name, got, c.want)
 		}
 	}
 }
@@ -160,88 +158,70 @@ func TestExportEscapesXMLMetadata(t *testing.T) {
 	}
 }
 
-func TestImageClientHasTimeout(t *testing.T) {
-	if imageClient.Timeout <= 0 {
-		t.Fatal("image client has no timeout; a stalled CDN would hang an export")
+func TestExportImagesToCBZRejectsMissingPage(t *testing.T) {
+	dir := t.TempDir()
+	jpg := []byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01")
+	if _, err := ExportImagesToCBZ("T", "1", [][]byte{jpg, nil, jpg}, dir); err == nil {
+		t.Fatal("expected an error for a missing page")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("failed export left files behind: %v", entries)
 	}
 }
 
-func TestDownloadImageMangaDexHeaders(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("User-Agent"); got != mangaDexImageUserAgent {
-			t.Errorf("User-Agent = %q, want %q", got, mangaDexImageUserAgent)
-		}
-		if got := r.Header.Get("Referer"); got != "" {
-			t.Errorf("MangaDex Referer = %q, want none", got)
-		}
-		w.Write([]byte("image-bytes"))
-	}))
-	defer srv.Close()
-
-	data, err := DownloadImage(srv.URL, "MangaDex", "https://mangadex.org/chapter/123")
+func TestExportKeepsOriginalTitleInComicInfo(t *testing.T) {
+	jpg := []byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01")
+	path, err := ExportImagesToCBZ("Re:Zero / Arc 1", "1", [][]byte{jpg}, t.TempDir())
 	if err != nil {
-		t.Fatalf("DownloadImage error: %v", err)
+		t.Fatal(err)
 	}
-	if string(data) != "image-bytes" {
-		t.Errorf("data = %q", data)
-	}
-}
-
-func TestDownloadImageUsesChapterReferer(t *testing.T) {
-	const chapterURL = "https://truyenqqko.com/truyen/one-piece/chuong-1.html"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Referer"); got != chapterURL {
-			t.Errorf("Referer = %q, want %q", got, chapterURL)
-		}
-		if got := r.Header.Get("User-Agent"); got != defaultImageUserAgent {
-			t.Errorf("User-Agent = %q, want %q", got, defaultImageUserAgent)
-		}
-		w.Write([]byte("image-bytes"))
-	}))
-	defer srv.Close()
-
-	if _, err := DownloadImage(srv.URL, "TruyenQQ", chapterURL); err != nil {
-		t.Fatalf("DownloadImage error: %v", err)
-	}
-}
-
-func TestExportChapterURLsSendsProviderHeaders(t *testing.T) {
-	const chapterURL = "https://truyenggvn.com/truyen-tranh/one-piece-chap-1"
-	jpg := []byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Referer"); got != chapterURL {
-			http.Error(w, "missing referer", http.StatusForbidden)
-			return
-		}
-		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write(jpg)
-	}))
-	defer srv.Close()
-
-	path, err := ExportChapterURLsToCBZ("Title", "1", []string{srv.URL}, t.TempDir(), "TruyenGG", chapterURL)
-	if err != nil {
-		t.Fatalf("ExportChapterURLsToCBZ error: %v", err)
-	}
-
 	zr, err := zip.OpenReader(path)
 	if err != nil {
-		t.Fatalf("open zip: %v", err)
+		t.Fatal(err)
 	}
 	defer zr.Close()
-	if len(zr.File) != 2 {
-		t.Fatalf("zip entries = %d, want ComicInfo.xml + 1 page", len(zr.File))
+	rc, err := zr.File[0].Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := io.ReadAll(rc)
+	rc.Close()
+	if !strings.Contains(string(data), "<Series>Re:Zero / Arc 1</Series>") {
+		t.Errorf("ComicInfo.xml lost the original title:\n%s", data)
 	}
 }
 
-func TestExportChapterURLsFailsWhenProviderRejects(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-	}))
-	defer srv.Close()
+func TestChapterFileLabel(t *testing.T) {
+	for in, want := range map[string]string{
+		"12":        "Chap_12",
+		"100.5":     "Chap_100.5",
+		"Chương 12": "Chương 12",
+		"Chap 150":  "Chap 150",
+		"":          "unknown",
+	} {
+		if got := ChapterFileLabel(in); got != want {
+			t.Errorf("ChapterFileLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
 
-	_, err := ExportChapterURLsToCBZ("Title", "1", []string{srv.URL}, t.TempDir(), "TruyenQQ", "https://truyenqqko.com/x")
-	if err == nil {
-		t.Fatal("expected an error when every page download is rejected")
+func TestCBZNameDoesNotRepeatChapterWord(t *testing.T) {
+	path, err := ExportImagesToCBZ("Blue Lock", "Chương 1", [][]byte{[]byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01")}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(path, "Blue Lock_Chương 1.cbz") {
+		t.Errorf("path = %q, want Blue Lock_Chương 1.cbz", path)
+	}
+}
+
+func TestShortPathUsesTilde(t *testing.T) {
+	t.Setenv("HOME", "/home/someone")
+	if got := ShortPath("/home/someone/Downloads/Futon/x.cbz"); got != "~/Downloads/Futon/x.cbz" {
+		t.Errorf("ShortPath = %q", got)
+	}
+	if got := ShortPath("/tmp/x.cbz"); got != "/tmp/x.cbz" {
+		t.Errorf("ShortPath outside home = %q", got)
 	}
 }

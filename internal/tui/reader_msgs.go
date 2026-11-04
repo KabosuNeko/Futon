@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/export"
 	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
-func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel, tea.Cmd) {
+func (m ReaderModel) handleChapterImages(msg pagesLoadedMsg) (ReaderModel, tea.Cmd) {
 	if msg.Err != nil {
 		m.step = stepError
 		m.err = msg.Err
@@ -26,6 +26,7 @@ func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel,
 	m.downloaded = 0
 	m.downloadPos = 0
 	m.downloading = make(map[int]struct{})
+	m.failed = make(map[int]error)
 	m.currentIdx = 0
 
 	// Resolve starting page: -2 = last page, >=0 = specific, default = history bookmark.
@@ -35,7 +36,7 @@ func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel,
 	case m.startPage >= 0 && m.startPage < m.total:
 		m.currentIdx = m.startPage
 	default:
-		if history, ok := storage.GetHistory(m.mangaID); ok && history.ChapterID == m.chapterID {
+		if history, ok := storage.GetHistory(m.mangaID, m.providerName()); ok && history.ChapterID == m.chapterID {
 			if history.PageIndex > 0 && history.PageIndex < m.total {
 				m.currentIdx = history.PageIndex
 			}
@@ -44,7 +45,7 @@ func (m ReaderModel) handleChapterImages(msg api.ChapterImagesMsg) (ReaderModel,
 
 	m.downloadOrder = m.buildDownloadOrder(m.currentIdx)
 	m.step = stepDownload
-	return m, tea.Batch(m.scheduleDownloads()...)
+	return m, tea.Batch(append(m.scheduleDownloads(), m.maybePreloadNext())...)
 }
 
 func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderModel, tea.Cmd) {
@@ -52,13 +53,14 @@ func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderMode
 	if msg.chapterID != m.chapterID {
 		return m, nil
 	}
-	if msg.err != nil {
-		m.step = stepError
-		m.err = msg.err
-		return m, nil
-	}
 	if msg.index < 0 || msg.index >= len(m.imageData) {
 		return m, nil
+	}
+	if msg.err != nil {
+		// One bad page must not end the chapter: mark it and keep going.
+		delete(m.downloading, msg.index)
+		m.markFailed(msg.index, msg.err)
+		return m, tea.Batch(m.scheduleDownloads()...)
 	}
 	if msg.data != nil {
 		m.imageData[msg.index] = msg.data
@@ -81,7 +83,7 @@ func (m ReaderModel) handleDownloadProgress(msg downloadProgressMsg) (ReaderMode
 func (m *ReaderModel) startReading() tea.Cmd {
 	m.step = stepRead
 	m.isLoading = true
-	return renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.imageRows())
+	return m.renderCmd(m.currentIdx)
 }
 
 func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) {
@@ -89,10 +91,12 @@ func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) 
 		return m, nil
 	}
 	if msg.err != nil {
-		m.step = stepError
-		m.err = msg.err
-		m.isLoading = false
+		// Undecodable page (e.g. an unsupported format): same as a failed download.
+		m.markFailed(msg.index, msg.err)
 		return m, nil
+	}
+	if msg.windowed {
+		return m.handleWindowRendered(msg)
 	}
 	m.setCached(msg.index, msg.img)
 	m.clampCurrentIndex()
@@ -102,7 +106,7 @@ func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) 
 
 	cmds := m.scheduleDownloads()
 	if nextIdx := m.nextRenderIndex(); nextIdx >= 0 && nextIdx < len(m.imageData) {
-		cmds = append(cmds, renderPage(m.renderer, m.imageData[nextIdx], nextIdx, m.chapterID, m.imageRows()))
+		cmds = append(cmds, m.renderCmd(nextIdx))
 	}
 	if len(cmds) == 0 {
 		return m, nil
@@ -120,10 +124,20 @@ func (m ReaderModel) handlePreloadComplete(msg PreloadCompleteMsg) (ReaderModel,
 	return m, nil
 }
 
+// markFailed records a page error. If it is the page on screen, stop waiting
+// for it so the error is shown and navigation keeps working.
+func (m *ReaderModel) markFailed(idx int, err error) {
+	m.failed[idx] = err
+	if idx == m.currentIdx {
+		m.step = stepRead
+		m.isLoading = false
+	}
+}
+
 func (m ReaderModel) handlePreloadTransitionReady(_ preloadTransitionReadyMsg) (ReaderModel, tea.Cmd) {
-	cmds := m.scheduleDownloads()
+	cmds := append(m.scheduleDownloads(), m.maybePreloadNext())
 	if m.step == stepRead && m.validCurrentImage() {
-		cmds = append(cmds, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.imageRows()))
+		cmds = append(cmds, m.renderCmd(m.currentIdx))
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -132,7 +146,7 @@ func (m ReaderModel) handleImageSaved(msg imageSavedMsg) (ReaderModel, tea.Cmd) 
 	if msg.err != nil {
 		m.flashMsg = fmt.Sprintf("Lỗi lưu ảnh: %v", msg.err)
 	} else {
-		m.flashMsg = fmt.Sprintf("Đã lưu ảnh: %s", msg.path)
+		m.flashMsg = fmt.Sprintf("Đã lưu ảnh: %s", export.ShortPath(msg.path))
 	}
 	return m, nil
 }
@@ -140,9 +154,12 @@ func (m ReaderModel) handleImageSaved(msg imageSavedMsg) (ReaderModel, tea.Cmd) 
 func (m ReaderModel) handleWindowSize(msg tea.WindowSizeMsg) (ReaderModel, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
+	if m.fitWidth {
+		m.resetImageCache() // the width the pages were scaled to changed
+	}
 	if m.step == stepRead && m.validCurrentImage() {
 		m.isLoading = true
-		return m, renderPage(m.renderer, m.imageData[m.currentIdx], m.currentIdx, m.chapterID, m.imageRows())
+		return m, m.renderCmd(m.currentIdx)
 	}
 	return m, nil
 }

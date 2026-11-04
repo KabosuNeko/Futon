@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
@@ -189,7 +188,7 @@ func splitSearchModelWithCover() (SearchModel, imgrender.RenderedImage) {
 	m.width = 100
 	m.height = 24
 	m.results = []models.Manga{
-		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "OTruyen"},
+		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "MangaDex"},
 	}
 	m.cursor = 0
 	rendered := imgrender.RenderedImage{
@@ -278,7 +277,7 @@ func TestSearchCoverClearOnHide(t *testing.T) {
 	_ = nextCoverPaint(t, sm, paintCmd)
 
 	// A failed search clears the cover.
-	newM2, cmd := sm.Update(api.MangaSearchResultMsg{Err: errors.New("boom")})
+	newM2, cmd := sm.Update(resultsMsg{Err: errors.New("boom")})
 	sm2 := newM2.(SearchModel)
 	if sm2.currentCover != nil {
 		t.Fatal("expected currentCover to be cleared on search error")
@@ -405,7 +404,7 @@ func TestLeaveSearchClearsCoverBeforeChapters(t *testing.T) {
 	app.search.width = 100
 	app.search.height = 24
 	app.search.results = []models.Manga{
-		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "OTruyen"},
+		{ID: "m1", Title: "One Piece", CoverURL: "https://example.com/cover.jpg", Provider: "MangaDex"},
 	}
 	rendered := imgrender.RenderedImage{
 		EscapeSequence: "\x1b_Gf=100,a=T;COVER\x1b\\",
@@ -415,7 +414,7 @@ func TestLeaveSearchClearsCoverBeforeChapters(t *testing.T) {
 	app.search.currentCover = &rendered
 	app.search.coverKey = app.search.coverPaintState()
 
-	updated, cmd := app.Update(ViewMangaMsg{MangaID: "m1", Title: "One Piece", ProviderName: "OTruyen"})
+	updated, cmd := app.Update(ViewMangaMsg{MangaID: "m1", Title: "One Piece", ProviderName: "MangaDex"})
 	if cmd == nil {
 		t.Fatal("expected a clear command before switching to chapters")
 	}
