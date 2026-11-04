@@ -34,7 +34,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 ### 4.1 Search
 
 - **FR-S1**: Typing ≥ 3 characters on the search screen triggers a search after a **300ms debounce**; fewer than 3 characters does not trigger a search.
-- **FR-S2**: Search runs **concurrently across all enabled providers** (1 goroutine per provider); each source's results stream back as soon as it finishes, and a final snapshot marks completion.
+- **FR-S2**: Search runs **concurrently across all enabled providers** (1 goroutine per provider); each source's results stream back as soon as it finishes, and a final snapshot marks completion. Starting a new search/feed/filter request **cancels** the in-flight one (its HTTP requests and retries stop).
 - **FR-S3**: Each source's results carry a `Provider` and the title is rewritten to `"Title (sourcename)"` (lowercase source name).
 - **FR-S4**: If one provider fails, results from the other providers are still returned (partial success); errors are joined into a single message with `"; "` and a per-provider warning line shows which sources failed while still displaying successful results.
 - **FR-S5**: If **no source is enabled**, every search action shows the error "Chọn ít nhất một nguồn trong /src".
@@ -42,24 +42,37 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-S7**: Stale search results are discarded if the query has changed (stale-response guard).
 - **FR-S8**: Until the first results arrive, searches show the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ...") and the initial feed shows its loading text; partial results appear as each source completes; after completion a subtle warning lists the failed providers plus a healthy/total source count.
 - **FR-S9**: Provider HTTP calls have a **10s timeout** and retry up to **2 times** on network errors or 5xx responses with incremental backoff.
+- **FR-S10**: The latest feed and filter results are **paged**: moving the cursor onto the last item loads the next page and appends it below (titles already listed are skipped); an empty page ends paging. Search results are not paged.
+- **FR-S12**: The result list shows **one row per title**: results whose titles match after normalization (source suffix removed, case folded, punctuation and spacing ignored) are grouped and list all their sources, the picked one first. `shift+←`/`shift+→` change the picked source (plain `←`/`→` keep editing the query); the preview shows it ("1/2"), `enter` opens it, and the choice survives more results streaming in. Untitled entries are never grouped.
+- **FR-S11**: Provider errors are never masked: a failing filter request surfaces as that provider's error instead of silently falling back to the latest list, and a latest-updates page that parses to nothing is an error (the site markup changed).
 
 #### Per-provider limits
-- **MangaDex**: search is **paginated** — each request uses `limit=100`, looping by offset until `total` is reached (following the `FetchChapters` pattern); no longer capped at 5 results. Title priority `vi` → `en` → `ja-ro` → any language, fallback "Không rõ tiêu đề".
-- **OTruyen**: cover URLs are built from the API's `APP_DOMAIN_CDN_IMAGE` when `thumb_url` is relative.
-- **TruyenQQ / TruyenGG / BaoTangTruyen**: HTML scraping, requires a browser UA (Chrome 127) due to bot detection.
+- **MangaDex**: search is **paginated** — `limit=100` per request, at most **3 pages (300 results)**; a broad query would otherwise walk thousands of titles, trip the rate limit, and hit the API's `offset+limit ≤ 10000` cap. If a later page fails, the pages already fetched are kept. Search, latest and filter lists only include titles with chapters in the `/lang` language (`availableTranslatedLanguage[]`). Title priority `vi` → `en` → `ja-ro` → any language, fallback "Không rõ tiêu đề".
+- **TruyenQQ / BaoTangTruyen / CuuTruyen**: HTML scraping, requires a browser UA (Chrome 127) due to bot detection.
+- **TruyenQQ**: primary `truyenqqko.com`, mirror `truyenggvn.com` (TruyenGG: same catalog and paths), probed once on first use. Manga and chapter IDs are **paths without host or `.html`**, so they stay valid on either mirror and search/list results of the same manga share one ID; image downloads send the chapter's absolute URL on the current mirror as `Referer` (the CDN returns 403 without it).
+- **CuuTruyen**: `cuutruyen.moe` (a copy of CuuTruyen with unscrambled, lightly compressed images, ~1024px). If the site shows its Livewire password gate, the provider submits the default password `5` and retries; a session cookie keeps it unlocked. IDs are paths; chapters are listed newest-first on the site and reversed.
+
+#### Filter mapping
+- Genre slugs per provider are kept in one table per provider, in the order of `api.FilterGenres`; a test enforces equal length.
+- **TruyenQQ**: with a genre, `/the-loai/{slug}[/trang-N]` with `status` (0 ongoing, 2 completed) and `sort` (2 updated, 4 most viewed); without a genre, completed → `/truyen-hoan-thanh`, popular → `/top-thang`, rating → `/truyen-yeu-thich`, else latest. Paths never end in `.html` (TruyenQQ's `.html` redirect drops the query; the mirror accepts both).
+- **CuuTruyen**: search uses `/tim-kiem?filter[name]=` (the site's `keyword` parameter returns HTTP 500). `/tim-kiem` combines `filter[accept_genres]`, `filter[status]` (site codes: 2 ongoing, 1 completed) and `sort` (`-updated_at`, `-views` for popular and rating, `name` for A–Z).
+- A latest/filter page past the end returns an empty list, not an error; only an empty **first** latest page is an error.
+- **BaoTangTruyen**: `/tim-truyen[/{slug}]?status=&sort=&page=` combines genre, status and sort (popular → top all-time, rating → most liked; no alphabetical sort).
+- **Merged sources**: TruyenGG (and the earlier FoxTruyen) are folded into TruyenQQ: saved source toggles map to TruyenQQ, and on launch TruyenGG favorites/history are re-labelled TruyenQQ with their IDs converted to paths (idempotent; when two history entries collide the most recent wins). FoxTruyen entries are left as they are (different site).
+- **Removed sources**: OTruyen was removed (its API returns 404 everywhere). Opening a favorite/history entry from a source that no longer exists shows "Nguồn X không còn được hỗ trợ." instead of opening it with another provider; entries without a provider still use the first source. A saved source list in which no source exists any more enables all sources.
 
 ### 4.2 Slash commands
 
-- **FR-C1** `src`: opens the source checklist; `space` toggles each provider on/off; state is **persisted to `userdata.json` immediately**; `esc` closes it.
+- **FR-C1** `src`: opens the source checklist; `space` toggles each provider on/off; state is **persisted to `userdata.json` immediately** (in a background command; rapid toggles are written in order); `esc` closes it and reloads the feed with the new sources.
 - **FR-C2** `fav`: opens the favorites list (loaded async); `enter` opens a manga; `ctrl+d` removes a favorite.
-- **FR-C3** `his`: opens reading history (loaded async); `enter` opens a manga resuming at the right chapter; `ctrl+d` removes an entry.
-- **FR-C4** `lang vi|en`: sets the chapter language for **MangaDex** (default `vi`); invalid syntax shows "Dùng: /lang vi hoặc /lang en".
+- **FR-C3** `his`: opens reading history (loaded async); `enter` loads the chapter list and goes **straight into the reader** at the saved chapter and page (staying on the list if that chapter no longer exists; `esc` from the reader returns to the list); `ctrl+d` removes an entry.
+- **FR-C4** `lang vi|en`: sets the chapter language for **MangaDex** (default `vi`), persisted to `userdata.json` (`chapter_lang`) and restored on launch; invalid syntax shows "Dùng: /lang vi hoặc /lang en".
 - **FR-C5**: In `/fav`, `/his`, or `/src` mode, typing filters the list in real time (case-insensitive, substring) by Title (fav), MangaTitle/ID (his), source name (src).
 
 ### 4.3 Favorites
 
 - **FR-F1**: `ctrl+f` on the chapter list adds a manga to favorites; shows flash "Đã thêm ... vào Yêu thích" (2s).
-- **FR-F2**: Deduped by MangaID — adding a duplicate is a no-op.
+- **FR-F2**: Deduped by (Provider, MangaID) — adding a duplicate is a no-op; the same ID on two providers is two favorites.
 - **FR-F3**: Persisted to `~/.config/futon/userdata.json` (`favorites` field).
 
 ### 4.4 Reading history
@@ -72,55 +85,57 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-H5**: The chapter list restores the cursor to the last-read chapter (`restoreHistoryPosition`).
 - **FR-H6**: The reader resumes at the correct page when opening a chapter that matches history (via `StartPageIndex=-1`).
 - **FR-H7**: History keeps the old Title/ChapterNumber if the new write does not provide them (prevents information loss).
+- **FR-H9**: History is keyed by (Provider, MangaID). Entries written before the provider was recorded are still found by MangaID and are re-keyed on the next save.
 
 ### 4.5 Chapter list
 
 - **FR-L1**: Shows the manga's chapter list ordered from chapter 1 (HTML sources reverse newest-first back to ascending).
 - **FR-L2**: **Quick jump** — type a number + `enter` to jump to that chapter; matching is fuzzy in priority: exact `Number` → prefix `Number` → substring `Number` → title contains query; no match → flash "Không tìm thấy chapter X".
 - **FR-L3**: `esc` while typing a number clears the input buffer; `esc` with no input returns to search.
-- **FR-L4**: HTML providers returning chapters **without a Number** fall back to displaying the Title.
-- **FR-L5**: MangaDex chapter feed is filtered by the configured language (`/lang`), auto-paginated 500 chapters per request.
+- **FR-L4**: HTML providers returning chapters **without a Number** fall back to displaying the Title; that title is also the chapter label passed to the reader, history and file names.
+- **FR-L5**: MangaDex chapter feed is filtered by the configured language (`/lang`), auto-paginated 500 chapters per request. External chapters (hosted on another site, no pages) are excluded, and when several groups upload the same chapter number only the first is listed.
 
 ### 4.6 Reader
 
 - **FR-R1**: Page navigation: `→`/`l` next page, `←`/`h` previous page. **Only active in the reader** (not swallowed by other screens).
 - **FR-R2**: **Continuous chapter switching**: on the last page, `→` goes to the next chapter; on the first page, `←` goes to the previous chapter — no need to return to the list.
-- **FR-R10**: **Fast chapter jump**: `j`/`↓` switches to the next chapter from any page; `k`/`↑` switches to the previous chapter from any page. Both open the target chapter at its first page and use the preloaded next chapter when available.
-- **FR-R3**: Chapter preload: reaching 3 pages before the end (0-based index `total-3`) automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
+- **FR-R10**: **Fast chapter jump**: `j` (and `↓` outside webtoon mode) switches to the next chapter from any page; `k` (and `↑`) to the previous one. Both open the target chapter at its first page and use the preloaded next chapter when available.
+- **FR-R12**: **Webtoon mode** (`w` toggles, remembered in `userdata.json` as `reader_fit_width` and kept across chapters): pages are scaled to the terminal width, never beyond their native width, and shown through a window of terminal height. `↓`/`space`/wheel-down scroll half a screen; past the bottom they go to the next page (at its top); `↑`/wheel-up scroll back, and above the top go to the previous page **at its bottom**. `←`/`→` still change pages and `j`/`k` chapters. Each page is decoded and scaled once; a scroll only crops and encodes the visible window, and the previous window stays on screen until the new one is ready. The footer shows how far down the page the window is.
+- **FR-R13**: The footer never wraps: when the terminal is too narrow, the least important hints are dropped whole (page number, navigation and `esc` are kept). Flash messages are truncated to one row.
+- **FR-R3**: Chapter preload: being within 3 pages of the end (0-based index `>= total-3`, checked on every page change and when a chapter opens, so resumes and short chapters count) automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
 - **FR-R4**: LRU image cache of **20 rendered images** (key = page index), evicts the oldest page; reset when entering a new chapter. Pre-renders at most 3 pages ahead that are not yet cached.
-- **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon/`, filename `{Title}_Ch{ChapterNumber}_Pg{page}.jpg`, sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
-- **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind.
+- **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon/`, filename `{Title}_{Chapter}_Pg{page}.{ext}` where `ext` matches the image data (jpg/png/webp/gif), sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
+- **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind. Each image retries up to **3 attempts** on network errors, 5xx and 429.
+- **FR-R11**: A page that fails to download or decode does **not** end the chapter: that page shows "Lỗi trang N: … — [r] Thử lại", other pages and navigation keep working, and `r` downloads it again.
 - **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`).
 - **FR-R8**: Terminal resize → re-render the current page.
 - **FR-R9**: `ctrl+h` toggles the reader footer/hint row. Hidden, the page is re-rendered to use the freed row; rendered cache is cleared so pages are not reused at the old size.
 
 ### 4.7 Image rendering
 
-- **FR-G1**: Auto-detect renderer: `FUTON_RENDERER` env override (`kitty`/`sixel`) > Kitty (`TERM=xterm-kitty`, `KITTY_WINDOW_ID`, `TERM` prefix `st-`) > Sixel (fallback).
-- **FR-G2**: Images fit the terminal size, **leaving the last row** for the footer/flash, preserving aspect ratio (Lanczos3 resize).
+- **FR-G1**: Auto-detect renderer: `FUTON_RENDERER` env override (`kitty`/`sixel`) > Kitty (`TERM=xterm-kitty`, `KITTY_WINDOW_ID`, Ghostty via `TERM=xterm-ghostty` or `TERM_PROGRAM=ghostty`, WezTerm via `TERM_PROGRAM=WezTerm`) > Sixel (fallback).
+- **FR-G2**: Images fit the terminal size, **leaving the last row** for the footer/flash, preserving aspect ratio (Catmull-Rom resize via `golang.org/x/image/draw`).
 - **FR-G3**: Uses ANSI cursor positioning + screen clear (`\x1b[H\x1b[2J`); **no `\n` scrolling** in the reader.
-- **FR-G4**: Kitty protocol: PNG → base64 → 2048-byte chunks.
+- **FR-G4**: Kitty protocol: PNG (fastest compression level) → base64 → 2048-byte chunks.
 
 ### 4.8 Self-update
 
 - **FR-U1**: On startup, checks GitHub `releases/latest` (5s timeout) in the background; `dev` version (built from source) **does not check**.
-- **FR-U2**: If a new version exists → banner `"[!] Đã có bản cập nhật {version}. Nhấn Ctrl+u để tự động cài đặt."` (actual key: `ctrl+u`).
-- **FR-U3**: `ctrl+u` (only on search, when banner visible) → runs `install.sh` from the GitHub main branch (via `curl|bash`, includes `sudo`), shows "Đang cập nhật..."; then forces exit to apply. If the install command fails, returns to search with "Cập nhật lỗi: ..." instead of exiting. **Why `ctrl+u` not `U`:** the search input is always focused, so a single-letter `U` would be typed into the search box; a `ctrl` combo avoids conflict.
-- **FR-U4**: Alternative triggers (same install path, no conflict with typing):
-  - **`/update`** slash command in search (enter) → checks version first: if outdated → installs immediately; if up-to-date → systemMsg "Đã là bản mới nhất."; if check fails → error shown.
-  - **`futon update`** CLI (also `futon --update`, `futon self-update`): run outside TUI, prints status to stdout/stderr and exits.
+- **FR-U2**: If a new version exists → banner `"[!] Đã có bản cập nhật {version}. Thoát rồi chạy \`futon update\` để cài."`.
+- **FR-U3**: Installing happens **only** from the CLI: `futon update` (also `futon --update`, `futon self-update`) runs outside the TUI, prints status and exits. It runs `install.sh` from the **release tag being installed** (`main` for dev builds), downloaded with `curl -f` to a `mktemp` file so an HTTP error aborts instead of running the error page. The TUI never runs the installer: it may prompt for `sudo`, which does not belong inside a full-screen app.
+- **FR-U4**: `/update` in search only checks: outdated → systemMsg "Có bản {version}. Thoát rồi chạy \`futon update\` để cài."; up-to-date → "Đã là bản mới nhất."; failure → the error; dev builds → a hint to run `futon update`.
 - **FR-U5**: Version comparison is semver component-wise (strips the `v` prefix).
 
 ### 4.9 Keybinding summary
 
-The keybindings table in `README.md` is the user-facing source of truth; FR-R1/FR-H8/FR-U3 above are the normative requirements.
+The keybindings table in `README.md` is the user-facing source of truth; FR-R1/FR-R12/FR-H8 above are the normative requirements.
 `tab` cycles search screens forward and `shift+tab` cycles them backward.
 
 ### 4.10 CBZ export
 
-- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_Chap_{Number}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader.
-- **FR-E2**: `ctrl+a` in the chapter list exports every chapter into `~/Downloads/Futon/{Title}/`; chapters that fail to download are skipped, and the final flash reports `{success}/{total}`.
-- **FR-E3**: Each CBZ contains `ComicInfo.xml` (series/title/number/page count, XML-escaped) and zero-padded page entries named `001.<ext>`, `002.<ext>`, ...
+- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. Messages show paths with `~` for the home directory.
+- **FR-E2**: Each CBZ contains `ComicInfo.xml` (original series/chapter titles, XML-escaped; only the file name is sanitized) and zero-padded page entries named `001.<ext>`, `002.<ext>`, ...
+- **FR-E3**: A CBZ is only written when **every page** downloaded (pages download 4 at a time, with the FR-R6 retries); otherwise the export fails naming the page. The archive is written to a temp file and renamed, so a failed export leaves no partial `.cbz`.
 
 ## 5. Non-Functional Requirements
 
@@ -134,28 +149,28 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 | What | Path | Format |
 |---|---|---|
-| Favorites + source toggles | `~/.config/futon/userdata.json` | JSON: `sources[]`, `favorites[]` |
-| Reading history | `~/.config/futon/history.json` | JSON array of records (`manga_id` key in memory) |
-| Downloaded images | `~/Downloads/Futon/` | JPG |
+| Favorites + source toggles + chapter language | `~/.config/futon/userdata.json` | JSON: `sources[]`, `favorites[]`, `chapter_lang` |
+| Reading history | `~/.config/futon/history.json` | JSON array of records, newest first (`provider` + `manga_id` key in memory) |
+| Downloaded images | `~/Downloads/Futon/` | Original format (JPG/PNG/WebP/GIF) |
 
 - **Migration**: on first run after upgrade, if `userdata.json` does not exist, old `favorites.json` + `sources.json` are auto-merged into `userdata.json` and the 2 old files are deleted (one-time).
 - Source toggles are stored by **provider name**; all enabled by default.
 
 ## 7. Platform
 
-- **Language**: Go 1.26; build/test commands live in `AGENTS.md`.
+- **Language**: Go ≥ 1.26 (minimum in `go.mod`; releases are built with the latest stable Go); build/test commands live in `AGENTS.md`.
 - **Release**: GoReleaser — Linux + macOS × amd64 + arm64; `v*` tags; version injected into the binary (`main.Version`).
 - **Supported terminals**: Kitty, WezTerm, Ghostty, foot, iTerm2, Konsole, mlterm, XTerm (sixel).
 
 ## 8. Architecture Constraints
 
-- Manga ID is an **opaque string** — slug (OTruyen), UUID (MangaDex), URL (HTML providers) — its format must not be assumed.
+- Manga ID is an **opaque string** — UUID (MangaDex), URL path (HTML providers) — its format must not be assumed.
 - Code structure, provider interface, and conventions live in `AGENTS.md`.
 
 ## 9. Definition of Done (for every change)
 
 1. Clean build: `go build ./...`.
-2. Tests pass: `go test ./...` and `go test -race ./...`.
+2. Tests pass: `go test ./...` and `go test -race ./...`. CI (`.github/workflows/ci.yml`) runs gofmt, `go vet`, `go test -race` and Linux/macOS builds on every push and PR; the release workflow runs vet + tests before GoReleaser, so a failing tag publishes nothing.
 3. Regression test for any changed TUI/storage behavior.
 4. `SPEC.md` / `README.md` updated if user-facing behavior changes.
 5. No type-error suppression; no removed tests.

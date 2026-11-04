@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -14,9 +15,9 @@ import (
 
 const kittyClearSeq = "\x1b_Ga=d,q=2;\x1b\\"
 
-func downloadOne(url string, index int, chapterID, providerName string) tea.Cmd {
+func downloadOne(provider api.MangaProvider, chapterID, url string, index int) tea.Cmd {
 	return func() tea.Msg {
-		data, err := export.DownloadImage(url, providerName, chapterID)
+		data, err := api.DownloadPage(context.Background(), provider, chapterID, url)
 		if err != nil {
 			return downloadProgressMsg{index: index, chapterID: chapterID, err: fmt.Errorf("tải ảnh %d: %w", index+1, err)}
 		}
@@ -37,7 +38,8 @@ func renderPage(r imgrender.Renderer, imgData []byte, index int, chapterID strin
 // preloadNextChapter fetches the next chapter's pages before the user asks.
 func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 	return func() tea.Msg {
-		urls, err := provider.FetchPages(nextID)
+		ctx := context.Background()
+		urls, err := provider.FetchPages(ctx, nextID)
 		if err != nil {
 			return PreloadCompleteMsg{ChapID: nextID}
 		}
@@ -47,7 +49,7 @@ func preloadNextChapter(nextID string, provider api.MangaProvider) tea.Cmd {
 
 		images := make([][]byte, 0, preloadCount)
 		for i := 0; i < preloadCount; i++ {
-			data, err := export.DownloadImage(urls[i], provider.Name(), nextID)
+			data, err := api.DownloadPage(ctx, provider, nextID, urls[i])
 			if err != nil {
 				break
 			}
@@ -106,18 +108,16 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 		if safeTitle == "Untitled" {
 			safeTitle = "manga"
 		}
-		ch := export.SanitizeFilename(chapterNumber)
-		if ch == "Untitled" {
-			ch = "unknown"
-		}
-		path := filepath.Join(dir, fmt.Sprintf("%s_Ch%s_Pg%d.jpg", safeTitle, ch, pageNumber))
+		ch := export.SanitizeFilename(export.ChapterFileLabel(chapterNumber))
+		ext := export.DetectImageExt(data)
+		path := filepath.Join(dir, fmt.Sprintf("%s_%s_Pg%d.%s", safeTitle, ch, pageNumber, ext))
 
 		// If filename exists, append suffix up to 999 before giving up.
 		for suffix := 1; suffix < 1000; suffix++ {
 			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 				break
 			}
-			path = filepath.Join(dir, fmt.Sprintf("%s_Ch%s_Pg%d_%d.jpg", safeTitle, ch, pageNumber, suffix))
+			path = filepath.Join(dir, fmt.Sprintf("%s_%s_Pg%d_%d.%s", safeTitle, ch, pageNumber, suffix, ext))
 		}
 
 		if err := os.WriteFile(path, data, 0o644); err != nil {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,7 +15,11 @@ import (
 
 const baotangtruyenBaseURL = "https://www.baotangtruyen.vip"
 
-var baotangtruyenBrowserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+// baotangGenres are genre slugs under /tim-truyen/ in FilterGenres order
+// (the site has no "isekai" tag; "chuyen-sinh" is its equivalent).
+var baotangGenres = []string{"", "action", "adventure", "comedy", "drama", "fantasy", "chuyen-sinh", "romance", "shounen", "manhwa"}
+
+const baotangListSelector = "div.items > div.row > div.item, .list-stories .item, .items .item"
 
 type BaoTangTruyenProvider struct {
 	baseURL    string
@@ -30,6 +35,12 @@ func NewBaoTangTruyenProvider() *BaoTangTruyenProvider {
 
 func (p *BaoTangTruyenProvider) Name() string {
 	return "BaoTangTruyen"
+}
+
+func (p *BaoTangTruyenProvider) coverReferer() string { return p.baseURL }
+
+func (p *BaoTangTruyenProvider) pageReferer(chapterID string) string {
+	return resolveURL(p.baseURL, chapterID)
 }
 
 func parseBaoTangList(doc *goquery.Document, selector string) []models.Manga {
@@ -68,10 +79,8 @@ func parseBaoTangList(doc *goquery.Document, selector string) []models.Manga {
 	return mangas
 }
 
-func (p *BaoTangTruyenProvider) Search(keyword string) ([]models.Manga, error) {
-	endpoint := p.baseURL + "/tim-truyen?keyword=" + url.QueryEscape(keyword)
-
-	resp, err := httpGet(p.httpClient, endpoint, baotangtruyenBrowserUA)
+func (p *BaoTangTruyenProvider) fetchList(ctx context.Context, endpoint, selector string) ([]models.Manga, error) {
+	resp, err := httpGet(ctx, p.httpClient, endpoint, browserUserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -81,73 +90,60 @@ func (p *BaoTangTruyenProvider) Search(keyword string) ([]models.Manga, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
-
-	return parseBaoTangList(doc, "div.items > div.row > div.item"), nil
+	return parseBaoTangList(doc, selector), nil
 }
 
-func (p *BaoTangTruyenProvider) FetchLatest(page int) ([]models.Manga, error) {
-	if page < 1 {
-		page = 1
-	}
-	endpoint := p.baseURL + fmt.Sprintf("/truyen-moi?page=%d", page)
+func (p *BaoTangTruyenProvider) Search(ctx context.Context, keyword string) ([]models.Manga, error) {
+	return p.fetchList(ctx, p.baseURL+"/tim-truyen?keyword="+url.QueryEscape(keyword), "div.items > div.row > div.item")
+}
 
-	resp, err := httpGet(p.httpClient, endpoint, baotangtruyenBrowserUA)
+func (p *BaoTangTruyenProvider) FetchLatest(ctx context.Context, page int) ([]models.Manga, error) {
+	page = max(1, page)
+	mangas, err := p.fetchList(ctx, p.baseURL+fmt.Sprintf("/truyen-moi?page=%d", page), baotangListSelector)
 	if err != nil {
-		resp, err = httpGet(p.httpClient, p.baseURL, baotangtruyenBrowserUA)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
-	defer resp.Body.Close()
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("parse HTML: %w", err)
-	}
-
-	mangas := parseBaoTangList(doc, "div.items > div.row > div.item, .list-stories .item, .items .item")
-	if len(mangas) == 0 {
-		return p.Search("")
+	// Only an empty first page means broken parsing; later pages end the list.
+	if len(mangas) == 0 && page == 1 {
+		return nil, errEmptyList
 	}
 	return mangas, nil
 }
 
-func (p *BaoTangTruyenProvider) Filter(opts FilterOptions) ([]models.Manga, error) {
-	page := opts.Page
-	if page < 1 {
-		page = 1
-	}
-
-	var endpoint string
-	if opts.Genre > 0 {
-		genres := []string{"", "action", "adventure", "comedy", "drama", "fantasy", "isekai", "romance", "shounen", "manhwa"}
-		if opts.Genre < len(genres) {
-			endpoint = p.baseURL + fmt.Sprintf("/the-loai/%s?page=%d", genres[opts.Genre], page)
-		}
-	} else if opts.Status == 2 {
-		endpoint = p.baseURL + fmt.Sprintf("/truyen-hoan-thanh?page=%d", page)
-	} else if opts.Sort == 1 || opts.Sort == 2 {
-		endpoint = p.baseURL + fmt.Sprintf("/truyen-hot?page=%d", page)
-	} else {
-		return p.FetchLatest(page)
-	}
-
-	resp, err := httpGet(p.httpClient, endpoint, baotangtruyenBrowserUA)
+// Filter uses the site's /tim-truyen[/genre] listing, which accepts genre,
+// status and sort together. There is no alphabetical sort; it falls back to
+// the default (recently updated) order.
+func (p *BaoTangTruyenProvider) Filter(ctx context.Context, opts FilterOptions) ([]models.Manga, error) {
+	genre, err := genreSlug(baotangGenres, opts.Genre)
 	if err != nil {
-		return p.FetchLatest(page)
-	}
-	defer resp.Body.Close()
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("parse HTML: %w", err)
+		return nil, err
 	}
 
-	mangas := parseBaoTangList(doc, "div.items > div.row > div.item, .list-stories .item, .items .item")
-	if len(mangas) == 0 {
-		return p.FetchLatest(page)
+	path := "/tim-truyen"
+	if genre != "" {
+		path += "/" + genre
 	}
-	return mangas, nil
+
+	q := url.Values{}
+	switch opts.Status {
+	case 1:
+		q.Set("status", "1")
+	case 2:
+		q.Set("status", "2")
+	default:
+		q.Set("status", "-1")
+	}
+	switch opts.Sort {
+	case 1:
+		q.Set("sort", "10") // top all-time views
+	case 2:
+		q.Set("sort", "20") // most liked
+	default:
+		q.Set("sort", "0")
+	}
+	q.Set("page", fmt.Sprintf("%d", max(1, opts.Page)))
+
+	return p.fetchList(ctx, p.baseURL+path+"?"+q.Encode(), baotangListSelector)
 }
 
 type btChapterItem struct {
@@ -159,10 +155,10 @@ type btItemList struct {
 	ItemListElement []btChapterItem `json:"itemListElement"`
 }
 
-func (p *BaoTangTruyenProvider) FetchChapters(mangaURL string) ([]models.Chapter, error) {
+func (p *BaoTangTruyenProvider) FetchChapters(ctx context.Context, mangaURL string) ([]models.Chapter, error) {
 	endpoint := resolveURL(p.baseURL, mangaURL)
 
-	resp, err := httpGet(p.httpClient, endpoint, baotangtruyenBrowserUA)
+	resp, err := httpGet(ctx, p.httpClient, endpoint, browserUserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -204,10 +200,10 @@ func (p *BaoTangTruyenProvider) FetchChapters(mangaURL string) ([]models.Chapter
 	return chapters, nil
 }
 
-func (p *BaoTangTruyenProvider) FetchPages(chapterID string) ([]string, error) {
+func (p *BaoTangTruyenProvider) FetchPages(ctx context.Context, chapterID string) ([]string, error) {
 	endpoint := resolveURL(p.baseURL, chapterID)
 
-	resp, err := httpGet(p.httpClient, endpoint, baotangtruyenBrowserUA)
+	resp, err := httpGet(ctx, p.httpClient, endpoint, browserUserAgent)
 	if err != nil {
 		return nil, err
 	}

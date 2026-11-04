@@ -25,14 +25,14 @@ Terminal cần support **Kitty Graphics Protocol** hoặc **Sixel**:
 |----------|----------|
 | [Kitty](https://sw.kovidgoyal.net/kitty/) | Kitty (native) |
 | [WezTerm](https://wezfurlong.org/wezterm/) | Kitty + Sixel |
-| [Ghostty](https://ghostty.org/) | Kitty + Sixel |
+| [Ghostty](https://ghostty.org/) | Kitty |
 | [foot](https://codeberg.org/dnkl/foot) | Sixel |
 | [iTerm2](https://iterm2.com/) | Sixel |
 | [Konsole](https://konsole.kde.org/) | Sixel |
 | [mlterm](https://github.com/arakiken/mlterm) | Sixel |
 | [XTerm](https://invisible-island.net/xterm/) | Sixel (compile với `--enable-sixel`) |
 
-Kitty protocol nhanh hơn. Nếu terminal support cả hai, Futon tự động ưu tiên Kitty.
+Kitty protocol nhanh hơn. Với Kitty, Ghostty và WezTerm, Futon tự dùng Kitty; terminal khác dùng Sixel. Có thể ép bằng `FUTON_RENDERER=kitty` hoặc `FUTON_RENDERER=sixel`.
 
 ## Cài đặt
 
@@ -76,9 +76,9 @@ futon update       # kiểm tra & cài bản mới (không cần mở TUI)
 | Key | Action |
 |-----|--------|
 | `ctrl+c` | Thoát |
-| `ctrl+u` | Cài bản cập nhật (khi có banner) |
 | `enter` | Search / mở truyện đang chọn |
-| `↑` / `↓` | Di chuyển list |
+| `↑` / `↓` | Di chuyển list (xuống cuối feed/bộ lọc sẽ tự tải trang tiếp) |
+| `shift+←` / `shift+→` | Đổi nguồn khi cùng một truyện có ở nhiều nguồn |
 | `tab` | Chuyển tab (feed → yêu thích → lịch sử → nguồn → bộ lọc) |
 | `shift+tab` | Chuyển tab ngược (bộ lọc → nguồn → lịch sử → yêu thích → feed) |
 | `/fav` | Xem favorites |
@@ -86,8 +86,8 @@ futon update       # kiểm tra & cài bản mới (không cần mở TUI)
 | `/src` | Chọn nguồn (space để toggle) |
 | `/feed` | Quay lại danh sách truyện mới cập nhật |
 | `/filter` (`/f`) | Mở bộ lọc |
-| `/update` | Kiểm tra & cài cập nhật |
-| `/lang vi\|en` | Set ngôn ngữ chapter (MangaDex) |
+| `/update` | Kiểm tra bản mới (cài bằng `futon update` ngoài terminal) |
+| `/lang vi\|en` | Set ngôn ngữ chapter (MangaDex), được lưu lại cho lần sau |
 
 Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sách.
 
@@ -95,7 +95,7 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 
 | Key | Action |
 |-----|--------|
-| `enter` | Mở truyện |
+| `enter` | Mở truyện (từ Lịch sử: mở thẳng chương & trang đang đọc) |
 | `ctrl+d` | Xoá khỏi list |
 | `esc` | Quay lại search |
 
@@ -108,7 +108,6 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 | `G` / `end` | Đến chapter cuối |
 | `ctrl+f` | Thêm truyện vào Yêu thích |
 | `ctrl+e` | Xuất chapter đang chọn ra CBZ |
-| `ctrl+a` | Xuất toàn bộ chapter ra CBZ |
 | `enter` | Mở chapter |
 | `[number]` + `enter` | Jump tới chapter |
 | `esc` | Quay lại search |
@@ -120,22 +119,35 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 |-----|--------|
 | `→` / `l` | Trang tiếp |
 | `←` / `h` | Trang trước |
-| `j` / `↓` | Nhảy sang chapter tiếp theo |
-| `k` / `↑` | Về chapter trước |
+| `j` / `↓` | Nhảy sang chapter tiếp theo (chế độ webtoon: `↓` cuộn trang) |
+| `k` / `↑` | Về chapter trước (chế độ webtoon: `↑` cuộn trang) |
+| `w` | Bật/tắt chế độ webtoon: vừa chiều ngang, cuộn bằng `↑`/`↓`/`space`/chuột (được nhớ) |
 | `ctrl+d` | Save trang hiện tại |
 | `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng) |
 | `ctrl+e` | Xuất chapter hiện tại ra CBZ |
+| `r` | Tải lại trang bị lỗi |
 | `esc` | Về chapter list |
 | `ctrl+c` | Thoát |
+
+## Nguồn
+
+| Nguồn | Ghi chú |
+|-------|---------|
+| MangaDex | API chính thức; một số nhà mạng/DNS chặn `api.mangadex.org` (đổi DNS nếu bị lỗi kết nối) |
+| TruyenQQ | Tự chuyển sang mirror `truyenggvn.com` (TruyenGG) khi domain chính chết |
+| BaoTangTruyen | |
+| CuuTruyen | `cuutruyen.moe`, ảnh chất lượng cao (~1024px); có lẫn truyện 18+ |
+
+Bật/tắt nguồn trong `/src`. Lịch sử và yêu thích cũ của TruyenGG được tự chuyển sang TruyenQQ.
 
 ## Data
 
 | Gì | Ở đâu |
 |----|--------|
-| Favorites + Sources | `~/.config/futon/userdata.json` |
+| Favorites + Sources + `/lang` | `~/.config/futon/userdata.json` |
 | Reading history | `~/.config/futon/history.json` |
 | Ảnh đã download | `~/Downloads/Futon/` |
-| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file, `ctrl+a` tạo thư mục riêng) |
+| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file) |
 
 ## Architecture
 

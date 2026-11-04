@@ -35,7 +35,7 @@ func (m *ReaderModel) scheduleDownloads() []tea.Cmd {
 			continue
 		}
 		m.downloading[idx] = struct{}{}
-		cmds = append(cmds, downloadOne(m.urls[idx], idx, m.chapterID, m.providerName()))
+		cmds = append(cmds, downloadOne(m.provider, m.chapterID, m.urls[idx], idx))
 	}
 	return cmds
 }
@@ -85,9 +85,11 @@ func (m *ReaderModel) applyPreloadedChapter(nextID string) {
 	m.imageData = make([][]byte, m.total)
 	m.resetImageCache()
 	m.downloading = make(map[int]struct{})
+	m.failed = make(map[int]error)
 	copy(m.imageData, m.preloadedImages)
 	m.downloaded = len(m.preloadedImages)
 	m.currentIdx = 0
+	m.scrollRow = 0
 	m.downloadPos = m.downloaded
 	m.downloadOrder = m.buildDownloadOrder(0)
 	if m.downloaded > 0 {

@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -137,14 +140,45 @@ func TestVersLE(t *testing.T) {
 }
 
 func TestInstallScriptCommand(t *testing.T) {
-	c := InstallScriptCommand()
+	c := InstallScriptCommand("v1.2.3")
 	if c == nil {
 		t.Fatal("expected a command")
 	}
-	if c.Args[0] != "bash" || c.Args[1] != "-c" {
+	if len(c.Args) != 5 || c.Args[0] != "bash" || c.Args[1] != "-c" {
 		t.Fatalf("unexpected argv: %v", c.Args)
 	}
-	if !strings.Contains(c.Args[2], "install.sh") || !strings.Contains(c.Args[2], "/tmp/futon_install.sh") {
-		t.Fatalf("unexpected install script command: %q", c.Args[2])
+	script := c.Args[2]
+	for _, want := range []string{"mktemp", "curl -fsSL", `bash "$tmp"`} {
+		if !strings.Contains(script, want) {
+			t.Errorf("install script missing %q:\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, "/tmp/futon_install.sh") {
+		t.Error("install script uses a fixed, predictable temp path")
+	}
+	if want := "https://raw.githubusercontent.com/KabosuNeko/Futon/v1.2.3/install.sh"; c.Args[4] != want {
+		t.Errorf("install URL = %q, want %q", c.Args[4], want)
+	}
+	if got := InstallScriptCommand("").Args[4]; !strings.Contains(got, "/main/install.sh") {
+		t.Errorf("dev install URL = %q, want main branch", got)
+	}
+}
+
+func TestInstallScriptFailsOnHTTPError(t *testing.T) {
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl not installed")
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If the 404 body were executed as bash, it would create the marker.
+		http.Error(w, "touch "+marker, http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	if err := exec.Command("bash", "-c", installScript, "futon-install", srv.URL).Run(); err == nil {
+		t.Fatal("install script succeeded on HTTP 404")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the HTTP error page was executed as a script")
 	}
 }

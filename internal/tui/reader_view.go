@@ -50,13 +50,16 @@ func (m ReaderModel) frameContent() string {
 		return b.String()
 
 	case stepRead:
-		img, cached := m.getCached(m.currentIdx)
-		if m.isLoading || !cached {
+		img, cached := m.currentFrame()
+		if pageErr, failed := m.failed[m.currentIdx]; failed && !m.isLoading {
+			b.WriteString(m.centerText(fmt.Sprintf("Lỗi trang %d: %v — [r] Thử lại", m.currentIdx+1, pageErr)))
+		} else if !cached || (m.isLoading && !m.fitWidth) {
+			// Webtoon mode keeps the previous window up while scrolling.
 			b.WriteString(m.centerText("Đang render ảnh..."))
 			return b.String()
+		} else {
+			b.WriteString(m.centeredImage(img))
 		}
-
-		b.WriteString(m.centeredImage(img))
 
 		w, h := m.width, m.height
 		if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
@@ -64,22 +67,7 @@ func (m ReaderModel) frameContent() string {
 		}
 
 		if !m.hideFooter {
-			var footerParts []string
-			footerParts = append(footerParts, fmt.Sprintf("[󰈙 Trang %d/%d]", m.currentIdx+1, m.total))
-			footerParts = append(footerParts, "[←/h] [→/l] Trang")
-			footerParts = append(footerParts, "[↑/k] [↓/j] Chap")
-			if m.hasPreviousChapter() && m.currentIdx == 0 {
-				footerParts = append(footerParts, "[←] Chap trước")
-			}
-			if m.hasNextChapter() && m.currentIdx == m.total-1 {
-				footerParts = append(footerParts, "[→] Chap tiếp")
-			}
-			footerParts = append(footerParts, "[ctrl+e] Xuất CBZ")
-			footerParts = append(footerParts, "[ctrl+d] Lưu ảnh")
-			footerParts = append(footerParts, "[ctrl+h] Ẩn gợi ý")
-			footerParts = append(footerParts, "[esc] Thoát")
-
-			rawFooter := strings.Join(footerParts, "  ")
+			rawFooter := m.footerText(w - 1)
 			footerRow := max(1, h)
 			footerCol := max(1, (w-runewidth.StringWidth(rawFooter))/2)
 
@@ -92,7 +80,9 @@ func (m ReaderModel) frameContent() string {
 		}
 
 		if m.flashMsg != "" {
-			flashCol := max(1, (w-runewidth.StringWidth(m.flashMsg))/2)
+			// One row only: a wrapped flash would spill onto the footer row.
+			flash := runewidth.Truncate(m.flashMsg, max(1, w-2), "…")
+			flashCol := max(1, (w-runewidth.StringWidth(flash))/2)
 			flashRow := max(1, h-1)
 			if m.hideFooter {
 				flashRow = max(1, h)
@@ -100,7 +90,7 @@ func (m ReaderModel) frameContent() string {
 			styledFlash := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("3")).
 				Bold(true).
-				Render(m.flashMsg)
+				Render(flash)
 			b.WriteString(fmt.Sprintf("\x1b[%d;%dH", flashRow, flashCol))
 			b.WriteString(styledFlash)
 		}
@@ -171,4 +161,56 @@ func (m ReaderModel) imageRect(img imgrender.RenderedImage) (offsetX, offsetY in
 func (m ReaderModel) centeredImage(img imgrender.RenderedImage) string {
 	offsetX, offsetY := m.imageRect(img)
 	return fmt.Sprintf("\x1b[%d;%dH", offsetY+1, offsetX+1) + img.EscapeSequence
+}
+
+// footerHint is one reader footer entry; lower prio values are kept longer.
+type footerHint struct {
+	text string
+	prio int
+}
+
+// footerText lists the reader's key hints in display order, dropping the
+// least important ones until the line fits width: the footer must never wrap,
+// since a second line would scroll the whole reader frame.
+func (m ReaderModel) footerText(width int) string {
+	page := fmt.Sprintf("[󰈙 Trang %d/%d]", m.currentIdx+1, m.total)
+	if pct, ok := m.scrollPercent(); ok {
+		page = fmt.Sprintf("[󰈙 Trang %d/%d · %d%%]", m.currentIdx+1, m.total, pct)
+	}
+	hints := []footerHint{{page, 0}, {"[←/h] [→/l] Trang", 2}}
+	if m.fitWidth {
+		hints = append(hints, footerHint{"[↑/↓] Cuộn", 2}, footerHint{"[k/j] Chap", 3}, footerHint{"[w] Vừa màn hình", 4})
+	} else {
+		hints = append(hints, footerHint{"[↑/k] [↓/j] Chap", 3}, footerHint{"[w] Webtoon", 4})
+	}
+	if m.hasPreviousChapter() && m.currentIdx == 0 {
+		hints = append(hints, footerHint{"[←] Chap trước", 8})
+	}
+	if m.hasNextChapter() && m.currentIdx == m.total-1 {
+		hints = append(hints, footerHint{"[→] Chap tiếp", 8})
+	}
+	hints = append(hints,
+		footerHint{"[ctrl+e] Xuất CBZ", 6},
+		footerHint{"[ctrl+d] Lưu ảnh", 5},
+		footerHint{"[ctrl+h] Ẩn gợi ý", 7},
+		footerHint{"[esc] Thoát", 1},
+	)
+
+	join := func(hs []footerHint) string {
+		parts := make([]string, len(hs))
+		for i, h := range hs {
+			parts[i] = h.text
+		}
+		return strings.Join(parts, "  ")
+	}
+	for runewidth.StringWidth(join(hints)) > width && len(hints) > 1 {
+		drop := 0
+		for i, h := range hints {
+			if h.prio > hints[drop].prio {
+				drop = i
+			}
+		}
+		hints = append(hints[:drop], hints[drop+1:]...)
+	}
+	return runewidth.Truncate(join(hints), max(1, width), "…")
 }

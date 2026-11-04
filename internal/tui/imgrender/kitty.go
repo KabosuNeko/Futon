@@ -28,8 +28,11 @@ func (r kittyRenderer) RenderInBox(imgData []byte, cols, rows int) (RenderedImag
 }
 
 func (r kittyRenderer) RenderImage(img image.Image) (RenderedImage, error) {
+	// Speed over size: the PNG only crosses the local terminal connection,
+	// and encoding happens on every page flip.
 	var pngBuf bytes.Buffer
-	if err := png.Encode(&pngBuf, img); err != nil {
+	enc := png.Encoder{CompressionLevel: png.BestSpeed}
+	if err := enc.Encode(&pngBuf, img); err != nil {
 		return RenderedImage{}, err
 	}
 

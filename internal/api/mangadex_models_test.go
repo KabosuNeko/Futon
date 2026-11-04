@@ -1,8 +1,8 @@
-package models
+package api
 
 import "testing"
 
-func TestPickTitlePriority(t *testing.T) {
+func TestMangaDexTitlePriority(t *testing.T) {
 	cases := []struct {
 		name   string
 		titles map[string]string
@@ -16,36 +16,36 @@ func TestPickTitlePriority(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := pickTitle(tc.titles); got != tc.want {
-				t.Errorf("pickTitle(%v) = %q, want %q", tc.titles, got, tc.want)
+			if got := mangadexTitle(tc.titles); got != tc.want {
+				t.Errorf("mangadexTitle(%v) = %q, want %q", tc.titles, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestMangaDataToManga(t *testing.T) {
+func TestMangaDexMangaToManga(t *testing.T) {
 	year := 1997
-	action := MangaTag{}
+	action := mangadexTag{}
 	action.Attributes.Name = map[string]string{"en": "Action"}
-	vietnamese := MangaTag{}
+	vietnamese := mangadexTag{}
 	vietnamese.Attributes.Name = map[string]string{"vi": "Hành động"}
 
-	data := MangaData{
+	data := mangadexManga{
 		ID: "manga-1",
-		Attributes: MangaAttributes{
+		Attributes: mangadexMangaAttributes{
 			Title:  map[string]string{"en": "One Piece"},
 			Year:   &year,
 			Status: "ongoing",
-			Tags:   []MangaTag{action, vietnamese},
+			Tags:   []mangadexTag{action, vietnamese},
 		},
-		Relationships: []MangaRelationship{
-			{Type: "cover_art", Attributes: &MangaRelAttributes{FileName: "cover.jpg"}},
-			{Type: "author", Attributes: &MangaRelAttributes{Name: "Oda"}},
-			{Type: "artist", Attributes: &MangaRelAttributes{Name: "Oda"}},
+		Relationships: []mangadexRelationship{
+			{Type: "cover_art", Attributes: &mangadexRelAttributes{FileName: "cover.jpg"}},
+			{Type: "author", Attributes: &mangadexRelAttributes{Name: "Oda"}},
+			{Type: "artist", Attributes: &mangadexRelAttributes{Name: "Oda"}},
 		},
 	}
 
-	manga := data.ToManga()
+	manga := data.toManga()
 	if manga.ID != "manga-1" || manga.Title != "One Piece" {
 		t.Errorf("unexpected identity: %+v", manga)
 	}

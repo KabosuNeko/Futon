@@ -1,15 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
-
-	"github.com/KabosuNeko/Futon/internal/models"
 )
 
 func newMangaDexTestServer(t *testing.T, handler http.HandlerFunc) {
@@ -23,11 +21,11 @@ func newMangaDexTestServer(t *testing.T, handler http.HandlerFunc) {
 
 func mangaJSON(t *testing.T, items int, total int) []byte {
 	t.Helper()
-	resp := models.MangaSearchResponse{Total: total}
+	resp := mangadexListResponse{Total: total}
 	for i := 0; i < items; i++ {
-		resp.Data = append(resp.Data, models.MangaData{
+		resp.Data = append(resp.Data, mangadexManga{
 			ID: fmt.Sprintf("id-%d", i),
-			Attributes: models.MangaAttributes{
+			Attributes: mangadexMangaAttributes{
 				Title: map[string]string{"en": fmt.Sprintf("Manga %d", i)},
 			},
 		})
@@ -63,7 +61,7 @@ func TestMangaDexSearchPaginates(t *testing.T) {
 	})
 
 	m := NewMangaDexProvider()
-	results, err := m.Search("naruto")
+	results, err := m.Search(context.Background(), "naruto")
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -84,7 +82,7 @@ func TestMangaDexSearchSinglePage(t *testing.T) {
 	})
 
 	m := NewMangaDexProvider()
-	results, err := m.Search("one piece")
+	results, err := m.Search(context.Background(), "one piece")
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -109,7 +107,7 @@ func TestMangaDexSearchStopsAtTotal(t *testing.T) {
 	})
 
 	m := NewMangaDexProvider()
-	results, err := m.Search("naruto")
+	results, err := m.Search(context.Background(), "naruto")
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
@@ -124,7 +122,7 @@ func TestMangaDexSearchHTTPError(t *testing.T) {
 	})
 
 	m := NewMangaDexProvider()
-	if _, err := m.Search("naruto"); err == nil {
+	if _, err := m.Search(context.Background(), "naruto"); err == nil {
 		t.Fatal("Search() error = nil, want HTTP 500 error")
 	}
 }
@@ -151,7 +149,7 @@ func TestMangaDexCoverURLParsing(t *testing.T) {
 	})
 
 	p := NewMangaDexProvider()
-	mangas, err := p.Search("test")
+	mangas, err := p.Search(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -161,55 +159,6 @@ func TestMangaDexCoverURLParsing(t *testing.T) {
 	expectedCover := "https://uploads.mangadex.org/covers/manga-123/cover.jpg.256.jpg"
 	if mangas[0].CoverURL != expectedCover {
 		t.Errorf("CoverURL = %q, want %q", mangas[0].CoverURL, expectedCover)
-	}
-}
-
-func TestOTruyenCoverURLParsing(t *testing.T) {
-	item := otruyenMangaItem{
-		Name:     "Naruto",
-		Slug:     "naruto",
-		ThumbURL: "naruto-thumb.jpg",
-	}
-	m := item.toManga("https://img.otruyenapi.com")
-	expected := "https://img.otruyenapi.com/uploads/comics/naruto-thumb.jpg"
-	if m.CoverURL != expected {
-		t.Errorf("toManga CoverURL = %q, want %q", m.CoverURL, expected)
-	}
-}
-
-func TestFetchCoverBytes(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ref := r.Header.Get("Referer")
-		if !strings.Contains(ref, "truyenqqko.com") {
-			t.Errorf("expected TruyenQQ referer header, got %q", ref)
-		}
-		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write([]byte("fake-image-bytes"))
-	}))
-	defer ts.Close()
-
-	data, err := FetchCoverBytes(ts.URL, "TruyenQQ")
-	if err != nil {
-		t.Fatalf("FetchCoverBytes failed: %v", err)
-	}
-	if string(data) != "fake-image-bytes" {
-		t.Errorf("got %q, want 'fake-image-bytes'", string(data))
-	}
-}
-
-func TestFetchCoverBytesTruyenGGReferer(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Referer"); got != truyenggBaseURL {
-			t.Errorf("Referer = %q, want %q", got, truyenggBaseURL)
-		}
-		w.Write([]byte("cover"))
-	}))
-	defer ts.Close()
-
-	// TruyenGG covers are served from hinhhinh.com; the provider check must win
-	// over the generic TruyenQQ host rule.
-	if _, err := FetchCoverBytes(ts.URL+"?host=hinhhinh.com", "TruyenGG"); err != nil {
-		t.Fatalf("FetchCoverBytes failed: %v", err)
 	}
 }
 
@@ -230,7 +179,7 @@ func TestMangaDexFetchChaptersUsesBaseURLAndLanguage(t *testing.T) {
 
 	p := NewMangaDexProvider()
 	p.SetLang("en")
-	chapters, err := p.FetchChapters("manga-1")
+	chapters, err := p.FetchChapters(context.Background(), "manga-1")
 	if err != nil {
 		t.Fatalf("FetchChapters error: %v", err)
 	}
@@ -252,7 +201,7 @@ func TestMangaDexFetchPagesUsesBaseURL(t *testing.T) {
 	})
 
 	p := NewMangaDexProvider()
-	urls, err := p.FetchPages("ch-1")
+	urls, err := p.FetchPages(context.Background(), "ch-1")
 	if err != nil {
 		t.Fatalf("FetchPages error: %v", err)
 	}
