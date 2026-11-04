@@ -48,7 +48,7 @@ func TestCtrlCInReaderFlushesHistory(t *testing.T) {
 
 	execCmd(cmd)
 
-	h, ok := storage.GetHistory(mangaID)
+	h, ok := storage.GetHistory(mangaID, "")
 	if !ok {
 		t.Fatal("expected history saved before quit")
 	}
@@ -87,7 +87,7 @@ func TestReaderKeysCtrlCFlushesHistory(t *testing.T) {
 
 	execCmd(cmd)
 
-	h, ok := storage.GetHistory(mangaID)
+	h, ok := storage.GetHistory(mangaID, "")
 	if !ok {
 		t.Fatal("expected history saved before quit")
 	}
@@ -104,17 +104,17 @@ func TestReaderKeysCtrlCNoMangaQuitsDirectly(t *testing.T) {
 	}
 }
 
-func TestQueryBannerSaysCtrlU(t *testing.T) {
+func TestUpdateBannerPointsToCLI(t *testing.T) {
 	m := NewAppModel("dev")
 	m.updateAvailable = true
 	m.updateVersion = "v9.9.9"
 	m.state = stateSearch
 
 	view := m.View().Content
-	if strings.Contains(view, "Nhấn 'U'") {
-		t.Error("banner still says 'U'")
+	if strings.Contains(view, "Ctrl+u") {
+		t.Error("banner still offers in-app install")
 	}
-	if !strings.Contains(view, "Nhấn Ctrl+u") {
-		t.Errorf("banner missing Ctrl+u hint, got:\n%s", view)
+	if !strings.Contains(view, "futon update") {
+		t.Errorf("banner missing `futon update` hint, got:\n%s", view)
 	}
 }

@@ -31,7 +31,7 @@ func TestSaveAndGetHistory(t *testing.T) {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
-	h, ok := GetHistory("m1")
+	h, ok := GetHistory("m1", "otruyen")
 	if !ok {
 		t.Fatalf("expected history for m1")
 	}
@@ -52,7 +52,7 @@ func TestSaveHistoryKeepsOldTitle(t *testing.T) {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
-	h, ok := GetHistory("m1")
+	h, ok := GetHistory("m1", "otruyen")
 	if !ok {
 		t.Fatalf("expected history for m1")
 	}
@@ -69,10 +69,10 @@ func TestDeleteHistory(t *testing.T) {
 	if err := SaveHistory("m1", "Title", "otruyen", "c1", "1", 0); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
-	if err := DeleteHistory("m1"); err != nil {
+	if err := DeleteHistory("m1", "otruyen"); err != nil {
 		t.Fatalf("DeleteHistory error: %v", err)
 	}
-	if _, ok := GetHistory("m1"); ok {
+	if _, ok := GetHistory("m1", "otruyen"); ok {
 		t.Errorf("expected history deleted")
 	}
 }
@@ -123,13 +123,13 @@ func TestGetHistoryReturnsCopy(t *testing.T) {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
-	h, ok := GetHistory("m1")
+	h, ok := GetHistory("m1", "otruyen")
 	if !ok {
 		t.Fatalf("expected history for m1")
 	}
 	h.PageIndex = 99
 
-	again, ok := GetHistory("m1")
+	again, ok := GetHistory("m1", "otruyen")
 	if !ok {
 		t.Fatalf("expected history for m1")
 	}
@@ -194,5 +194,68 @@ func TestFlushHistoryLoadsExistingFileBeforeWriting(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "existing-1") {
 		t.Fatalf("flush before load wiped existing history: %s", data)
+	}
+}
+
+func TestHistoryIsKeyedByProvider(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	defer resetHistoryForTest()
+
+	if err := SaveHistory("same-id", "A", "ProviderA", "a1", "1", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveHistory("same-id", "B", "ProviderB", "b7", "7", 3); err != nil {
+		t.Fatal(err)
+	}
+
+	a, ok := GetHistory("same-id", "ProviderA")
+	if !ok || a.ChapterID != "a1" {
+		t.Fatalf("ProviderA history = %+v, %v; want chapter a1", a, ok)
+	}
+	b, ok := GetHistory("same-id", "ProviderB")
+	if !ok || b.ChapterID != "b7" {
+		t.Fatalf("ProviderB history = %+v, %v; want chapter b7", b, ok)
+	}
+
+	if err := DeleteHistory("same-id", "ProviderA"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := GetHistory("same-id", "ProviderA"); ok {
+		t.Error("ProviderA entry still present after delete")
+	}
+	if _, ok := GetHistory("same-id", "ProviderB"); !ok {
+		t.Error("deleting ProviderA removed ProviderB's entry")
+	}
+}
+
+func TestLegacyHistoryWithoutProviderIsFoundAndRekeyed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	defer resetHistoryForTest()
+
+	dir := filepath.Join(os.Getenv("HOME"), ".config", "futon")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `[{"manga_id":"old","manga_title":"Old","chapter_id":"c1","page_index":2,"updated_at":1}]`
+	if err := os.WriteFile(filepath.Join(dir, "history.json"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, ok := GetHistory("old", "OTruyen")
+	if !ok || h.ChapterID != "c1" {
+		t.Fatalf("legacy entry not found via provider lookup: %+v, %v", h, ok)
+	}
+
+	if err := SaveHistory("old", "", "OTruyen", "c2", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := LoadAllHistory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Provider != "OTruyen" || entries[0].MangaTitle != "Old" {
+		t.Errorf("legacy entry not re-keyed in place: %+v", entries)
 	}
 }

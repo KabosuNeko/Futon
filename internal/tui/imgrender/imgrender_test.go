@@ -99,3 +99,71 @@ func TestKittyChunkedPayloadMarksLastChunk(t *testing.T) {
 		t.Errorf("payload does not end with the kitty terminator")
 	}
 }
+
+func TestNewDoesNotTreatStAsKitty(t *testing.T) {
+	t.Setenv("FUTON_RENDERER", "")
+	t.Setenv("KITTY_WINDOW_ID", "")
+	t.Setenv("TERM_PROGRAM", "")
+	t.Setenv("TERM", "st-256color")
+	if _, ok := New().(sixelRenderer); !ok {
+		t.Error("TERM=st-256color must use Sixel; plain st has no Kitty graphics")
+	}
+}
+
+func TestNewPicksKittyForKittyCapableTerminals(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"TERM": "xterm-kitty"},
+		{"TERM": "xterm-ghostty"},
+		{"TERM": "xterm-256color", "TERM_PROGRAM": "ghostty"},
+		{"TERM": "xterm-256color", "TERM_PROGRAM": "WezTerm"},
+	} {
+		t.Setenv("FUTON_RENDERER", "")
+		t.Setenv("KITTY_WINDOW_ID", "")
+		t.Setenv("TERM_PROGRAM", "")
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		if _, ok := New().(kittyRenderer); !ok {
+			t.Errorf("%v: want the Kitty renderer", env)
+		}
+	}
+
+	t.Setenv("TERM", "foot")
+	t.Setenv("TERM_PROGRAM", "")
+	if _, ok := New().(sixelRenderer); !ok {
+		t.Error("foot must use Sixel")
+	}
+}
+
+func TestScaleToWidthNeverUpscales(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 900, 5000))
+	wide := TerminalSize{Cols: 200, Rows: 50, PxW: 1600, PxH: 800}
+	if got := scaleToWidth(img, wide, 0).Bounds(); got.Dx() != 900 || got.Dy() != 5000 {
+		t.Errorf("wide terminal: %v, want native 900x5000", got)
+	}
+	narrow := TerminalSize{Cols: 50, Rows: 40, PxW: 400, PxH: 640}
+	if got := scaleToWidth(img, narrow, 0).Bounds(); got.Dx() != 400 || got.Dy() != 2222 {
+		t.Errorf("narrow terminal: %v, want 400x2222", got)
+	}
+}
+
+func TestWindowClampsToBottom(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 10, 100)) // 100px = 10 rows of 10px
+	img.Set(0, 95, color.RGBA{R: 255, A: 255})
+
+	w, top, total := window(img, 0, 4, 10)
+	if total != 10 || top != 0 || w.Bounds().Dy() != 40 {
+		t.Errorf("top window: top=%d total=%d h=%d", top, total, w.Bounds().Dy())
+	}
+
+	w, top, _ = window(img, 99, 4, 10)
+	if top != 6 || w.Bounds().Dy() != 40 {
+		t.Fatalf("past the end: top=%d h=%d, want clamped to 6 and a full window", top, w.Bounds().Dy())
+	}
+	if r, _, _, _ := w.At(0, 35).RGBA(); r == 0 {
+		t.Error("window content is not the bottom of the page")
+	}
+	if w.Bounds().Min != (image.Point{}) {
+		t.Error("window must start at the origin")
+	}
+}

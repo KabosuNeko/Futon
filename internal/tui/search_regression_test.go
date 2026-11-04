@@ -26,7 +26,7 @@ func TestTypingUpdatesInput(t *testing.T) {
 
 func TestSourceCommandToggles(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	providers := []api.MangaProvider{api.NewOTruyenProvider(), api.NewMangaDexProvider()}
+	providers := []api.MangaProvider{api.NewBaoTangTruyenProvider(), api.NewMangaDexProvider()}
 	m := NewSearchModel(providers)
 
 	for i := range m.providers {
@@ -41,7 +41,7 @@ func TestSourceCommandToggles(t *testing.T) {
 	}
 	newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = newM.(SearchModel)
-	if !m.showingSources {
+	if m.view != viewSources {
 		t.Fatalf("expected showingSources after /src")
 	}
 
@@ -71,18 +71,18 @@ func TestSourceCommandToggles(t *testing.T) {
 
 	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = newM.(SearchModel)
-	if m.showingSources {
+	if m.view == viewSources {
 		t.Errorf("expected showingSources false after ESC")
 	}
 
 	m.providerToggles = []bool{true, false}
-	m.showingSources = false
+	m.view = viewFeed
 	active := m.activeProviders()
 	if len(active) != 1 {
 		t.Fatalf("expected 1 active provider, got %d", len(active))
 	}
-	if active[0].Name() != "OTruyen" {
-		t.Errorf("expected OTruyen, got %s", active[0].Name())
+	if active[0].Name() != "BaoTangTruyen" {
+		t.Errorf("expected BaoTangTruyen, got %s", active[0].Name())
 	}
 }
 
@@ -175,8 +175,8 @@ func stripANSI(s string) string {
 }
 
 func TestSearchRequestCmdStampsRequestID(t *testing.T) {
-	cmd := searchRequestCmd(7, func() tea.Msg { return api.MangaSearchResultMsg{} })
-	msg, ok := cmd().(api.MangaSearchResultMsg)
+	cmd := searchRequestCmd(7, func() tea.Msg { return resultsMsg{} })
+	msg, ok := cmd().(resultsMsg)
 	if !ok {
 		t.Fatalf("unexpected message type")
 	}
@@ -192,7 +192,7 @@ func TestStaleSearchSnapshotIgnored(t *testing.T) {
 	m.pendingSeq = 2
 	m.results = []models.Manga{{ID: "keep", Title: "Keep"}}
 
-	updated, _ := m.Update(api.MangaSearchResultMsg{
+	updated, _ := m.Update(resultsMsg{
 		Manga:     []models.Manga{{ID: "old", Title: "Old"}},
 		RequestID: 1,
 	})
@@ -204,12 +204,12 @@ func TestStaleSearchSnapshotIgnored(t *testing.T) {
 		t.Error("stale final snapshot must not clear isSearching")
 	}
 
-	updated, _ = sm.Update(api.MangaSearchResultMsg{RequestID: 1})
+	updated, _ = sm.Update(resultsMsg{RequestID: 1})
 	if !updated.(SearchModel).isSearching {
 		t.Error("stale final snapshot cleared isSearching")
 	}
 
-	updated, _ = sm.Update(api.MangaSearchResultMsg{
+	updated, _ = sm.Update(resultsMsg{
 		Manga:     []models.Manga{{ID: "new", Title: "New"}},
 		RequestID: 2,
 	})

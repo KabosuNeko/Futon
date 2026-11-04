@@ -3,6 +3,7 @@ package export
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -28,11 +29,10 @@ func TestLiveProviderExports(t *testing.T) {
 	}
 
 	providers := []api.MangaProvider{
-		api.NewOTruyenProvider(),
 		api.NewMangaDexProvider(),
 		api.NewTruyenQQProvider(),
-		api.NewTruyenGGProvider(),
 		api.NewBaoTangTruyenProvider(),
+		api.NewCuuTruyenProvider(),
 	}
 	for _, provider := range providers {
 		t.Run(provider.Name(), func(t *testing.T) {
@@ -49,9 +49,9 @@ func liveExportOne(t *testing.T, provider api.MangaProvider) {
 	if md, ok := provider.(*api.MangaDexProvider); ok {
 		// Latest manga are often untranslated; use a known title with chapters.
 		md.SetLang("en")
-		mangas, err = md.Search("one piece")
+		mangas, err = md.Search(context.Background(), "one piece")
 	} else {
-		mangas, err = provider.FetchLatest(1)
+		mangas, err = provider.FetchLatest(context.Background(), 1)
 	}
 	if err != nil {
 		t.Skipf("source unavailable: %v", err)
@@ -64,13 +64,13 @@ func liveExportOne(t *testing.T, provider api.MangaProvider) {
 	}
 
 	for _, manga := range mangas {
-		chapters, err := provider.FetchChapters(manga.ID)
+		chapters, err := provider.FetchChapters(context.Background(), manga.ID)
 		if err != nil || len(chapters) == 0 {
 			continue
 		}
 		for _, idx := range []int{0, len(chapters) - 1} {
 			chapter := chapters[idx]
-			urls, err := provider.FetchPages(chapter.ID)
+			urls, err := provider.FetchPages(context.Background(), chapter.ID)
 			if err != nil || len(urls) == 0 {
 				continue
 			}
@@ -83,7 +83,11 @@ func liveExportOne(t *testing.T, provider api.MangaProvider) {
 				label = "unknown"
 			}
 
-			path, err := ExportChapterURLsToCBZ("Futon live test", label, urls[:pages], t.TempDir(), provider.Name(), chapter.ID)
+			images, err := api.DownloadChapterPages(context.Background(), provider, chapter.ID, urls[:pages])
+			if err != nil {
+				t.Fatalf("download failed: %v", err)
+			}
+			path, err := ExportImagesToCBZ("Futon live test", label, images, t.TempDir())
 			if err != nil {
 				t.Fatalf("export failed: %v", err)
 			}
