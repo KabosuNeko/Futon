@@ -133,12 +133,34 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 
 | Nguồn | Ghi chú |
 |-------|---------|
-| MangaDex | API chính thức; một số nhà mạng/DNS chặn `api.mangadex.org` (đổi DNS nếu bị lỗi kết nối) |
+| MangaDex | API chính thức; **bị một số nhà mạng Việt Nam chặn**, xem [bên dưới](#mangadex-bị-chặn) |
 | TruyenQQ | Tự chuyển sang mirror `truyenggvn.com` (TruyenGG) khi domain chính chết |
 | BaoTangTruyen | |
 | CuuTruyen | `cuutruyen.moe`, ảnh chất lượng cao (~1024px); có lẫn truyện 18+ |
 
 Bật/tắt nguồn trong `/src`. Lịch sử và yêu thích cũ của TruyenGG được tự chuyển sang TruyenQQ.
+
+### MangaDex bị chặn
+
+Nếu nguồn MangaDex báo lỗi kiểu:
+
+```
+MangaDex: không kết nối được api.mangadex.org: dial tcp [::1]:443: connect: connection refused
+MangaDex: không kết nối được api.mangadex.org: read tcp ...: read: connection reset by peer
+```
+
+thì nhà mạng (hoặc router) đang chặn MangaDex. Một số nhà mạng chặn ở **cả DNS lẫn kết nối** (cắt kết nối TLS theo tên miền), nên **chỉ đổi DNS là không đủ**. Cách khắc phục:
+
+- **VPN cho cả máy**, ví dụ [Cloudflare WARP](https://one.one.one.one/) (miễn phí, có bản Linux `warp-cli`). Bật VPN là MangaDex dùng được bình thường.
+- **Proxy chỉ cho Futon**: Futon đọc biến môi trường proxy chuẩn, hỗ trợ cả `http://` và `socks5://`:
+
+  ```bash
+  HTTPS_PROXY=socks5://127.0.0.1:1080 futon
+  ```
+
+- **Hoặc tắt MangaDex** trong `/src` và dùng các nguồn còn lại (không bị chặn). CuuTruyen là nguồn có ảnh đẹp nhất.
+
+Kiểm tra nhanh: `resolvectl query api.mangadex.org` (hoặc `nslookup api.mangadex.org`) ra `::1`/`0.0.0.0` là bị chặn DNS; ra IP thật mà Futon vẫn báo `connection reset by peer` là bị chặn kết nối, khi đó chỉ VPN/proxy mới giúp được.
 
 ## Data
 
