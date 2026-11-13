@@ -56,11 +56,14 @@ func migrateHistory(fix EntryFix) error {
 	}
 	changed := false
 	migrated := make(map[string]ReadHistory, len(historyCache))
-	for _, e := range historyCache {
+	for oldKey, e := range historyCache {
 		p, id, ch := fix(e.Provider, e.MangaID, e.ChapterID)
 		if p != e.Provider || id != e.MangaID || ch != e.ChapterID {
 			e.Provider, e.MangaID, e.ChapterID = p, id, ch
 			changed = true
+			if historyKey(id, p) != oldKey {
+				historyDeleted[oldKey] = true // the file still has it under the old key
+			}
 		}
 		key := historyKey(e.MangaID, e.Provider)
 		if old, ok := migrated[key]; ok {

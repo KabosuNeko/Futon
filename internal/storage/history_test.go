@@ -1,10 +1,12 @@
 package storage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestMain redirects HOME to a temp dir for the whole test binary.
@@ -19,6 +21,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("HOME", home)
+	// Tests isolate data through HOME; XDG paths would point at the real ones.
+	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Unsetenv("XDG_DOWNLOAD_DIR")
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)
@@ -166,6 +171,7 @@ func resetHistoryForTest() {
 	historyMu.Lock()
 	historyCache = nil
 	historyLoaded = false
+	historyDeleted = map[string]bool{}
 	historyMu.Unlock()
 }
 
@@ -257,5 +263,81 @@ func TestLegacyHistoryWithoutProviderIsFoundAndRekeyed(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Provider != "OTruyen" || entries[0].MangaTitle != "Old" {
 		t.Errorf("legacy entry not re-keyed in place: %+v", entries)
+	}
+}
+
+// writeOtherWindow replaces history.json as another Futon window would.
+func writeOtherWindow(t *testing.T, entries string) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HOME"), ".config", "futon")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "history.json"), []byte(entries), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFlushKeepsEntriesWrittenByAnotherWindow(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	defer resetHistoryForTest()
+
+	if err := SaveHistory("a", "A", "P", "a1", "1", 0); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	writeOtherWindow(t, fmt.Sprintf(`[
+		{"manga_id":"b","provider":"P","chapter_id":"b1","page_index":2,"updated_at":%d},
+		{"manga_id":"a","provider":"P","chapter_id":"a-old","page_index":9,"updated_at":%d}
+	]`, now, now-100))
+
+	if err := FlushHistory(); err != nil {
+		t.Fatal(err)
+	}
+	if h, ok := GetHistory("b", "P"); !ok || h.ChapterID != "b1" {
+		t.Errorf("the other window's entry was lost: %+v %v", h, ok)
+	}
+	if h, _ := GetHistory("a", "P"); h.ChapterID != "a1" {
+		t.Errorf("an older entry from disk replaced this window's newer one: %+v", h)
+	}
+}
+
+func TestFlushDoesNotResurrectDeletedEntries(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	defer resetHistoryForTest()
+
+	if err := SaveHistory("a", "A", "P", "a1", "1", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := FlushHistory(); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteHistory("a", "P"); err != nil {
+		t.Fatal(err)
+	}
+	if err := FlushHistory(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := GetHistory("a", "P"); ok {
+		t.Error("a deleted entry came back from the file on the next flush")
+	}
+}
+
+func TestRekeyedLegacyEntryIsNotDuplicatedOnFlush(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	defer resetHistoryForTest()
+
+	writeOtherWindow(t, `[{"manga_id":"old","chapter_id":"c1","page_index":2,"updated_at":1}]`)
+	if err := SaveHistory("old", "", "OTruyen", "c2", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := FlushHistory(); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := LoadAllHistory(); len(all) != 1 {
+		t.Errorf("entries = %+v, want only the re-keyed one", all)
 	}
 }

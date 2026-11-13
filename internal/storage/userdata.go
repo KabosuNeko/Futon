@@ -187,6 +187,12 @@ func writeJSON(path string, v any) error {
 		tmp.Close()
 		return err
 	}
+	// Force the data to disk before the rename makes it the real file;
+	// otherwise a power cut can leave an empty file (APFS does not order these).
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Chmod(0o644); err != nil {
 		tmp.Close()
 		return err

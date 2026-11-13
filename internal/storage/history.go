@@ -26,6 +26,12 @@ var (
 	historyCache  map[string]ReadHistory // keyed by historyKey
 	historyLoaded bool
 	flushTimer    *time.Timer
+	// historyDeleted holds keys removed in this session, so merging the file
+	// written by another Futon window does not bring them back.
+	historyDeleted = map[string]bool{}
+	// flushMu serializes flushes: the debounce timer and an explicit flush
+	// may run together, and an older snapshot must not be renamed in last.
+	flushMu sync.Mutex
 )
 
 const flushDelay = 2 * time.Second
@@ -100,7 +106,8 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		}
 	}
 	// Re-key a legacy provider-less entry now that the provider is known.
-	delete(historyCache, historyKey(mangaID, ""))
+	forgetHistory(historyKey(mangaID, ""))
+	delete(historyDeleted, historyKey(mangaID, provider))
 
 	historyCache[historyKey(mangaID, provider)] = ReadHistory{
 		MangaID:       mangaID,
@@ -170,7 +177,44 @@ func sortedHistory() []ReadHistory {
 	return entries
 }
 
+// forgetHistory removes an entry for good. Callers hold historyMu.
+func forgetHistory(key string) {
+	delete(historyCache, key)
+	historyDeleted[key] = true
+}
+
+// mergeHistoryFromDisk takes in entries that another Futon window wrote since
+// this one loaded the file: missing ones, and newer ones for the same manga.
+// A missing or unreadable file leaves the cache as it is. Callers hold
+// historyMu.
+func mergeHistoryFromDisk() {
+	path, err := historyPath()
+	if err != nil {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var entries []ReadHistory
+	if json.Unmarshal(data, &entries) != nil {
+		return
+	}
+	for _, e := range entries {
+		key := historyKey(e.MangaID, e.Provider)
+		if historyDeleted[key] {
+			continue
+		}
+		if cur, ok := historyCache[key]; !ok || e.UpdatedAt > cur.UpdatedAt {
+			historyCache[key] = e
+		}
+	}
+}
+
 func FlushHistory() error {
+	flushMu.Lock()
+	defer flushMu.Unlock()
+
 	historyMu.Lock()
 	// Flushing before anything has read the file must not overwrite it with a
 	// snapshot of the still-empty cache.
@@ -178,6 +222,7 @@ func FlushHistory() error {
 		historyMu.Unlock()
 		return err
 	}
+	mergeHistoryFromDisk()
 	snapshot := sortedHistory()
 	historyMu.Unlock()
 
@@ -203,7 +248,7 @@ func DeleteHistory(mangaID, provider string) error {
 		return err
 	}
 
-	delete(historyCache, historyKey(mangaID, provider))
+	forgetHistory(historyKey(mangaID, provider))
 	historyMu.Unlock()
 
 	return FlushHistory()

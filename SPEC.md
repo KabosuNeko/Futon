@@ -81,7 +81,8 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-H2**: Disk write is **debounced 2s** from the last save (timer resets on every save).
 - **FR-H3**: `esc` in the reader: flushes history immediately (does not wait for debounce).
 - **FR-H4**: Removing an entry (`ctrl+d` in `/his`) flushes synchronously right away.
-- **FR-H8**: `ctrl+c` in the reader (or from the router while in the reader): saves + flushes history before quitting (prevents losing the last page position when exiting before the 2s debounce).
+- **FR-H8**: `ctrl+c` in the reader (or from the router while in the reader): saves + flushes history before quitting (prevents losing the last page position when exiting before the 2s debounce). Every other exit also flushes once the program returns: quitting from another screen, `SIGTERM`, and `SIGHUP` (closing the terminal window), which is caught to quit cleanly.
+- **FR-H10**: Several Futon windows share one history file: each flush re-reads it and keeps entries written by the other windows (the newer `updated_at` wins per manga); entries deleted or re-keyed in this window are not brought back. Flushes are serialized, and files are synced to disk before the atomic rename.
 - **FR-H5**: The chapter list restores the cursor to the last-read chapter (`restoreHistoryPosition`).
 - **FR-H6**: The reader resumes at the correct page when opening a chapter that matches history (via `StartPageIndex=-1`).
 - **FR-H7**: History keeps the old Title/ChapterNumber if the new write does not provide them (prevents information loss).
