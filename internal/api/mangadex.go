@@ -65,7 +65,7 @@ func (m *MangaDexProvider) SetLang(lang string) {
 	m.mu.Unlock()
 }
 
-func (m *MangaDexProvider) language() string {
+func (m *MangaDexProvider) Lang() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.lang
@@ -96,7 +96,7 @@ func (m *MangaDexProvider) listParams(limit, offset int) url.Values {
 	params.Add("includes[]", "cover_art")
 	params.Add("includes[]", "author")
 	params.Add("includes[]", "artist")
-	params.Add("availableTranslatedLanguage[]", m.language())
+	params.Add("availableTranslatedLanguage[]", m.Lang())
 	return params
 }
 
@@ -180,7 +180,7 @@ func (m *MangaDexProvider) FetchChapters(ctx context.Context, mangaID string) ([
 	var all []models.Chapter
 	seen := make(map[string]bool)
 	offset := 0
-	lang := m.language()
+	lang := m.Lang()
 
 	for {
 		endpoint := fmt.Sprintf(

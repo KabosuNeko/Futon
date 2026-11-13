@@ -58,8 +58,9 @@ type storageSavedMsg struct {
 	err error
 }
 
-func saveReaderFitWidthCmd(on bool) tea.Cmd {
+// saveUserDataCmd saves a change to the user's settings.
+func saveUserDataCmd(update func(*storage.UserData)) tea.Cmd {
 	return func() tea.Msg {
-		return storageSavedMsg{err: storage.SaveReaderFitWidth(on)}
+		return storageSavedMsg{err: storage.UpdateUserData(update)}
 	}
 }

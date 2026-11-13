@@ -24,14 +24,6 @@ func NewTruyenQQProvider() *TruyenQQProvider {
 	return newTruyenQQProvider(truyenqqPrimaryURL, truyenqqFallbackURL)
 }
 
-// TruyenQQPath turns a TruyenQQ (or TruyenGG mirror) manga or chapter URL into the
-// mirror-independent ID the provider uses now: the path without the host and
-// without the ".html" some mirrors append. Older saved entries stored
-// absolute URLs of whichever mirror was in use.
-func TruyenQQPath(id string) string {
-	return truyenqqPath(id)
-}
-
 // truyenqqGenres are genre slugs in FilterGenres order (checked against the
 // site menus of TruyenQQ and its TruyenGG mirror, which share them).
 var truyenqqGenres = []string{"", "action-26", "adventure-27", "comedy-28", "drama-29", "fantasy-30", "isekai-85", "romance-36", "shounen-31", "manhwa-49"}
@@ -135,7 +127,7 @@ func (p *TruyenQQProvider) Search(ctx context.Context, keyword string) ([]models
 		}
 		cover, _ := s.Find(".search_avatar img").Attr("src")
 		mangas = append(mangas, models.Manga{
-			ID:       truyenqqPath(href),
+			ID:       TruyenQQPath(href),
 			Title:    name,
 			CoverURL: cover,
 		})
@@ -164,7 +156,7 @@ func parseTruyenQQList(doc *goquery.Document) []models.Manga {
 		}
 		cover, _ := imageSrc(s.Find("img"))
 		mangas = append(mangas, models.Manga{
-			ID:       truyenqqPath(href),
+			ID:       TruyenQQPath(href),
 			Title:    name,
 			CoverURL: cover,
 		})
@@ -172,10 +164,11 @@ func parseTruyenQQList(doc *goquery.Document) []models.Manga {
 	return mangas
 }
 
-// truyenqqPath reduces a manga/chapter link to its path without ".html".
+// TruyenQQPath reduces a manga/chapter link to its path without ".html".
 // IDs stay valid on every mirror, and the same manga gets the same ID whether
 // it came from search (absolute links) or a list page (relative links).
-func truyenqqPath(href string) string {
+// Also used to migrate entries saved as absolute URLs of either mirror.
+func TruyenQQPath(href string) string {
 	href = strings.TrimSpace(href)
 	if u, err := url.Parse(href); err == nil && u.Host != "" {
 		href = u.Path
@@ -306,7 +299,7 @@ func (p *TruyenQQProvider) FetchChapters(ctx context.Context, mangaURL string) (
 			return
 		}
 		chapters = append(chapters, models.Chapter{
-			ID:    truyenqqPath(href),
+			ID:    TruyenQQPath(href),
 			Title: title,
 		})
 	})

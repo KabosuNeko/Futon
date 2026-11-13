@@ -121,8 +121,8 @@ func TestSearchSlashCommands(t *testing.T) {
 		if (rm.view == viewHistory) != tc.wantHistory {
 			t.Errorf("%q: showingHistory = %v, want %v", tc.input, (rm.view == viewHistory), tc.wantHistory)
 		}
-		if rm.chapterLanguage != tc.wantLang {
-			t.Errorf("%q: chapterLanguage = %v, want %v", tc.input, rm.chapterLanguage, tc.wantLang)
+		if got := rm.providers[1].(*api.MangaDexProvider).Lang(); got != tc.wantLang {
+			t.Errorf("%q: MangaDex language = %v, want %v", tc.input, got, tc.wantLang)
 		}
 		if tc.wantSystemMsg != "" && rm.systemMsg != tc.wantSystemMsg {
 			t.Errorf("%q: systemMsg = %q, want %q", tc.input, rm.systemMsg, tc.wantSystemMsg)

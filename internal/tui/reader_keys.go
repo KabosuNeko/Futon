@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/export"
+	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
 const preloadTriggerOffset = 3
@@ -231,7 +232,8 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		m.hideFooter = !m.hideFooter
 		m.resetImageCache()
 		m.isLoading = true
-		return m, m.renderCmd(m.currentIdx)
+		hidden := m.hideFooter
+		return m, tea.Batch(m.renderCmd(m.currentIdx), saveUserDataCmd(func(ud *storage.UserData) { ud.ReaderHideFooter = hidden }))
 
 	case "ctrl+d":
 		if m.step == stepRead && m.validCurrentImage() {

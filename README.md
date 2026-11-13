@@ -123,7 +123,7 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 | `k` / `↑` | Về chapter trước (chế độ webtoon: `↑` cuộn trang) |
 | `w` | Bật/tắt chế độ webtoon: vừa chiều ngang, cuộn bằng `↑`/`↓`/`space`/chuột (được nhớ) |
 | `ctrl+d` | Save trang hiện tại |
-| `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng) |
+| `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng; được nhớ) |
 | `ctrl+e` | Xuất chapter hiện tại ra CBZ |
 | `r` | Tải lại trang bị lỗi |
 | `esc` | Về chapter list |

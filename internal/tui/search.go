@@ -70,9 +70,8 @@ type SearchModel struct {
 	providerCounts     map[string]int
 	providerErrors     map[string]string
 
-	filterQuery     string
-	chapterLanguage string
-	systemMsg       string
+	filterQuery string
+	systemMsg   string
 
 	// pendingSeq identifies the newest result request; snapshots from older
 	// requests are ignored (stale-response guard).
@@ -114,7 +113,6 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		input:           ti,
 		width:           80,
 		height:          24,
-		chapterLanguage: "vi",
 		providers:       providers,
 		providerToggles: toggles,
 		page:            1,

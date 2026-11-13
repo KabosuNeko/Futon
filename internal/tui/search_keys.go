@@ -268,7 +268,7 @@ func (m SearchModel) handleEnter() (SearchModel, tea.Cmd, bool) {
 		m.setChapterLanguage(parts[1])
 		m.systemMsg = "Đã cài đặt ngôn ngữ chapter mặc định: " + parts[1]
 		lang := parts[1]
-		return m, func() tea.Msg { return storageSavedMsg{err: storage.SaveChapterLang(lang)} }, true
+		return m, saveUserDataCmd(func(ud *storage.UserData) { ud.ChapterLang = lang }), true
 	}
 
 	if val == "/update" {
@@ -290,7 +290,6 @@ func (m SearchModel) handleEnter() (SearchModel, tea.Cmd, bool) {
 
 // setChapterLanguage applies the MangaDex chapter language.
 func (m *SearchModel) setChapterLanguage(lang string) {
-	m.chapterLanguage = lang
 	for _, p := range m.providers {
 		if md, ok := p.(*api.MangaDexProvider); ok {
 			md.SetLang(lang)

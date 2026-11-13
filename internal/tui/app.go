@@ -74,8 +74,9 @@ type AppModel struct {
 
 	// Last known terminal size, handed to screens created after the resize.
 	width, height int
-	// readerFitWidth is the saved webtoon-mode choice for the first reader.
-	readerFitWidth bool
+	// Saved reader choices (webtoon mode, hidden hints) for the first reader.
+	readerFitWidth   bool
+	readerHideFooter bool
 }
 
 func NewAppModel(version string) AppModel {
@@ -91,19 +92,23 @@ func NewAppModel(version string) AppModel {
 	_ = storage.MigrateEntries(migrateLegacyEntry)
 
 	search := NewSearchModel(providers)
-	// Restore the /lang choice; a read error just keeps the default.
-	if lang, err := storage.LoadChapterLang(); err == nil && lang != "" {
-		search.setChapterLanguage(lang)
+	// Restore saved choices; an unreadable file just keeps the defaults.
+	ud, err := storage.LoadUserData()
+	if err != nil {
+		ud = &storage.UserData{}
 	}
-	fitWidth, _ := storage.LoadReaderFitWidth()
+	if ud.ChapterLang != "" {
+		search.setChapterLanguage(ud.ChapterLang)
+	}
 
 	return AppModel{
-		state:           stateSearch,
-		search:          search,
-		providers:       providers,
-		currentProvider: providers[0],
-		appVersion:      version,
-		readerFitWidth:  fitWidth,
+		state:            stateSearch,
+		search:           search,
+		providers:        providers,
+		currentProvider:  providers[0],
+		appVersion:       version,
+		readerFitWidth:   ud.ReaderFitWidth,
+		readerHideFooter: ud.ReaderHideFooter,
 	}
 }
 
@@ -175,15 +180,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.search.repaintCoverCmd()
 
 	case ViewChapterMsg:
-		// Keep the reading mode across chapters: the previous reader holds
-		// the latest choice (w may have been pressed since launch).
+		// Keep the reader choices across chapters: the previous reader holds
+		// the latest ones (w or ctrl+h may have been pressed since launch).
 		if m.reader.renderer != nil {
 			m.readerFitWidth = m.reader.fitWidth
+			m.readerHideFooter = m.reader.hideFooter
 		}
 		m.state = stateReader
 		m.reader = NewReaderModel(msg.MangaID, msg.MangaTitle, msg.ChapterID, msg.ChapterNumber, msg.AllChapterIDs, msg.ChapterIndex, msg.StartPageIndex, m.currentProvider)
 		m.reader.allChapterNumbers = msg.AllChapterNumbers
 		m.reader.fitWidth = m.readerFitWidth
+		m.reader.hideFooter = m.readerHideFooter
 		if m.width > 0 && m.height > 0 {
 			m.reader.width, m.reader.height = m.width, m.height
 		}

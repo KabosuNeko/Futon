@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
@@ -170,13 +171,14 @@ func (m ReaderModel) scrollPage(dir int) (ReaderModel, tea.Cmd) {
 // remembers the choice.
 func (m ReaderModel) toggleFitWidth() (ReaderModel, tea.Cmd) {
 	m.fitWidth = !m.fitWidth
+	on := m.fitWidth
 	m.scrollRow = 0
 	m.resetImageCache()
 	m.flashMsg = "Chế độ: vừa màn hình"
 	if m.fitWidth {
 		m.flashMsg = "Chế độ webtoon: vừa chiều ngang, [↑/↓] cuộn"
 	}
-	cmds := []tea.Cmd{saveReaderFitWidthCmd(m.fitWidth), clearFlashAfter(2 * time.Second)}
+	cmds := []tea.Cmd{saveUserDataCmd(func(ud *storage.UserData) { ud.ReaderFitWidth = on }), clearFlashAfter(2 * time.Second)}
 	if m.step == stepRead && m.validCurrentImage() {
 		m.isLoading = true
 		cmds = append(cmds, m.renderCmd(m.currentIdx))

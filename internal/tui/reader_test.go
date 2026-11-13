@@ -520,10 +520,28 @@ func TestReaderModeCarriesAcrossChapters(t *testing.T) {
 	app := NewAppModel("dev")
 	app.reader = NewReaderModel("m", "T", "c1", "1", []string{"c1", "c2"}, 0, 0, nil)
 	app.reader.fitWidth = true
+	app.reader.hideFooter = true
 
 	updated, _ := app.Update(ViewChapterMsg{MangaID: "m", ChapterID: "c2", AllChapterIDs: []string{"c1", "c2"}, ChapterIndex: 1})
-	if !updated.(AppModel).reader.fitWidth {
+	next := updated.(AppModel).reader
+	if !next.fitWidth {
 		t.Error("the next chapter lost webtoon mode")
+	}
+	if !next.hideFooter {
+		t.Error("the next chapter showed the footer again after ctrl+h hid it")
+	}
+}
+
+func TestCtrlHIsRememberedAcrossLaunches(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := newReadingModel(1)
+	m.imageData[0] = []byte{1}
+
+	_, cmd := m.update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	collectMessages(cmd) // runs the save command
+
+	if !NewAppModel("dev").readerHideFooter {
+		t.Error("a new launch does not start with the footer hidden")
 	}
 }
 
