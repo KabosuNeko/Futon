@@ -104,20 +104,16 @@ func saveImageCmd(data []byte, mangaTitle, chapterNumber string, pageNumber int)
 			return imageSavedMsg{err: fmt.Errorf("tạo thư mục download: %w", err)}
 		}
 
-		safeTitle := export.SanitizeFilename(mangaTitle)
-		if safeTitle == "Untitled" {
-			safeTitle = "manga"
-		}
-		ch := export.SanitizeFilename(export.ChapterFileLabel(chapterNumber))
+		stem := export.FileStem(mangaTitle, chapterNumber)
 		ext := export.DetectImageExt(data)
-		path := filepath.Join(dir, fmt.Sprintf("%s_%s_Pg%d.%s", safeTitle, ch, pageNumber, ext))
+		path := filepath.Join(dir, fmt.Sprintf("%s_Pg%d.%s", stem, pageNumber, ext))
 
 		// If filename exists, append suffix up to 999 before giving up.
 		for suffix := 1; suffix < 1000; suffix++ {
 			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 				break
 			}
-			path = filepath.Join(dir, fmt.Sprintf("%s_%s_Pg%d_%d.%s", safeTitle, ch, pageNumber, suffix, ext))
+			path = filepath.Join(dir, fmt.Sprintf("%s_Pg%d_%d.%s", stem, pageNumber, suffix, ext))
 		}
 
 		if err := os.WriteFile(path, data, 0o644); err != nil {

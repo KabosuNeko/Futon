@@ -56,7 +56,7 @@ internal/
     search_layout.go # pane sizes, viewport, list rows for mouse hit-testing
     search_view.go   # search screen rendering
     chapter.go       # ChapterListModel, Init, Update
-    chapter_export.go # ctrl+e CBZ export
+    chapter_export.go # ctrl+e chapter / ctrl+a whole-series CBZ export (streamed progress, cancel)
     chapter_view.go  # chapter list view, viewport, history restore, quick jump
     reader.go        # ReaderModel, New, Init, Update dispatcher
     reader_keys.go   # reader key handling (navigation, retry, save, export, quit)
@@ -93,7 +93,9 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 
 - Favorites + source toggles + `/lang`: `~/.config/futon/userdata.json` (read-modify-write guarded by a mutex)
 - Reading history (last chapter + page per manga, keyed by provider + manga ID): `~/.config/futon/history.json`
-- Downloaded images: `~/Downloads/Futon/`
+- Downloaded images and CBZ: `{Downloads}/Futon/` (`XDG_DOWNLOAD_DIR` or `user-dirs.dirs`, else `~/Downloads`); the config folder honours `XDG_CONFIG_HOME` unless `~/.config/futon` already exists. Tests isolate both through `HOME` and unset the XDG variables in `TestMain`.
+- History flushes are serialized and merge entries written by other Futon windows; `cmd/main.go` flushes after the program exits (also on `SIGTERM`/`SIGHUP`).
+- File names come from `export.FileStem` (title prefix dropped from chapter labels, kept under 200 bytes).
 - Old `favorites.json` and `sources.json` are auto-migrated to `userdata.json` on first launch.
 
 ## Image Rendering
@@ -136,7 +138,7 @@ Every Kitty graphics command carries `q=2` so the terminal sends no replies into
 - `esc` in `/fav`, `/his`, or `/src` returns to the search screen.
 - `ctrl+d` in `/fav` removes a favorite; `ctrl+d` in `/his` removes a history entry.
 - `ctrl+h` in the reader toggles the footer/hint row.
-- `ctrl+e` exports the focused/current chapter to CBZ. There is no whole-series export (out of scope, see SPEC Non-Goals).
+- `ctrl+e` exports the focused/current chapter to CBZ; `ctrl+a` in the chapter list exports every chapter (`esc` cancels it).
 - `r` in the reader retries a page that failed to load.
 - Search-screen tabs are one `searchView` enum (`m.view`); switch tabs through `switchView`, not by setting fields by hand.
 - Views must not do I/O: screens get their size from the router (`WindowSizeMsg`, propagated to newly created screens) and cached state; mouse rows come from the same layout code that renders the view.

@@ -37,6 +37,12 @@ func ConfigDir() (string, error) {
 		return "", fmt.Errorf("lấy thư mục home: %w", err)
 	}
 	dir := filepath.Join(home, ".config", "futon")
+	// Honour XDG_CONFIG_HOME, but keep using data already saved in ~/.config.
+	if base := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(base) {
+		if _, err := os.Stat(dir); err != nil {
+			dir = filepath.Join(base, "futon")
+		}
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("tạo thư mục cấu hình: %w", err)
 	}

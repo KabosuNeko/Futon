@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestExportImagesToCBZ(t *testing.T) {
@@ -87,6 +88,9 @@ func TestSanitizeFilename(t *testing.T) {
 }
 
 func TestGetDefaultExportDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DOWNLOAD_DIR", "")
 	dir, err := GetDefaultExportDir()
 	if err != nil {
 		t.Fatalf("GetDefaultExportDir error: %v", err)
@@ -223,5 +227,66 @@ func TestShortPathUsesTilde(t *testing.T) {
 	}
 	if got := ShortPath("/tmp/x.cbz"); got != "/tmp/x.cbz" {
 		t.Errorf("ShortPath outside home = %q", got)
+	}
+}
+
+func TestFileStemFitsNameLimitAndKeepsChapter(t *testing.T) {
+	title := "Chuyển Sinh Thành Thất Hoàng Tử Tôi Quyết Định Sống Cuộc Đời Bình Thường Ở Thế Giới Khác"
+	long := strings.Repeat(title+" ", 3)
+
+	if got := FileStem(title, title+" Chapter 12"); got != title+"_Chapter 12" {
+		t.Errorf("repeated title not dropped: %q", got)
+	}
+	a, b := FileStem(long, "Chương 1"), FileStem(long, "Chương 2")
+	if len(a) > maxNameBytes || a == b || !strings.HasSuffix(a, "_Chương 1") {
+		t.Errorf("long title: %d bytes %q / %q", len(a), a, b)
+	}
+	if !utf8.ValidString(a) {
+		t.Error("a character was split")
+	}
+
+	// The real failure: this export used to hit "file name too long".
+	jpg := []byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01")
+	if _, err := ExportImagesToCBZ(long, long+" Chapter 12", [][]byte{jpg}, t.TempDir()); err != nil {
+		t.Fatalf("export with a long title: %v", err)
+	}
+}
+
+func TestDownloadsDirFollowsXDGUserDirs(t *testing.T) {
+	home, cfg := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("XDG_DOWNLOAD_DIR", "")
+
+	if got := downloadsDir(home); got != filepath.Join(home, "Downloads") {
+		t.Errorf("no user-dirs: %q", got)
+	}
+	os.WriteFile(filepath.Join(cfg, "user-dirs.dirs"), []byte("# comment\nXDG_DOWNLOAD_DIR=\"$HOME/Tải xuống\"\n"), 0o644)
+	if got := downloadsDir(home); got != filepath.Join(home, "Tải xuống") {
+		t.Errorf("localized: %q", got)
+	}
+	os.WriteFile(filepath.Join(cfg, "user-dirs.dirs"), []byte("XDG_DOWNLOAD_DIR=\"$HOME/\"\n"), 0o644)
+	if got := downloadsDir(home); got != filepath.Join(home, "Downloads") {
+		t.Errorf("disabled entry must fall back: %q", got)
+	}
+	t.Setenv("XDG_DOWNLOAD_DIR", "/data/dl")
+	if got := downloadsDir(home); got != "/data/dl" {
+		t.Errorf("env override: %q", got)
+	}
+}
+
+func TestFileStemDropsTitleOnlyAtWordBoundary(t *testing.T) {
+	if got := FileStem("One", "Oneshot"); got != "One_Oneshot" {
+		t.Errorf("FileStem(One, Oneshot) = %q, want the label kept whole", got)
+	}
+	if got := FileStem("One", "One - Chapter 2"); got != "One_Chapter 2" {
+		t.Errorf("FileStem(One, One - Chapter 2) = %q", got)
+	}
+}
+
+func TestSanitizeFilenameDropsLeadingDots(t *testing.T) {
+	for in, want := range map[string]string{"..": "Untitled", ".": "Untitled", " .. ": "Untitled", ".hidden": "hidden", "Dr. Stone": "Dr. Stone", "...Ah": "Ah"} {
+		if got := SanitizeFilename(in); got != want {
+			t.Errorf("SanitizeFilename(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

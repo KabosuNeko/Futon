@@ -146,3 +146,21 @@ func TestMigrateOldDataIgnoresCorruptFavorites(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigDirHonoursXDGButKeepsExistingData(t *testing.T) {
+	home, xdg := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	if dir, _ := ConfigDir(); dir != filepath.Join(xdg, "futon") {
+		t.Errorf("new install: %s, want under XDG_CONFIG_HOME", dir)
+	}
+
+	// An existing ~/.config/futon keeps being used, so no data is orphaned.
+	home2 := t.TempDir()
+	t.Setenv("HOME", home2)
+	os.MkdirAll(filepath.Join(home2, ".config", "futon"), 0o755)
+	if dir, _ := ConfigDir(); dir != filepath.Join(home2, ".config", "futon") {
+		t.Errorf("existing data: %s, want the old ~/.config/futon", dir)
+	}
+}

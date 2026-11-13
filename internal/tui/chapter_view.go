@@ -182,7 +182,7 @@ func (m ChapterListModel) buildContent() (string, int) {
 	if m.inputBuffer != "" {
 		footer = "[enter] Nhảy đến chapter  [esc] Hủy  [^c] Thoát"
 	} else {
-		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất CBZ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
+		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất chap  [ctrl+a] Xuất cả bộ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
 	}
 
 	footerNode := lipgloss.NewStyle().

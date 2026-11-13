@@ -108,9 +108,10 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 | `G` / `end` | Đến chapter cuối |
 | `ctrl+f` | Thêm truyện vào Yêu thích |
 | `ctrl+e` | Xuất chapter đang chọn ra CBZ |
+| `ctrl+a` | Xuất toàn bộ chapter ra CBZ (hiện tiến độ; `esc` để hủy) |
 | `enter` | Mở chapter |
 | `[number]` + `enter` | Jump tới chapter |
-| `esc` | Quay lại search |
+| `esc` | Hủy xuất cả bộ đang chạy, hoặc quay lại search |
 | `ctrl+c` | Thoát |
 
 #### Reader
@@ -169,7 +170,9 @@ Kiểm tra nhanh: `resolvectl query api.mangadex.org` (hoặc `nslookup api.mang
 | Favorites + Sources + `/lang` | `~/.config/futon/userdata.json` |
 | Reading history | `~/.config/futon/history.json` |
 | Ảnh đã download | `~/Downloads/Futon/` |
-| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file) |
+| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file; `ctrl+a` gom vào thư mục riêng của truyện) |
+
+`~/.config` theo `XDG_CONFIG_HOME` nếu có đặt (dữ liệu cũ ở `~/.config/futon` vẫn được dùng tiếp). `~/Downloads` là thư mục tải về của desktop (`XDG_DOWNLOAD_DIR`, vd. `~/Tải xuống`). Có thể mở nhiều cửa sổ Futon cùng lúc: lịch sử đọc của các cửa sổ được gộp chung.
 
 ## Architecture
 

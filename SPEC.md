@@ -24,8 +24,8 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 
 - Continuous-scroll manga reading (infinite scroll) — page-by-page reading only.
 - Windows support (build targets are Linux + macOS only; Windows code merely compiles, it does not run).
-- Offline library management (downloading full series, reading offline).
-- Manual bulk page downloads (only 1 page per `ctrl+d`; CBZ export is per chapter, not arbitrary page selection).
+- Offline library management (reading downloaded chapters inside Futon; exported CBZ files are read with other apps).
+- Manual bulk page downloads (only 1 page per `ctrl+d`; CBZ export is per chapter or whole series, not arbitrary page selection).
 - User accounts, cloud sync, follow/notifications.
 - Comments, ratings, in-app reviews.
 
@@ -134,9 +134,10 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 ### 4.10 CBZ export
 
-- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. Messages show paths with `~` for the home directory.
+- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. When the chapter label starts with the manga title (some sources repeat it), that prefix is dropped. Names are kept under 200 bytes (file systems allow 255; Vietnamese letters take 2-3 bytes) by shortening the title, never the chapter part, so chapters cannot collide. Messages show paths with `~` for the home directory.
 - **FR-E2**: Each CBZ contains `ComicInfo.xml` (original series/chapter titles, XML-escaped; only the file name is sanitized) and zero-padded page entries named `001.<ext>`, `002.<ext>`, ...
 - **FR-E3**: A CBZ is only written when **every page** downloaded (pages download 4 at a time, with the FR-R6 retries); otherwise the export fails naming the page. The archive is written to a temp file and renamed, so a failed export leaves no partial `.cbz`.
+- **FR-E4**: `ctrl+a` in the chapter list exports every chapter into `~/Downloads/Futon/{Title}/`, one CBZ per chapter, showing `{done}/{total}` progress as each chapter finishes; `esc` cancels it (after the chapter in progress). Chapters that fail are skipped and named in the final flash with `{success}/{total}`. Progress keeps updating while a chapter is being read.
 
 ## 5. Non-Functional Requirements
 
@@ -157,6 +158,7 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 - **Migration**: on first run after upgrade, if `userdata.json` does not exist, old `favorites.json` + `sources.json` are auto-merged into `userdata.json` and the 2 old files are deleted (one-time).
 - Source toggles are stored by **provider name**; all enabled by default.
+- **Locations**: the config folder is `$XDG_CONFIG_HOME/futon` when that variable is set, unless `~/.config/futon` already exists (existing data is never orphaned). Downloads go to `{Downloads}/Futon`, where `{Downloads}` is `XDG_DOWNLOAD_DIR` (environment or `user-dirs.dirs`, e.g. `~/Tải xuống` on a Vietnamese desktop), else `~/Downloads`.
 
 ## 7. Platform
 

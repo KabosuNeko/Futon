@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"time"
 	"unicode"
@@ -30,6 +31,8 @@ type ChapterListModel struct {
 	history *storage.ReadHistory
 	// resumeChapterID, when set, opens that chapter once the list loads.
 	resumeChapterID string
+	// cancelExport stops a running ctrl+a export; nil when none is running.
+	cancelExport context.CancelFunc
 }
 
 func NewChapterListModel(mangaID, mangaTitle string, provider api.MangaProvider) ChapterListModel {
@@ -115,6 +118,12 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.inputBuffer = ""
 				return m, nil
 			}
+			if m.cancelExport != nil {
+				m.cancelExport()
+				m.cancelExport = nil
+				m.flashMsg = "Đang hủy xuất CBZ..."
+				return m, nil
+			}
 			return m, func() tea.Msg { return BackToSearchMsg{} }
 
 		case "ctrl+f":
@@ -141,6 +150,15 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, exportChapterCmd(m.provider, ch.ID, m.mangaTitle, chapterLabel(ch))
 			}
 			return m, nil
+
+		case "ctrl+a":
+			if m.cancelExport != nil || len(m.chapters) == 0 {
+				return m, nil
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			m.cancelExport = cancel
+			m.flashMsg = fmt.Sprintf("Đang xuất 0/%d chapters ra CBZ... [esc] Hủy", len(m.chapters))
+			return m, exportAllChaptersCmd(ctx, m.mangaID, m.provider, m.mangaTitle, m.chapters)
 
 		case "g", "home":
 			m.cursor = 0
@@ -195,6 +213,9 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+
+	case batchExportMsg:
+		return m.handleBatchExport(msg)
 
 	case cbzExportedMsg:
 		if msg.err != nil {

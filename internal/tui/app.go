@@ -196,6 +196,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.reader.Init()
 
+	case batchExportMsg:
+		// Export progress belongs to the chapter list even while reading.
+		cm, cmd := m.chapter.Update(msg)
+		m.chapter = cm.(ChapterListModel)
+		return m, cmd
+
 	case BackToChaptersMsg:
 		m.state = stateChapters
 		m.chapter.reloadHistory() // the reader just saved a new position

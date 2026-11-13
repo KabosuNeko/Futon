@@ -18,6 +18,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("HOME", home)
+	// Tests isolate data through HOME; XDG paths would point at the real ones.
+	os.Unsetenv("XDG_CONFIG_HOME")
+	os.Unsetenv("XDG_DOWNLOAD_DIR")
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)
