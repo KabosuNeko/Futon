@@ -109,7 +109,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind. Each image retries up to **3 attempts** on network errors, 5xx and 429.
 - **FR-R11**: A page that fails to download or decode does **not** end the chapter: that page shows "Lỗi trang N: … — [r] Thử lại", other pages and navigation keep working, and `r` downloads it again.
 - **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`).
-- **FR-R8**: Terminal resize → re-render the current page.
+- **FR-R8**: Terminal resize → re-render the current page. The rendered cache is cleared, and renders started before a resize or a `w`/`ctrl+h` toggle are dropped, so no page is shown at an old size or in the other mode.
 - **FR-R9**: `ctrl+h` toggles the reader footer/hint row. Hidden, the page is re-rendered to use the freed row; rendered cache is cleared so pages are not reused at the old size. The choice is kept across chapters and remembered in `userdata.json` (`reader_hide_footer`), like webtoon mode.
 
 ### 4.7 Image rendering

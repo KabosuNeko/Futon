@@ -16,12 +16,8 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 		if len(indices) > 0 && m.cursor < len(indices) {
 			fav := m.favorites[indices[m.cursor]]
 			m.resetView(viewFeed)
-			providerName := fav.Provider
-			if providerName == "" && len(m.providers) > 0 {
-				providerName = m.providers[0].Name()
-			}
 			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: providerName}
+				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: fav.Provider}
 			}, true
 		}
 		return m, nil, true
@@ -36,12 +32,8 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 			if title == "" {
 				title = h.MangaID
 			}
-			providerName := h.Provider
-			if providerName == "" && len(m.providers) > 0 {
-				providerName = m.providers[0].Name()
-			}
 			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: providerName, ResumeChapterID: h.ChapterID}
+				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: h.Provider, ResumeChapterID: h.ChapterID}
 			}, true
 		}
 		return m, nil, true
@@ -52,15 +44,8 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 		if !ok {
 			return m, nil, false
 		}
-		providerName := manga.Provider
-		if providerName == "" {
-			active := m.activeProviders()
-			if len(active) > 0 {
-				providerName = active[0].Name()
-			}
-		}
 		return m, func() tea.Msg {
-			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: providerName}
+			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: manga.Provider}
 		}, true
 	}
 

@@ -21,8 +21,10 @@ type downloadProgressMsg struct {
 type renderDoneMsg struct {
 	index     int
 	chapterID string
-	img       imgrender.RenderedImage
-	err       error
+	// gen is the reader's renderGen when the render started.
+	gen int
+	img imgrender.RenderedImage
+	err error
 	// Webtoon-mode renders (windowed) also carry the scaled page, the scroll
 	// that was asked for, the clamped scroll that was rendered and the page
 	// height in rows.
@@ -58,12 +60,14 @@ type ReaderModel struct {
 	urls              []string
 	imageData         [][]byte
 	imageCache        map[int]imgrender.RenderedImage
-	cacheOrder        []int
-	currentIdx        int
-	startPage         int
-	downloadOrder     []int
-	downloadPos       int
-	downloading       map[int]struct{}
+	// renderGen counts cache resets; a render started before one is dropped.
+	renderGen     int
+	cacheOrder    []int
+	currentIdx    int
+	startPage     int
+	downloadOrder []int
+	downloadPos   int
+	downloading   map[int]struct{}
 	// failed holds pages whose download or decode failed; the reader shows
 	// the error on that page only and `r` retries it.
 	failed           map[int]error
@@ -180,6 +184,12 @@ func (m ReaderModel) update(msg tea.Msg) (ReaderModel, tea.Cmd) {
 		return m, clearFlashAfter(3 * time.Second)
 	case clearFlashMsg:
 		m.flashMsg = ""
+		return m, nil
+	case storageSavedMsg:
+		if msg.err != nil {
+			m.flashMsg = fmt.Sprintf("Lỗi lưu cài đặt: %v", msg.err)
+			return m, clearFlashAfter(3 * time.Second)
+		}
 		return m, nil
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)

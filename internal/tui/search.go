@@ -281,6 +281,9 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 			m.results = m.mergeResults(msg.Manga)
 			m.appendBase = nil
 			if msg.Err != nil {
+				// Every source failed: ask for this page again on the next try.
+				m.page--
+				m.hasMore = true
 				m.flashMsg = fmt.Sprintf("Lỗi tải thêm: %v", msg.Err)
 				return m, clearFlashAfter(3 * time.Second)
 			}

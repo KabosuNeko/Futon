@@ -59,7 +59,7 @@ func (m ReaderModel) renderCmd(idx int) tea.Cmd {
 		return nil
 	}
 	if !m.fitWidth {
-		return renderPage(m.renderer, m.imageData[idx], idx, m.chapterID, m.imageRows())
+		return renderPage(m.renderer, m.imageData[idx], idx, m.chapterID, m.renderGen, m.imageRows())
 	}
 	scroll := 0
 	var scaled image.Image
@@ -69,13 +69,13 @@ func (m ReaderModel) renderCmd(idx int) tea.Cmd {
 	if s := m.scaledFor(idx); s != nil {
 		scaled = s.img
 	}
-	return renderWindow(m.renderer, m.imageData[idx], scaled, idx, m.chapterID, scroll, m.viewRows())
+	return renderWindow(m.renderer, m.imageData[idx], scaled, idx, m.chapterID, m.renderGen, scroll, m.viewRows())
 }
 
-func renderWindow(r imgrender.Renderer, data []byte, scaled image.Image, index int, chapterID string, scroll, rows int) tea.Cmd {
+func renderWindow(r imgrender.Renderer, data []byte, scaled image.Image, index int, chapterID string, gen, scroll, rows int) tea.Cmd {
 	return func() tea.Msg {
 		fail := func(err error) tea.Msg {
-			return renderDoneMsg{index: index, chapterID: chapterID, err: fmt.Errorf("render trang %d: %w", index+1, err)}
+			return renderDoneMsg{index: index, chapterID: chapterID, gen: gen, err: fmt.Errorf("render trang %d: %w", index+1, err)}
 		}
 		if scaled == nil {
 			var err error
@@ -89,7 +89,7 @@ func renderWindow(r imgrender.Renderer, data []byte, scaled image.Image, index i
 			return fail(err)
 		}
 		return renderDoneMsg{
-			index: index, chapterID: chapterID, img: img,
+			index: index, chapterID: chapterID, gen: gen, img: img,
 			windowed: true, scaled: scaled, requested: scroll, scroll: top, totalRows: total,
 		}
 	}

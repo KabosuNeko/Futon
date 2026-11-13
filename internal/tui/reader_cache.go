@@ -37,6 +37,7 @@ func (m *ReaderModel) getCached(idx int) (imgrender.RenderedImage, bool) {
 func (m *ReaderModel) resetImageCache() {
 	m.imageCache = make(map[int]imgrender.RenderedImage)
 	m.cacheOrder = nil
+	m.renderGen++
 	m.scaled = nil
 	m.nextScaled = nil
 	m.window = windowFrame{}

@@ -579,3 +579,34 @@ type escProvider struct{ pagedProvider }
 func (escProvider) FetchChapters(context.Context, string) ([]models.Chapter, error) {
 	return []models.Chapter{{ID: "c", Title: "Chap\x1b]0;pwned\a 1"}}, nil
 }
+
+func TestRenderStartedBeforeModeToggleIsDropped(t *testing.T) {
+	m := newReadingModel(3)
+	for i := range m.imageData {
+		m.imageData[i] = []byte{1}
+	}
+	oldGen := m.renderGen
+	m, _ = m.toggleFitWidth() // a fit-screen render of page 1 is still in flight
+
+	m, _ = m.update(renderDoneMsg{index: 1, chapterID: m.chapterID, gen: oldGen, img: imgrender.RenderedImage{WidthPx: 1, HeightPx: 1}})
+	if _, cached := m.imageCache[1]; cached {
+		t.Error("a render from before the toggle was cached in webtoon mode")
+	}
+}
+
+func TestResizeClearsRenderedPagesInFitScreenMode(t *testing.T) {
+	m := newReadingModel(3)
+	m.setCached(1, imgrender.RenderedImage{WidthPx: 1, HeightPx: 1})
+	m, _ = m.update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	if _, cached := m.imageCache[1]; cached {
+		t.Error("page 1 kept its render for the old terminal size")
+	}
+}
+
+func TestReaderShowsSettingsSaveError(t *testing.T) {
+	m := newReadingModel(1)
+	m, _ = m.update(storageSavedMsg{err: errors.New("parse userdata JSON")})
+	if !strings.Contains(m.flashMsg, "parse userdata JSON") {
+		t.Errorf("flash = %q, want the save error", m.flashMsg)
+	}
+}

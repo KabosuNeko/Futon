@@ -25,13 +25,13 @@ func downloadOne(provider api.MangaProvider, chapterID, url string, index int) t
 	}
 }
 
-func renderPage(r imgrender.Renderer, imgData []byte, index int, chapterID string, rows int) tea.Cmd {
+func renderPage(r imgrender.Renderer, imgData []byte, index int, chapterID string, gen, rows int) tea.Cmd {
 	return func() tea.Msg {
 		img, err := r.RenderInBox(imgData, 0, rows)
 		if err != nil {
-			return renderDoneMsg{index: index, chapterID: chapterID, err: fmt.Errorf("render trang %d: %w", index+1, err)}
+			return renderDoneMsg{index: index, chapterID: chapterID, gen: gen, err: fmt.Errorf("render trang %d: %w", index+1, err)}
 		}
-		return renderDoneMsg{index: index, chapterID: chapterID, img: img}
+		return renderDoneMsg{index: index, chapterID: chapterID, gen: gen, img: img}
 	}
 }
 

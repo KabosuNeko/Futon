@@ -138,7 +138,7 @@ func TestReaderResizeReframes(t *testing.T) {
 	}
 
 	sm := newM.(ReaderModel)
-	_, cmd2 := sm.Update(renderDoneMsg{index: 0, chapterID: "c1", img: rendered})
+	_, cmd2 := sm.Update(renderDoneMsg{index: 0, chapterID: "c1", gen: sm.renderGen, img: rendered})
 	frame := collectRawPayloads(cmd2)
 	if !strings.Contains(frame, rendered.EscapeSequence) {
 		t.Errorf("expected re-rendered image frame after resize, got %q", frame)
