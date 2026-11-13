@@ -134,10 +134,10 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 ### 4.10 CBZ export
 
-- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. When the chapter label starts with the manga title (some sources repeat it), that prefix is dropped. Names are kept under 200 bytes (file systems allow 255; Vietnamese letters take 2-3 bytes) by shortening the title, never the chapter part, so chapters cannot collide. Messages show paths with `~` for the home directory.
+- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used instead. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. When the chapter label starts with the manga title (some sources repeat it), that prefix is dropped. Names are kept under 200 bytes (file systems allow 255; Vietnamese letters take 2-3 bytes) by shortening the title, never the chapter part, so chapters cannot collide. Messages show paths with `~` for the home directory.
 - **FR-E2**: Each CBZ contains `ComicInfo.xml` (original series/chapter titles, XML-escaped; only the file name is sanitized) and zero-padded page entries named `001.<ext>`, `002.<ext>`, ...
 - **FR-E3**: A CBZ is only written when **every page** downloaded (pages download 4 at a time, with the FR-R6 retries); otherwise the export fails naming the page. The archive is written to a temp file and renamed, so a failed export leaves no partial `.cbz`.
-- **FR-E4**: `ctrl+a` in the chapter list exports every chapter into `~/Downloads/Futon/{Title}/`, one CBZ per chapter, showing `{done}/{total}` progress as each chapter finishes; `esc` cancels it (after the chapter in progress). Chapters that fail are skipped and named in the final flash with `{success}/{total}`. Progress keeps updating while a chapter is being read.
+- **FR-E4**: `ctrl+a` in the chapter list exports every chapter into `~/Downloads/Futon/{Title}/`, one CBZ per chapter, showing `{done}/{total}` progress as each chapter finishes; `esc` cancels it (after the chapter in progress). Chapters that share a label (e.g. MangaDex oneshots with neither number nor title) get `_2`, `_3`... so none overwrites another. Chapters that fail are skipped and named in the final flash with `{success}/{total}` (the first 5, then `+N`). Progress keeps updating while a chapter is being read.
 
 ## 5. Non-Functional Requirements
 
@@ -146,7 +146,7 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 - **NFR-3**: Key input must respond instantly; network search must not freeze the interface.
 - **NFR-4**: Local data safety — write files with 0644, do not overwrite unnecessarily.
 - **NFR-5**: Cross-compilation without CGO (`CGO_ENABLED=0`).
-- **NFR-6**: Text from sources (titles, authors, genres, chapter names) has control characters removed before use, and the reader strips them again before writing raw to the terminal, so a crafted title cannot send terminal escape sequences (clipboard writes, screen changes).
+- **NFR-6**: Text from sources (titles, authors, genres, chapter names) has control characters removed before use, and the reader strips them again before writing raw to the terminal, so a crafted title cannot send terminal escape sequences (clipboard writes, screen changes). Images from sources are capped at 32 MB downloaded and 50 megapixels decoded, so a crafted page (a decompression bomb) fails like a broken page instead of exhausting memory.
 
 ## 6. Data & Storage
 

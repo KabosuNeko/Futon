@@ -13,8 +13,9 @@ import (
 )
 
 type MangaDexProvider struct {
-	mu   sync.RWMutex
-	lang string
+	mu         sync.RWMutex
+	lang       string
+	httpClient *http.Client
 }
 
 // mangadexBaseURL is overridable in tests (see mangadex_test.go).
@@ -44,7 +45,7 @@ var mangadexGenreTags = []string{
 }
 
 func NewMangaDexProvider() *MangaDexProvider {
-	return &MangaDexProvider{lang: "vi"}
+	return &MangaDexProvider{lang: "vi", httpClient: &http.Client{Timeout: providerTimeout}}
 }
 
 func (m *MangaDexProvider) Name() string {
@@ -102,7 +103,7 @@ func (m *MangaDexProvider) listParams(limit, offset int) url.Values {
 
 func (m *MangaDexProvider) list(ctx context.Context, params url.Values) ([]models.Manga, int, error) {
 	endpoint := fmt.Sprintf("%s/manga?%s", mangadexBaseURL, params.Encode())
-	resp, err := httpGet(ctx, http.DefaultClient, endpoint, defaultUserAgent)
+	resp, err := httpGet(ctx, m.httpClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -188,7 +189,7 @@ func (m *MangaDexProvider) FetchChapters(ctx context.Context, mangaID string) ([
 			mangadexBaseURL, url.PathEscape(mangaID), url.QueryEscape(lang), limit, offset,
 		)
 
-		resp, err := httpGet(ctx, http.DefaultClient, endpoint, defaultUserAgent)
+		resp, err := httpGet(ctx, m.httpClient, endpoint, defaultUserAgent)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +236,7 @@ func (m *MangaDexProvider) FetchPages(ctx context.Context, chapterID string) ([]
 		url.PathEscape(chapterID),
 	)
 
-	resp, err := httpGet(ctx, http.DefaultClient, endpoint, defaultUserAgent)
+	resp, err := httpGet(ctx, m.httpClient, endpoint, defaultUserAgent)
 	if err != nil {
 		return nil, err
 	}

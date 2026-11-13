@@ -189,15 +189,6 @@ func (m ReaderModel) handleMouseMsg(msg tea.MouseMsg) (ReaderModel, tea.Cmd) {
 	return m, nil
 }
 
-// exportLabel names the reader export; HTML providers have no chapter numbers,
-// so fall back to the chapter ID instead of the shared "Untitled" filename.
-func (m ReaderModel) exportLabel() string {
-	if m.chapterNumber != "" {
-		return m.chapterNumber
-	}
-	return m.chapterID
-}
-
 func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -220,8 +211,8 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 
 	case "ctrl+e":
 		if m.step == stepRead && m.total > 0 {
-			m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", m.exportLabel())
-			return m, exportReaderCBZCmd(m.provider, m.chapterID, m.mangaTitle, m.exportLabel(), m.imageData, m.urls)
+			m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", m.chapterNumber)
+			return m, exportReaderCBZCmd(m.provider, m.chapterID, m.mangaTitle, m.chapterNumber, m.imageData, m.urls)
 		}
 		return m, nil
 

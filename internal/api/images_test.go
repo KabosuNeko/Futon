@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -181,5 +182,21 @@ func TestDownloadChapterPagesKeepsOrder(t *testing.T) {
 func TestDownloadChapterPagesRejectsEmptyList(t *testing.T) {
 	if _, err := DownloadChapterPages(context.Background(), nil, "", nil); err == nil {
 		t.Fatal("expected an error for a chapter without pages")
+	}
+}
+
+func TestDownloadPageRejectsOversizedImage(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Write(make([]byte, maxImageBytes+1))
+	}))
+	defer srv.Close()
+
+	if _, err := DownloadPage(context.Background(), nil, "", srv.URL); err == nil || !strings.Contains(err.Error(), "quá lớn") {
+		t.Fatalf("err = %v, want an oversized-image error", err)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("requests = %d, want 1 (too large is not transient)", n)
 	}
 }

@@ -37,6 +37,9 @@ const imageMaxAttempts = 3
 // imageRetryDelay is the base backoff between attempts; tests shorten it.
 var imageRetryDelay = 500 * time.Millisecond
 
+// maxImageBytes caps one downloaded image; real pages are a few MB at most.
+const maxImageBytes = 32 << 20
+
 // maxConcurrentPageDownloads bounds parallel page downloads for one chapter.
 const maxConcurrentPageDownloads = 4
 
@@ -117,9 +120,13 @@ func fetchImage(ctx context.Context, rawURL, userAgent, referer string) (data []
 		transient := resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests
 		return nil, transient, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	data, err = io.ReadAll(resp.Body)
+	// One byte past the cap tells an oversized image from one exactly at it.
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
 	if err != nil {
 		return nil, true, err
+	}
+	if len(data) > maxImageBytes {
+		return nil, false, fmt.Errorf("ảnh quá lớn (> %d MB)", maxImageBytes>>20)
 	}
 	if len(data) == 0 {
 		return nil, true, fmt.Errorf("ảnh rỗng")

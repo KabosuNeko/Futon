@@ -86,16 +86,24 @@ func exportAllChaptersCmd(ctx context.Context, mangaID string, provider api.Mang
 		go func() {
 			defer close(updates)
 			progress := batchExportMsg{mangaID: mangaID, total: len(chapters), destDir: mangaDir}
+			// Chapters with the same label (oneshots without number or title)
+			// would otherwise overwrite each other's file.
+			used := make(map[string]bool, len(chapters))
 			for _, ch := range chapters {
 				if ctx.Err() != nil {
 					break
 				}
-				_, err := exportChapterCBZ(ctx, provider, ch.ID, mangaTitle, chapterLabel(ch), mangaDir)
+				label := chapterLabel(ch)
+				for n := 2; used[label]; n++ {
+					label = fmt.Sprintf("%s_%d", chapterLabel(ch), n)
+				}
+				used[label] = true
+				_, err := exportChapterCBZ(ctx, provider, ch.ID, mangaTitle, label, mangaDir)
 				if ctx.Err() != nil {
 					break
 				}
 				if err != nil {
-					progress.failed = append(append([]string(nil), progress.failed...), chapterLabel(ch))
+					progress.failed = append(append([]string(nil), progress.failed...), label)
 				} else {
 					progress.done++
 				}
@@ -139,7 +147,12 @@ func (m ChapterListModel) handleBatchExport(msg batchExportMsg) (tea.Model, tea.
 	case msg.canceled:
 		m.flashMsg = fmt.Sprintf("Đã hủy xuất CBZ (%d/%d chapters xong)", msg.done, msg.total)
 	case len(msg.failed) > 0:
-		m.flashMsg = fmt.Sprintf("Đã xuất %d/%d chapters vào %s; lỗi: %s", msg.done, msg.total, dir, strings.Join(msg.failed, ", "))
+		// Offline, every chapter fails; a full list would push the screen apart.
+		failed := strings.Join(msg.failed[:min(5, len(msg.failed))], ", ")
+		if extra := len(msg.failed) - 5; extra > 0 {
+			failed += fmt.Sprintf(" +%d", extra)
+		}
+		m.flashMsg = fmt.Sprintf("Đã xuất %d/%d chapters vào %s; lỗi: %s", msg.done, msg.total, dir, failed)
 	default:
 		m.flashMsg = fmt.Sprintf("Đã xuất %d/%d chapters vào %s", msg.done, msg.total, dir)
 	}

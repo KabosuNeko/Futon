@@ -131,3 +131,30 @@ func TestBatchExportOfAnotherMangaKeepsDraining(t *testing.T) {
 		t.Error("progress of a manga no longer shown must still be drained")
 	}
 }
+
+func TestExportAllChaptersKeepsChaptersWithTheSameLabel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01"))
+	}))
+	defer srv.Close()
+
+	// MangaDex oneshots often have neither a number nor a title.
+	chapters := []models.Chapter{{ID: "a"}, {ID: "b"}, {ID: "c", Number: "1"}}
+	msgs := drainBatchExport(t, exportAllChaptersCmd(context.Background(), "m1", pageProvider{pagedProvider{name: "P"}, srv.URL}, "T", chapters))
+	final := msgs[len(msgs)-1]
+	for _, name := range []string{"T_unknown.cbz", "T_unknown_2.cbz", "T_Chap_1.cbz"} {
+		if _, err := os.Stat(filepath.Join(final.destDir, name)); err != nil {
+			t.Errorf("missing %s: %v", name, err)
+		}
+	}
+}
+
+func TestBatchExportFlashCapsFailedList(t *testing.T) {
+	m := NewChapterListModel("m1", "T", nil)
+	failed := []string{"1", "2", "3", "4", "5", "6", "7"}
+	got, _ := m.handleBatchExport(batchExportMsg{mangaID: "m1", final: true, total: 7, failed: failed})
+	if flash := got.(ChapterListModel).flashMsg; !strings.HasSuffix(flash, "lỗi: 1, 2, 3, 4, 5 +2") {
+		t.Errorf("flash = %q", flash)
+	}
+}

@@ -157,18 +157,6 @@ func TestClampCurrentIndex(t *testing.T) {
 	}
 }
 
-func TestReaderExportLabelFallsBackToChapterID(t *testing.T) {
-	m := NewReaderModel("m1", "Title", "https://example.com/ch/1", "12", nil, 0, -1, nil)
-	if got := m.exportLabel(); got != "12" {
-		t.Errorf("exportLabel = %q, want the chapter number", got)
-	}
-
-	m.chapterNumber = ""
-	if got := m.exportLabel(); got != "https://example.com/ch/1" {
-		t.Errorf("exportLabel = %q, want the chapter ID fallback", got)
-	}
-}
-
 func TestReaderCtrlHTogglesFooterHints(t *testing.T) {
 	m := NewReaderModel("m1", "Title", "c1", "1", nil, 0, -1, nil)
 	m.step = stepRead
