@@ -144,6 +144,7 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 - **NFR-3**: Key input must respond instantly; network search must not freeze the interface.
 - **NFR-4**: Local data safety — write files with 0644, do not overwrite unnecessarily.
 - **NFR-5**: Cross-compilation without CGO (`CGO_ENABLED=0`).
+- **NFR-6**: Text from sources (titles, authors, genres, chapter names) has control characters removed before use, and the reader strips them again before writing raw to the terminal, so a crafted title cannot send terminal escape sequences (clipboard writes, screen changes).
 
 ## 6. Data & Storage
 

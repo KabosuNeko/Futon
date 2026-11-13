@@ -87,6 +87,7 @@ Navigation between screens uses custom `tea.Msg` types defined in `internal/tui/
 - `fanOut` in `aggregate.go` uses `sync.WaitGroup` + `sync.Mutex` for concurrent requests; the search screen cancels the previous request's context when it starts a new one.
 - Genre slugs live in one table per provider, ordered like `api.FilterGenres` (test-enforced). Never fall back to another list on a provider error; return the error.
 - Titles are standardized to `Name (source)` format in all search modes.
+- Text from sources is untrusted: `api.CleanText` strips control characters where it enters (`fanOut` for manga lists, `fetchChaptersCmd` for chapters) and where the reader writes raw to the terminal (flash, centered messages). A title must never reach `tea.Raw` unfiltered: an ESC in it becomes a terminal command (e.g. OSC 52 rewrites the clipboard).
 
 ## Runtime State
 

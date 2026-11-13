@@ -105,3 +105,13 @@ func TestFanOutCancelStopsSlowProviders(t *testing.T) {
 		t.Errorf("cancelled search returned %d results, want 0", len(final.Manga))
 	}
 }
+
+func TestFanOutStripsTerminalEscapesFromTitles(t *testing.T) {
+	evil := "Evil\x1b]52;c;cm0gLXJmIH4=\aTitle"
+	p := fakeProvider{name: "P", manga: []models.Manga{{ID: "1", Title: evil, Author: "A\x1b[2J", Genres: []string{"G\x07"}}}}
+	snaps := drain(SearchAll(context.Background(), []MangaProvider{p}, "q"))
+	got := snaps[len(snaps)-1].Manga[0]
+	if got.Title != "Evil]52;c;cm0gLXJmIH4=Title" || got.Author != "A[2J" || got.Genres[0] != "G" {
+		t.Errorf("control characters survived: %q %q %q", got.Title, got.Author, got.Genres)
+	}
+}

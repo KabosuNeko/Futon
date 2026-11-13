@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"regexp"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/mattn/go-runewidth"
 )
@@ -523,4 +525,27 @@ func TestReaderModeCarriesAcrossChapters(t *testing.T) {
 	if !updated.(AppModel).reader.fitWidth {
 		t.Error("the next chapter lost webtoon mode")
 	}
+}
+
+func TestReaderRawFrameHasNoEscapesFromTitles(t *testing.T) {
+	m := newReadingModel(1)
+	m.failed[0] = errors.New("x") // error frame: no image needed
+	m.flashMsg = "Đã lưu ảnh: ~/Downloads/Futon/Evil\x1b]52;c;cm0gLXJmIH4=\a_Pg1.jpg"
+	if frame := m.frameContent(); strings.Contains(frame, "\x1b]52") || strings.ContainsRune(frame, '\a') {
+		t.Errorf("an OSC 52 sequence from a title reached the terminal: %q", frame)
+	}
+}
+
+func TestChapterTitlesAreCleanedOnLoad(t *testing.T) {
+	p := escProvider{}
+	msg := fetchChaptersCmd(p, "m")().(chaptersLoadedMsg)
+	if strings.ContainsRune(msg.Chapters[0].Title, 0x1b) {
+		t.Errorf("chapter title kept an escape: %q", msg.Chapters[0].Title)
+	}
+}
+
+type escProvider struct{ pagedProvider }
+
+func (escProvider) FetchChapters(context.Context, string) ([]models.Chapter, error) {
+	return []models.Chapter{{ID: "c", Title: "Chap\x1b]0;pwned\a 1"}}, nil
 }
