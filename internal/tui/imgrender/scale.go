@@ -122,6 +122,9 @@ func scaleToWidth(img image.Image, ts TerminalSize, cols int) image.Image {
 		return img
 	}
 	w := min(b.Dx(), cols*cellW)
+	if w == b.Dx() {
+		return img // already fits: rescaling to the same size costs 4x the decode
+	}
 	h := max(1, w*b.Dy()/b.Dx())
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)

@@ -326,7 +326,11 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 			return m, nil, false
 		}
 
-		itemIdx := m.viewportStart + (mouse.Y - m.listTopRow())
+		top := m.listTopRow()
+		if top == 0 {
+			return m, nil, true // only the too-small notice is on screen
+		}
+		itemIdx := m.viewportStart + (mouse.Y - top)
 		if itemIdx >= 0 && itemIdx < m.currentListLen() {
 			if m.view == viewSources {
 				m.sourceCursor = itemIdx

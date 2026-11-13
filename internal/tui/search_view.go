@@ -18,6 +18,8 @@ func (m SearchModel) View() tea.View {
 	return tea.NewView(content)
 }
 
+const tooSmallNotice = "Cửa sổ quá nhỏ, hãy phóng to terminal"
+
 // buildContent renders the search screen and computes its geometry. Cover
 // escape sequences are not part of the returned content; they are painted
 // out-of-band with tea.Raw because the v2 cell renderer strips them.
@@ -33,52 +35,13 @@ func (m SearchModel) buildContent() (string, searchLayout) {
 
 	header := boxStyle.Render(m.input.View())
 
-	tabFeed := "[󰑓 Mới cập nhật]"
-	tabFav := "[ Yêu thích]"
-	tabHis := "[ Lịch sử]"
-	tabSrc := "[󰖟 Nguồn]"
-	tabFlt := "[󰈲 Bộ lọc]"
-
-	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-
-	// Same order as the searchView constants.
-	tabLabels := []string{tabFeed, tabFav, tabHis, tabSrc, tabFlt}
-	activeTab := int(m.view)
-
-	tabs := make([]string, len(tabLabels))
-	for i, label := range tabLabels {
-		if i == activeTab {
-			tabs[i] = activeTabStyle.Render(label)
-		} else {
-			tabs[i] = inactiveTabStyle.Render(label)
-		}
-	}
-	tabBar := strings.Join(tabs, " ")
+	tabBar := m.renderTabBar()
 
 	var headerParts []string
 	headerParts = append(headerParts, header, tabBar)
 
-	if m.systemMsg != "" {
-		sysStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("6")).
-			MarginTop(1)
-		headerParts = append(headerParts, sysStyle.Render(m.systemMsg))
-	} else if len(m.providerErrors) > 0 && !m.isSearching && (m.view == viewFeed || m.view == viewFilters) && m.err == nil && len(m.results) > 0 {
-		warnStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("3")).
-			MarginTop(1)
-		var failed []string
-		for name := range m.providerErrors {
-			failed = append(failed, name)
-		}
-		total := len(m.providerCounts)
-		if total == 0 {
-			total = len(failed) + 1
-		}
-		ok := total - len(failed)
-		wmsg := fmt.Sprintf("󰀦 %s lỗi (%d/%d nguồn)", strings.Join(failed, ", "), ok, total)
-		headerParts = append(headerParts, warnStyle.Render(wmsg))
+	if line := m.headerNotice(); line != "" {
+		headerParts = append(headerParts, line)
 	}
 
 	headerNode := lipgloss.JoinVertical(lipgloss.Center, headerParts...)
@@ -167,6 +130,13 @@ func (m SearchModel) buildContent() (string, searchLayout) {
 			Foreground(lipgloss.Color("226")).
 			Bold(true)
 		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
+	}
+
+	// The input box and the filter modal have fixed sizes, and wrapped tabs
+	// or hints take extra rows: on a terminal too small for the result, say
+	// so instead of drawing a clipped screen.
+	if lipgloss.Width(placed) > m.width || lipgloss.Height(placed) > m.height {
+		return runewidth.Truncate(tooSmallNotice, m.width, "…"), searchLayout{}
 	}
 
 	headerH := lipgloss.Height(headerNode)
@@ -600,8 +570,12 @@ func (m SearchModel) renderFilterModal() string {
 
 func (m SearchModel) renderSearchResults() string {
 	rows := m.resultRows()
+	// Only the rows in view are drawn; formatting all of them made every
+	// cursor blink cost ~40ms once the feed had grown to thousands.
 	items := make([]string, len(rows))
-	for i, row := range rows {
+	end := min(len(rows), m.viewportStart+m.listVisibleItems())
+	for i := m.viewportStart; i < end; i++ {
+		row := rows[i]
 		manga, sel := m.selectedVariant(row)
 		t := cleanTitle(manga.Title, manga.Provider)
 		if manga.Provider == "" {
@@ -697,7 +671,7 @@ func (m SearchModel) renderFooter() string {
 
 	switch m.view {
 	case viewFilters:
-		return lipgloss.JoinHorizontal(lipgloss.Center,
+		return wrapItems(m.width, "",
 			pill("←/→", "Đổi giá trị"),
 			pill("↑/↓", "Chọn dòng"),
 			pill("enter", "Áp dụng"),
@@ -705,14 +679,14 @@ func (m SearchModel) renderFooter() string {
 			pill("^c", "Thoát"),
 		)
 	case viewSources:
-		return lipgloss.JoinHorizontal(lipgloss.Center,
+		return wrapItems(m.width, "",
 			pill("space", "Bật/Tắt"),
 			pill("↑/↓", "Di chuyển"),
 			pill("esc", "Quay lại"),
 			pill("^c", "Thoát"),
 		)
 	case viewFavorites:
-		return lipgloss.JoinHorizontal(lipgloss.Center,
+		return wrapItems(m.width, "",
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
 			pill("tab", "Chuyển tab"),
@@ -721,7 +695,7 @@ func (m SearchModel) renderFooter() string {
 			pill("^c", "Thoát"),
 		)
 	case viewHistory:
-		return lipgloss.JoinHorizontal(lipgloss.Center,
+		return wrapItems(m.width, "",
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
 			pill("tab", "Chuyển tab"),
@@ -730,7 +704,7 @@ func (m SearchModel) renderFooter() string {
 			pill("^c", "Thoát"),
 		)
 	default:
-		return lipgloss.JoinHorizontal(lipgloss.Center,
+		return wrapItems(m.width, "",
 			pill("enter", "Mở đọc"),
 			pill("↑/↓", "Chọn"),
 			pill("tab", "Chuyển tab"),
@@ -764,4 +738,78 @@ func historyChapterLabel(h storage.ReadHistory) string {
 		return "Ch. " + label
 	}
 	return label
+}
+
+// wrapItems lays items out left to right and starts a new line when the
+// next one would not fit in width, so the line never widens the screen.
+// The screen is centered on its widest line; a fixed-width tab bar or
+// footer pushed it off terminals narrower than that line.
+func wrapItems(width int, sep string, items ...string) string {
+	var lines []string
+	line := ""
+	for _, item := range items {
+		if line != "" && lipgloss.Width(line+sep+item) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line == "" {
+			line = item
+		} else {
+			line += sep + item
+		}
+	}
+	return lipgloss.JoinVertical(lipgloss.Center, append(lines, line)...)
+}
+
+// renderTabBar draws the tabs, wrapped to the terminal width.
+func (m SearchModel) renderTabBar() string {
+	tabFeed := "[󰑓 Mới cập nhật]"
+	tabFav := "[ Yêu thích]"
+	tabHis := "[ Lịch sử]"
+	tabSrc := "[󰖟 Nguồn]"
+	tabFlt := "[󰈲 Bộ lọc]"
+
+	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+
+	// Same order as the searchView constants.
+	tabLabels := []string{tabFeed, tabFav, tabHis, tabSrc, tabFlt}
+	activeTab := int(m.view)
+
+	tabs := make([]string, len(tabLabels))
+	for i, label := range tabLabels {
+		if i == activeTab {
+			tabs[i] = activeTabStyle.Render(label)
+		} else {
+			tabs[i] = inactiveTabStyle.Render(label)
+		}
+	}
+	return wrapItems(m.width, " ", tabs...)
+}
+
+// headerNotice is the line under the tabs: a system message or a warning
+// about failed sources ("" when there is none).
+func (m SearchModel) headerNotice() string {
+	if m.systemMsg != "" {
+		sysStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("6")).
+			MarginTop(1)
+		return sysStyle.Render(m.systemMsg)
+	} else if len(m.providerErrors) > 0 && !m.isSearching && (m.view == viewFeed || m.view == viewFilters) && m.err == nil && len(m.results) > 0 {
+		warnStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("3")).
+			MarginTop(1)
+		var failed []string
+		for name := range m.providerErrors {
+			failed = append(failed, name)
+		}
+		total := len(m.providerCounts)
+		if total == 0 {
+			total = len(failed) + 1
+		}
+		ok := total - len(failed)
+		wmsg := fmt.Sprintf("󰀦 %s lỗi (%d/%d nguồn)", strings.Join(failed, ", "), ok, total)
+		return warnStyle.Render(wmsg)
+	}
+	return ""
 }

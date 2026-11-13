@@ -48,7 +48,9 @@ type SearchModel struct {
 	height  int
 	results []models.Manga
 	// variantSel remembers, per title row, which source the user picked.
-	variantSel       map[string]string
+	variantSel map[string]string
+	// rowCache is shared by every copy of the model (see search_groups.go).
+	rowCache         *rowCache
 	favorites        []storage.FavoriteManga
 	history          []storage.ReadHistory
 	view             searchView
@@ -118,6 +120,7 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		page:            1,
 		renderer:        imgrender.New(),
 		coverCache:      make(map[string]imgrender.RenderedImage),
+		rowCache:        &rowCache{},
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -188,5 +189,21 @@ func TestTruyenQQLatestChaptersAndPages(t *testing.T) {
 	}
 	if len(urls) != 2 || urls[0] != "https://img.example/1.jpg" || urls[1] != "https://img.example/2.jpg" {
 		t.Fatalf("unexpected pages: %v", urls)
+	}
+}
+
+func TestTruyenQQProbeGivesUpQuickly(t *testing.T) {
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // a mirror that never answers
+	}))
+	defer hang.Close()
+
+	p := newTruyenQQProvider(hang.URL)
+	start := time.Now()
+	if p.tryDomain(hang.URL) {
+		t.Fatal("a hanging mirror was accepted")
+	}
+	if d := time.Since(start); d > probeTimeout+time.Second {
+		t.Errorf("probe took %v, want about %v", d, probeTimeout)
 	}
 }

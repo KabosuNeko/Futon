@@ -167,3 +167,11 @@ func TestWindowClampsToBottom(t *testing.T) {
 		t.Error("window must start at the origin")
 	}
 }
+
+func TestScaleToWidthSkipsSameSizeScale(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 900, 5000))
+	wide := TerminalSize{Cols: 200, Rows: 50, PxW: 1600, PxH: 800}
+	if scaleToWidth(img, wide, 0) != image.Image(img) {
+		t.Error("a page that already fits is scaled anyway")
+	}
+}

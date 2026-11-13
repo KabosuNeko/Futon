@@ -38,11 +38,35 @@ func titleKey(m models.Manga) string {
 	return b.String() // "" for untitled entries, which are never merged
 }
 
+// rowCache remembers the grouping of one results slice. Results are only ever
+// replaced by a new slice or grown, so its first element and length identify
+// it. Grouping 3000 results took ~75% of a search-screen frame, and a frame
+// asks for the rows several times.
+type rowCache struct {
+	first *models.Manga
+	n     int
+	rows  []resultRow
+}
+
 // resultRows groups m.results by title, in first-seen order.
 func (m SearchModel) resultRows() []resultRow {
+	if len(m.results) == 0 {
+		return nil
+	}
+	if c := m.rowCache; c != nil && c.first == &m.results[0] && c.n == len(m.results) {
+		return c.rows
+	}
+	rows := groupRows(m.results)
+	if m.rowCache != nil {
+		*m.rowCache = rowCache{first: &m.results[0], n: len(m.results), rows: rows}
+	}
+	return rows
+}
+
+func groupRows(results []models.Manga) []resultRow {
 	var rows []resultRow
-	index := make(map[string]int, len(m.results))
-	for n, r := range m.results {
+	index := make(map[string]int, len(results))
+	for n, r := range results {
 		key := titleKey(r)
 		if key == "" {
 			key = fmt.Sprintf("\x00%d", n)

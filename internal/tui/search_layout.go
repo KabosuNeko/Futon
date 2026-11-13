@@ -1,6 +1,6 @@
 package tui
 
-import ()
+import "charm.land/lipgloss/v2"
 
 // listTopRow is the 0-based terminal row of the first visible list item.
 func (m SearchModel) listTopRow() int {
@@ -9,7 +9,10 @@ func (m SearchModel) listTopRow() int {
 }
 
 func (m SearchModel) listVisibleItems() int {
-	h := m.height
+	// 8 rows go to the input box, one tab row, one hint row and spacing; a
+	// notice line or wrapped tabs and hints take more, and the list must
+	// give those rows back or the screen overflows.
+	h := m.height - m.extraChromeRows()
 	boxH := h - 8
 	if boxH > 22 {
 		boxH = 22
@@ -120,7 +123,9 @@ const previewImageRowOffset = 9
 // listIsCard reports whether lists render as a bordered card (wide screens)
 // rather than a bare title + rows.
 func (m SearchModel) listIsCard() bool {
-	return m.width >= 80 && m.height >= 16 && m.view != viewSources
+	// The preview pane needs about 20 rows; below that it pushed the footer
+	// off screen and could paint the cover past the bottom row.
+	return m.width >= 80 && m.height-m.extraChromeRows() >= 20 && m.view != viewSources
 }
 
 // listItemOffset is the number of rows from the top of the list content to
@@ -130,4 +135,14 @@ func (m SearchModel) listItemOffset() int {
 		return 3
 	}
 	return 2
+}
+
+// extraChromeRows is how many rows the header and footer use beyond their
+// one-line minimum.
+func (m SearchModel) extraChromeRows() int {
+	extra := lipgloss.Height(m.renderTabBar()) - 1 + lipgloss.Height(m.renderFooter()) - 1
+	if notice := m.headerNotice(); notice != "" {
+		extra += lipgloss.Height(notice)
+	}
+	return extra
 }

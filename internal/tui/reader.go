@@ -85,11 +85,13 @@ type ReaderModel struct {
 	fitWidth  bool
 	scrollRow int
 	scaled    *scaledPage
-	window    windowFrame
-	err       error
-	width     int
-	height    int
-	lastFrame string
+	// nextScaled keeps the prefetched next page so it is not decoded again.
+	nextScaled *scaledPage
+	window     windowFrame
+	err        error
+	width      int
+	height     int
+	lastFrame  string
 }
 
 type readerStep int

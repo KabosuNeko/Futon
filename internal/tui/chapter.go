@@ -98,7 +98,11 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, ok := msg.(tea.MouseClickMsg); !ok {
 				return m, nil
 			}
-			itemIdx := m.viewportStart + (mouse.Y - m.listTopRow())
+			top := m.listTopRow()
+			if top == 0 {
+				return m, nil // only the too-small notice is on screen
+			}
+			itemIdx := m.viewportStart + (mouse.Y - top)
 			if itemIdx >= 0 && itemIdx < len(m.chapters) {
 				if itemIdx == m.cursor {
 					return m.selectCurrentChapter()

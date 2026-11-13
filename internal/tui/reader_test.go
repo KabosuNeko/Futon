@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"image"
 	"reflect"
 	"regexp"
 	"strings"
@@ -542,6 +543,17 @@ func TestCtrlHIsRememberedAcrossLaunches(t *testing.T) {
 
 	if !NewAppModel("dev").readerHideFooter {
 		t.Error("a new launch does not start with the footer hidden")
+	}
+}
+
+func TestWebtoonKeepsPrefetchedPageScaled(t *testing.T) {
+	m := webtoonModel()
+	next := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	m, _ = m.update(renderDoneMsg{index: 1, chapterID: m.chapterID, windowed: true, scaled: next, totalRows: 50})
+
+	m.currentIdx = 1
+	if s := m.scaledFor(1); s == nil || s.img != next || s.rows != 50 {
+		t.Fatal("the prefetched page is decoded and scaled again when it becomes current")
 	}
 }
 

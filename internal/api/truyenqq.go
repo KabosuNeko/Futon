@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/PuerkitoBio/goquery"
@@ -58,8 +59,15 @@ func (p *TruyenQQProvider) resolveDomain() {
 	})
 }
 
+// probeTimeout bounds each mirror probe: offline, the old 10s per mirror
+// stalled the first TruyenQQ request for 20s. The probe deliberately ignores
+// the caller's context: a cancelled search must not settle the mirror choice.
+const probeTimeout = 3 * time.Second
+
 func (p *TruyenQQProvider) tryDomain(domain string) bool {
-	req, err := http.NewRequest(http.MethodGet, domain, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, domain, nil)
 	if err != nil {
 		return false
 	}
