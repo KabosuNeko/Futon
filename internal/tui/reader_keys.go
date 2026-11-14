@@ -207,6 +207,7 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		)
 
 	case "esc":
+		m.exited = true
 		return m, tea.Sequence(
 			m.saveHistoryCmd(m.currentIdx),
 			flushHistoryCmd(),

@@ -97,6 +97,9 @@ type ReaderModel struct {
 	width      int
 	height     int
 	lastFrame  string
+	// exited is set by esc: renders still in flight and resizes routed here
+	// afterwards must not draw on the chapter list or the search screen.
+	exited bool
 }
 
 type readerStep int
@@ -151,6 +154,10 @@ func (m ReaderModel) Init() tea.Cmd {
 // frame (see View in reader_view.go for why).
 func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newM, cmd := m.update(msg)
+	// A reader that was left must not paint over the screen after it.
+	if newM.exited {
+		return newM, cmd
+	}
 	if frame := newM.frameContent(); frame != newM.lastFrame {
 		newM.lastFrame = frame
 		cmd = tea.Batch(cmd, tea.Raw(frame))

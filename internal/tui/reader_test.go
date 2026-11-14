@@ -622,3 +622,24 @@ func TestPlainArrowsDoNotSwitchChapters(t *testing.T) {
 		}
 	}
 }
+
+func TestReaderPaintsNothingAfterEsc(t *testing.T) {
+	m := newReadingModel(3)
+	m.imageData[0] = []byte{1}
+	m.isLoading = true // the page on screen is still rendering
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(ReaderModel)
+
+	img := imgrender.RenderedImage{EscapeSequence: "\x1b_Gimg\x1b\\", WidthPx: 10, HeightPx: 10}
+	for _, msg := range []tea.Msg{
+		renderDoneMsg{index: 0, chapterID: m.chapterID, gen: m.renderGen, img: img}, // finishes during the flush
+		tea.WindowSizeMsg{Width: 100, Height: 30},                                   // routed here on the search screen
+	} {
+		updated, cmd := m.Update(msg)
+		m = updated.(ReaderModel)
+		if raw := collectRawPayloads(cmd); raw != "" {
+			t.Errorf("%T after esc painted %q over the next screen", msg, raw)
+		}
+	}
+}
