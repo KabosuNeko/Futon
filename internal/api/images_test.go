@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -181,5 +182,75 @@ func TestDownloadChapterPagesKeepsOrder(t *testing.T) {
 func TestDownloadChapterPagesRejectsEmptyList(t *testing.T) {
 	if _, err := DownloadChapterPages(context.Background(), nil, "", nil); err == nil {
 		t.Fatal("expected an error for a chapter without pages")
+	}
+}
+
+func TestDownloadPageRejectsOversizedImage(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Write(make([]byte, maxImageBytes+1))
+	}))
+	defer srv.Close()
+
+	if _, err := DownloadPage(context.Background(), nil, "", srv.URL); err == nil || !strings.Contains(err.Error(), "quá lớn") {
+		t.Fatalf("err = %v, want an oversized-image error", err)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("requests = %d, want 1 (too large is not transient)", n)
+	}
+}
+
+func TestLookupCoverOnEverySource(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/manga/md-1":
+			fmt.Fprint(w, `{"data":{"id":"md-1","relationships":[{"type":"cover_art","attributes":{"fileName":"c.jpg"}}]}}`)
+		case "/truyen-tranh/qq-1", "/truyen/ct-1":
+			fmt.Fprint(w, `<meta property="og:image" content="https://cdn.example/og.jpg">`)
+		case "/truyen-tranh/bt-1":
+			fmt.Fprint(w, `<meta property="og:image" content="https://bt.example/logo.png">
+				<div class="col-image"><img src="https://bt.example/cover.jpg"></div>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	oldMD, oldCT := mangadexBaseURL, cuutruyenBaseURL
+	mangadexBaseURL, cuutruyenBaseURL = srv.URL, srv.URL
+	defer func() { mangadexBaseURL, cuutruyenBaseURL = oldMD, oldCT }()
+	bt := NewBaoTangTruyenProvider()
+	bt.baseURL = srv.URL
+
+	cases := []struct {
+		p    MangaProvider
+		id   string
+		want string
+	}{
+		{NewMangaDexProvider(), "md-1", "https://uploads.mangadex.org/covers/md-1/c.jpg.256.jpg"},
+		{testQQ(srv.URL), "/truyen-tranh/qq-1", "https://cdn.example/og.jpg"},
+		{bt, "/truyen-tranh/bt-1", "https://bt.example/cover.jpg"}, // not the og:image logo
+		{NewCuuTruyenProvider(), "/truyen/ct-1", "https://cdn.example/og.jpg"},
+	}
+	for _, c := range cases {
+		if got, err := LookupCover(context.Background(), c.p, c.id); err != nil || got != c.want {
+			t.Errorf("%s: cover = %q, %v; want %q", c.p.Name(), got, err, c.want)
+		}
+	}
+	if _, err := LookupCover(context.Background(), testQQ(srv.URL), "/truyen-tranh/missing"); err == nil {
+		t.Error("a missing page must be an error, not an empty cover")
+	}
+}
+
+func TestBaoTangCoverNeverFallsBackToTheLogo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<meta property="og:image" content="https://bt.example/logo.png"><div class="new-layout"></div>`)
+	}))
+	defer srv.Close()
+	bt := NewBaoTangTruyenProvider()
+	bt.baseURL = srv.URL
+	if got, err := LookupCover(context.Background(), bt, "/truyen-tranh/x"); err == nil {
+		t.Errorf("cover = %q, want an error instead of the og:image logo", got)
 	}
 }

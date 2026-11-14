@@ -87,7 +87,8 @@ func (m *ReaderModel) startReading() tea.Cmd {
 }
 
 func (m ReaderModel) handleRenderDone(msg renderDoneMsg) (ReaderModel, tea.Cmd) {
-	if msg.chapterID != m.chapterID {
+	// A render begun before a resize or a mode toggle has the old size or mode.
+	if msg.chapterID != m.chapterID || msg.gen != m.renderGen {
 		return m, nil
 	}
 	if msg.err != nil {
@@ -154,9 +155,7 @@ func (m ReaderModel) handleImageSaved(msg imageSavedMsg) (ReaderModel, tea.Cmd) 
 func (m ReaderModel) handleWindowSize(msg tea.WindowSizeMsg) (ReaderModel, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
-	if m.fitWidth {
-		m.resetImageCache() // the width the pages were scaled to changed
-	}
+	m.resetImageCache() // pages are rendered for the terminal size
 	if m.step == stepRead && m.validCurrentImage() {
 		m.isLoading = true
 		return m, m.renderCmd(m.currentIdx)

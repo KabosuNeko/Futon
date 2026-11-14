@@ -24,7 +24,7 @@ func (m *SearchModel) maybeLoadMore() tea.Cmd {
 	if m.view != viewFeed || m.listMode == resultsSearch || !m.hasMore || m.loadingMore || m.isSearching {
 		return nil
 	}
-	if m.cursor < len(m.resultRows())-1 {
+	if m.cursor < len(m.results)-1 {
 		return nil
 	}
 	return m.requestResults(m.listMode, m.page+1, true)

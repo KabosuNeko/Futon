@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/PuerkitoBio/goquery"
@@ -22,14 +23,6 @@ const (
 
 func NewTruyenQQProvider() *TruyenQQProvider {
 	return newTruyenQQProvider(truyenqqPrimaryURL, truyenqqFallbackURL)
-}
-
-// TruyenQQPath turns a TruyenQQ (or TruyenGG mirror) manga or chapter URL into the
-// mirror-independent ID the provider uses now: the path without the host and
-// without the ".html" some mirrors append. Older saved entries stored
-// absolute URLs of whichever mirror was in use.
-func TruyenQQPath(id string) string {
-	return truyenqqPath(id)
 }
 
 // truyenqqGenres are genre slugs in FilterGenres order (checked against the
@@ -66,8 +59,15 @@ func (p *TruyenQQProvider) resolveDomain() {
 	})
 }
 
+// probeTimeout bounds each mirror probe: offline, the old 10s per mirror
+// stalled the first TruyenQQ request for 20s. The probe deliberately ignores
+// the caller's context: a cancelled search must not settle the mirror choice.
+const probeTimeout = 3 * time.Second
+
 func (p *TruyenQQProvider) tryDomain(domain string) bool {
-	req, err := http.NewRequest(http.MethodGet, domain, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, domain, nil)
 	if err != nil {
 		return false
 	}
@@ -135,7 +135,7 @@ func (p *TruyenQQProvider) Search(ctx context.Context, keyword string) ([]models
 		}
 		cover, _ := s.Find(".search_avatar img").Attr("src")
 		mangas = append(mangas, models.Manga{
-			ID:       truyenqqPath(href),
+			ID:       TruyenQQPath(href),
 			Title:    name,
 			CoverURL: cover,
 		})
@@ -164,7 +164,7 @@ func parseTruyenQQList(doc *goquery.Document) []models.Manga {
 		}
 		cover, _ := imageSrc(s.Find("img"))
 		mangas = append(mangas, models.Manga{
-			ID:       truyenqqPath(href),
+			ID:       TruyenQQPath(href),
 			Title:    name,
 			CoverURL: cover,
 		})
@@ -172,10 +172,11 @@ func parseTruyenQQList(doc *goquery.Document) []models.Manga {
 	return mangas
 }
 
-// truyenqqPath reduces a manga/chapter link to its path without ".html".
+// TruyenQQPath reduces a manga/chapter link to its path without ".html".
 // IDs stay valid on every mirror, and the same manga gets the same ID whether
 // it came from search (absolute links) or a list page (relative links).
-func truyenqqPath(href string) string {
+// Also used to migrate entries saved as absolute URLs of either mirror.
+func TruyenQQPath(href string) string {
 	href = strings.TrimSpace(href)
 	if u, err := url.Parse(href); err == nil && u.Host != "" {
 		href = u.Path
@@ -306,13 +307,27 @@ func (p *TruyenQQProvider) FetchChapters(ctx context.Context, mangaURL string) (
 			return
 		}
 		chapters = append(chapters, models.Chapter{
-			ID:    truyenqqPath(href),
+			ID:    TruyenQQPath(href),
 			Title: title,
 		})
 	})
 
 	slices.Reverse(chapters)
 	return chapters, nil
+}
+
+func (p *TruyenQQProvider) lookupCover(ctx context.Context, mangaID string) (string, error) {
+	p.resolveDomain()
+	resp, err := httpGet(ctx, p.httpClient, resolveURL(p.baseURL, mangaID), browserUserAgent)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("parse HTML: %w", err)
+	}
+	return pageCover(doc, ""), nil
 }
 
 func (p *TruyenQQProvider) FetchPages(ctx context.Context, chapterID string) ([]string, error) {

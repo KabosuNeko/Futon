@@ -43,12 +43,10 @@ const (
 const searchPlaceholder = "Nhập tên manga cần tìm..."
 
 type SearchModel struct {
-	input   textinput.Model
-	width   int
-	height  int
-	results []models.Manga
-	// variantSel remembers, per title row, which source the user picked.
-	variantSel       map[string]string
+	input            textinput.Model
+	width            int
+	height           int
+	results          []models.Manga
 	favorites        []storage.FavoriteManga
 	history          []storage.ReadHistory
 	view             searchView
@@ -70,9 +68,8 @@ type SearchModel struct {
 	providerCounts     map[string]int
 	providerErrors     map[string]string
 
-	filterQuery     string
-	chapterLanguage string
-	systemMsg       string
+	filterQuery string
+	systemMsg   string
 
 	// pendingSeq identifies the newest result request; snapshots from older
 	// requests are ignored (stale-response guard).
@@ -92,8 +89,11 @@ type SearchModel struct {
 	sourceCursor    int
 	sourceSaveSeq   int
 
-	renderer       imgrender.Renderer
-	coverCache     map[string]imgrender.RenderedImage
+	renderer   imgrender.Renderer
+	coverCache map[string]imgrender.RenderedImage
+	// coverLookups holds the fav/his entries whose missing cover was looked
+	// up this session, so a source without one is asked only once.
+	coverLookups   map[string]bool
 	currentCover   *imgrender.RenderedImage
 	currentCoverID string
 	coverLoading   bool
@@ -114,7 +114,6 @@ func NewSearchModel(providers []api.MangaProvider) SearchModel {
 		input:           ti,
 		width:           80,
 		height:          24,
-		chapterLanguage: "vi",
 		providers:       providers,
 		providerToggles: toggles,
 		page:            1,
@@ -188,6 +187,13 @@ type searchInitMsg struct {
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newM, cmd := m.update(msg)
 	if key := newM.coverPaintState(); key != m.coverKey {
+		// Sixel images are plain pixels in cells that the renderer thinks are
+		// blank, so they stay until erased: wipe the old area before the new
+		// frame paints (Kitty images go with the delete in the same sequence).
+		if old := m.coverKey; old.isSplit && !sameCoverArea(old, key) {
+			old.draw = false
+			cmd = tea.Batch(tea.Raw(m.coverSequence(old)), cmd)
+		}
 		newM.coverKey = key
 		cmd = tea.Batch(cmd, tea.Tick(coverPaintDelay, func(time.Time) tea.Msg {
 			return coverPaintMsg{key: key}
@@ -219,7 +225,7 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		m.favorites = msg.favorites
 		m.cursor = 0
 		m.viewportStart = 0
-		return m, nil
+		return m, m.updateFocusedCover()
 
 	case historyLoadedMsg:
 		m.loadingHistory = false
@@ -230,7 +236,7 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		m.history = msg.history
 		m.cursor = 0
 		m.viewportStart = 0
-		return m, nil
+		return m, m.updateFocusedCover()
 
 	case searchInitMsg:
 		if msg.err != nil {
@@ -280,6 +286,9 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 			m.results = m.mergeResults(msg.Manga)
 			m.appendBase = nil
 			if msg.Err != nil {
+				// Every source failed: ask for this page again on the next try.
+				m.page--
+				m.hasMore = true
 				m.flashMsg = fmt.Sprintf("Lỗi tải thêm: %v", msg.Err)
 				return m, clearFlashAfter(3 * time.Second)
 			}
@@ -299,9 +308,15 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 		m.err = nil
 		return m, m.updateFocusedCover()
 
+	case coverFoundMsg:
+		return m.applyFoundCover(msg)
+
 	case coverDebounceMsg:
 		focused, ok := m.focusedManga()
 		if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
+			if msg.coverURL == "" {
+				return m, m.lookupCover(focused)
+			}
 			boxW, boxH := m.previewBoxSize()
 			return m, fetchAndRenderCoverCmd(m.renderer, m.providerByName(focused.Provider), msg.mangaID, msg.coverURL, boxW, boxH)
 		}
@@ -326,6 +341,10 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 			if ok && focused.ID == msg.mangaID && focused.CoverURL == msg.coverURL {
 				m.setCover(nil)
 				m.coverLoading = false
+				// A saved cover URL can go stale (re-uploaded covers): ask again.
+				if m.canLookupCover(focused) {
+					return m, m.lookupCover(focused)
+				}
 			}
 		}
 		return m, nil
@@ -368,7 +387,7 @@ func (m SearchModel) update(msg tea.Msg) (SearchModel, tea.Cmd) {
 			m.cursor = 0
 			m.viewportStart = 0
 			m.sourceCursor = 0
-			return m, cmd
+			return m, tea.Batch(cmd, m.updateFocusedCover())
 		}
 
 		// Any change makes in-flight results belong to an older request.
@@ -405,6 +424,7 @@ func (m SearchModel) focusedManga() (manga models.Manga, ok bool) {
 				ID:       fav.MangaID,
 				Title:    fav.Title,
 				Provider: fav.Provider,
+				CoverURL: fav.CoverURL,
 			}, true
 		}
 		return models.Manga{}, false
@@ -420,13 +440,13 @@ func (m SearchModel) focusedManga() (manga models.Manga, ok bool) {
 				ID:       h.MangaID,
 				Title:    t,
 				Provider: h.Provider,
+				CoverURL: h.CoverURL,
 			}, true
 		}
 		return models.Manga{}, false
 	}
-	if row, ok := m.focusedRow(); ok {
-		v, _ := m.selectedVariant(row)
-		return v, true
+	if m.cursor >= 0 && m.cursor < len(m.results) {
+		return m.results[m.cursor], true
 	}
 	return models.Manga{}, false
 }

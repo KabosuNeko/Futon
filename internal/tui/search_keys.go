@@ -16,12 +16,8 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 		if len(indices) > 0 && m.cursor < len(indices) {
 			fav := m.favorites[indices[m.cursor]]
 			m.resetView(viewFeed)
-			providerName := fav.Provider
-			if providerName == "" && len(m.providers) > 0 {
-				providerName = m.providers[0].Name()
-			}
 			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: providerName}
+				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: fav.Provider, CoverURL: fav.CoverURL}
 			}, true
 		}
 		return m, nil, true
@@ -36,12 +32,8 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 			if title == "" {
 				title = h.MangaID
 			}
-			providerName := h.Provider
-			if providerName == "" && len(m.providers) > 0 {
-				providerName = m.providers[0].Name()
-			}
 			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: providerName, ResumeChapterID: h.ChapterID}
+				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: h.Provider, CoverURL: h.CoverURL, ResumeChapterID: h.ChapterID}
 			}, true
 		}
 		return m, nil, true
@@ -52,15 +44,8 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 		if !ok {
 			return m, nil, false
 		}
-		providerName := manga.Provider
-		if providerName == "" {
-			active := m.activeProviders()
-			if len(active) > 0 {
-				providerName = active[0].Name()
-			}
-		}
 		return m, func() tea.Msg {
-			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: providerName}
+			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: manga.Provider, CoverURL: manga.CoverURL}
 		}, true
 	}
 
@@ -155,19 +140,6 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m, cmd := m.cycleView(-1)
 		return m, cmd, true
 
-	case "shift+left", "shift+right":
-		// Same title on several sources: pick which one to open.
-		if m.view == viewFeed {
-			delta := 1
-			if msg.String() == "shift+left" {
-				delta = -1
-			}
-			if m.cycleVariant(delta) {
-				return m, m.updateFocusedCover(), true
-			}
-			return m, nil, true
-		}
-
 	case "left", "right":
 		if m.view == viewFilters {
 			delta := 1
@@ -217,6 +189,7 @@ func (m SearchModel) deleteFocusedEntry() (SearchModel, tea.Cmd, bool) {
 		return m, tea.Batch(
 			func() tea.Msg { return storageSavedMsg{err: storage.RemoveFavorite(fav.MangaID, fav.Provider)} },
 			clearFlashAfter(2*time.Second),
+			m.updateFocusedCover(),
 		), true
 
 	case viewHistory:
@@ -228,7 +201,7 @@ func (m SearchModel) deleteFocusedEntry() (SearchModel, tea.Cmd, bool) {
 		h := m.history[actualIdx]
 		m.history = append(m.history[:actualIdx], m.history[actualIdx+1:]...)
 		m.clampCursorAfterDelete()
-		return m, deleteHistoryCmd(h.MangaID, h.Provider), true
+		return m, tea.Batch(deleteHistoryCmd(h.MangaID, h.Provider), m.updateFocusedCover()), true
 	}
 	return m, nil, true
 }
@@ -268,7 +241,7 @@ func (m SearchModel) handleEnter() (SearchModel, tea.Cmd, bool) {
 		m.setChapterLanguage(parts[1])
 		m.systemMsg = "Đã cài đặt ngôn ngữ chapter mặc định: " + parts[1]
 		lang := parts[1]
-		return m, func() tea.Msg { return storageSavedMsg{err: storage.SaveChapterLang(lang)} }, true
+		return m, saveUserDataCmd(func(ud *storage.UserData) { ud.ChapterLang = lang }), true
 	}
 
 	if val == "/update" {
@@ -290,7 +263,6 @@ func (m SearchModel) handleEnter() (SearchModel, tea.Cmd, bool) {
 
 // setChapterLanguage applies the MangaDex chapter language.
 func (m *SearchModel) setChapterLanguage(lang string) {
-	m.chapterLanguage = lang
 	for _, p := range m.providers {
 		if md, ok := p.(*api.MangaDexProvider); ok {
 			md.SetLang(lang)
@@ -327,7 +299,11 @@ func (m SearchModel) handleMouseMsg(msg tea.MouseMsg) (SearchModel, tea.Cmd, boo
 			return m, nil, false
 		}
 
-		itemIdx := m.viewportStart + (mouse.Y - m.listTopRow())
+		top := m.listTopRow()
+		if top == 0 {
+			return m, nil, true // only the too-small notice is on screen
+		}
+		itemIdx := m.viewportStart + (mouse.Y - top)
 		if itemIdx >= 0 && itemIdx < m.currentListLen() {
 			if m.view == viewSources {
 				m.sourceCursor = itemIdx

@@ -2,6 +2,7 @@ package imgrender
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -10,8 +11,26 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Image, error) {
+// maxPixels bounds a decoded image. Decoders allocate the full image from the
+// header, so a few-MB PNG can claim 30000x30000 (3.6 GB); real webtoon strips
+// stay under 20 megapixels.
+const maxPixels = 50_000_000
+
+// decode rejects images too large to hold in memory before decoding them.
+func decode(imgData []byte) (image.Image, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(imgData))
+	if err != nil {
+		return nil, err
+	}
+	if int64(cfg.Width)*int64(cfg.Height) > maxPixels {
+		return nil, fmt.Errorf("ảnh quá lớn (%dx%d)", cfg.Width, cfg.Height)
+	}
 	img, _, err := image.Decode(bytes.NewReader(imgData))
+	return img, err
+}
+
+func decodeAndScaleInBox(imgData []byte, targetCols, targetRows int) (image.Image, error) {
+	img, err := decode(imgData)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +124,7 @@ func currentTerminal() TerminalSize {
 // never enlarges past the native width: a 900px strip stays 900px wide on a
 // wide terminal instead of turning blurry and huge.
 func ScaleToWidth(imgData []byte, cols int) (image.Image, error) {
-	img, _, err := image.Decode(bytes.NewReader(imgData))
+	img, err := decode(imgData)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +141,9 @@ func scaleToWidth(img image.Image, ts TerminalSize, cols int) image.Image {
 		return img
 	}
 	w := min(b.Dx(), cols*cellW)
+	if w == b.Dx() {
+		return img // already fits: rescaling to the same size costs 4x the decode
+	}
 	h := max(1, w*b.Dy()/b.Dx())
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)

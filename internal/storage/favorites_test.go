@@ -100,29 +100,37 @@ func TestConcurrentUserDataUpdatesAreNotLost(t *testing.T) {
 	}
 }
 
-func TestChapterLangPersists(t *testing.T) {
+func TestUpdateUserDataPersistsSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-
-	if lang, _ := LoadChapterLang(); lang != "" {
-		t.Fatalf("default lang = %q, want empty", lang)
+	if ud, _ := LoadUserData(); ud.ChapterLang != "" || ud.ReaderFitWidth || ud.ReaderHideFooter {
+		t.Fatalf("defaults = %+v, want zero values", ud)
 	}
-	if err := SaveChapterLang("en"); err != nil {
+	err := UpdateUserData(func(ud *UserData) {
+		ud.ChapterLang = "en"
+		ud.ReaderFitWidth = true
+		ud.ReaderHideFooter = true
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if lang, _ := LoadChapterLang(); lang != "en" {
-		t.Errorf("lang = %q, want en", lang)
+	if ud, _ := LoadUserData(); ud.ChapterLang != "en" || !ud.ReaderFitWidth || !ud.ReaderHideFooter {
+		t.Errorf("saved settings = %+v", ud)
 	}
 }
 
-func TestReaderFitWidthPersists(t *testing.T) {
+func TestSetFavoriteCoverFillsOldEntry(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if on, _ := LoadReaderFitWidth(); on {
-		t.Fatal("fit-width must default to off")
-	}
-	if err := SaveReaderFitWidth(true); err != nil {
+	if err := AddFavorite(FavoriteManga{MangaID: "m1", Title: "A", Provider: "P"}); err != nil {
 		t.Fatal(err)
 	}
-	if on, _ := LoadReaderFitWidth(); !on {
-		t.Error("fit-width setting not persisted")
+	if err := SetFavoriteCover("m1", "P", "https://x/a.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFavoriteCover("m1", "Other", "https://x/b.jpg"); err != nil { // not a favorite
+		t.Fatal(err)
+	}
+	favs, err := LoadFavorites()
+	if err != nil || len(favs) != 1 || favs[0].CoverURL != "https://x/a.jpg" {
+		t.Fatalf("favorites = %+v, err %v", favs, err)
 	}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -118,5 +119,38 @@ func TestNewRequestCancelsInFlightOne(t *testing.T) {
 	_ = m.requestResults(resultsSearch, 1, false)
 	if !ctxCanceled {
 		t.Error("starting a new request did not cancel the previous one")
+	}
+}
+
+// flakyProvider fails its first request for page 2.
+type flakyProvider struct {
+	pagedProvider
+	failed *bool
+}
+
+func (p flakyProvider) FetchLatest(ctx context.Context, page int) ([]models.Manga, error) {
+	if page == 2 && !*p.failed {
+		*p.failed = true
+		return nil, errors.New("offline")
+	}
+	return p.pagedProvider.FetchLatest(ctx, page)
+}
+
+func TestFailedNextPageIsRequestedAgain(t *testing.T) {
+	p := flakyProvider{pagedProvider{name: "P", pages: map[int][]models.Manga{
+		1: {{ID: "a"}},
+		2: {{ID: "b"}},
+	}}, new(bool)}
+	m := NewSearchModel([]api.MangaProvider{p})
+	m.providerToggles = []bool{true}
+	m = runResults(t, m, m.requestResults(resultsLatest, 1, false))
+
+	m = runResults(t, m, m.maybeLoadMore()) // page 2 fails
+	if !m.hasMore || m.page != 1 {
+		t.Fatalf("after a failed page: hasMore=%v page=%d, want true and 1", m.hasMore, m.page)
+	}
+	m = runResults(t, m, m.maybeLoadMore()) // and is asked for again
+	if len(m.results) != 2 || m.results[1].ID != "b" {
+		t.Errorf("results = %+v, want page 2 loaded on retry", m.results)
 	}
 }

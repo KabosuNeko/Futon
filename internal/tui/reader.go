@@ -21,8 +21,10 @@ type downloadProgressMsg struct {
 type renderDoneMsg struct {
 	index     int
 	chapterID string
-	img       imgrender.RenderedImage
-	err       error
+	// gen is the reader's renderGen when the render started.
+	gen int
+	img imgrender.RenderedImage
+	err error
 	// Webtoon-mode renders (windowed) also carry the scaled page, the scroll
 	// that was asked for, the clamped scroll that was rendered and the page
 	// height in rows.
@@ -49,6 +51,7 @@ type imageSavedMsg struct {
 type ReaderModel struct {
 	mangaID           string
 	mangaTitle        string
+	coverURL          string // saved with history, for the /his preview
 	chapterNumber     string
 	chapterID         string
 	allChapterIDs     []string
@@ -58,12 +61,14 @@ type ReaderModel struct {
 	urls              []string
 	imageData         [][]byte
 	imageCache        map[int]imgrender.RenderedImage
-	cacheOrder        []int
-	currentIdx        int
-	startPage         int
-	downloadOrder     []int
-	downloadPos       int
-	downloading       map[int]struct{}
+	// renderGen counts cache resets; a render started before one is dropped.
+	renderGen     int
+	cacheOrder    []int
+	currentIdx    int
+	startPage     int
+	downloadOrder []int
+	downloadPos   int
+	downloading   map[int]struct{}
 	// failed holds pages whose download or decode failed; the reader shows
 	// the error on that page only and `r` retries it.
 	failed           map[int]error
@@ -85,11 +90,16 @@ type ReaderModel struct {
 	fitWidth  bool
 	scrollRow int
 	scaled    *scaledPage
-	window    windowFrame
-	err       error
-	width     int
-	height    int
-	lastFrame string
+	// nextScaled keeps the prefetched next page so it is not decoded again.
+	nextScaled *scaledPage
+	window     windowFrame
+	err        error
+	width      int
+	height     int
+	lastFrame  string
+	// exited is set by esc: renders still in flight and resizes routed here
+	// afterwards must not draw on the chapter list or the search screen.
+	exited bool
 }
 
 type readerStep int
@@ -144,6 +154,10 @@ func (m ReaderModel) Init() tea.Cmd {
 // frame (see View in reader_view.go for why).
 func (m ReaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newM, cmd := m.update(msg)
+	// A reader that was left must not paint over the screen after it.
+	if newM.exited {
+		return newM, cmd
+	}
 	if frame := newM.frameContent(); frame != newM.lastFrame {
 		newM.lastFrame = frame
 		cmd = tea.Batch(cmd, tea.Raw(frame))
@@ -178,6 +192,12 @@ func (m ReaderModel) update(msg tea.Msg) (ReaderModel, tea.Cmd) {
 		return m, clearFlashAfter(3 * time.Second)
 	case clearFlashMsg:
 		m.flashMsg = ""
+		return m, nil
+	case storageSavedMsg:
+		if msg.err != nil {
+			m.flashMsg = fmt.Sprintf("Lỗi lưu cài đặt: %v", msg.err)
+			return m, clearFlashAfter(3 * time.Second)
+		}
 		return m, nil
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)

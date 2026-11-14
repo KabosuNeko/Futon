@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui"
 	"github.com/KabosuNeko/Futon/internal/updater"
 )
@@ -27,7 +30,20 @@ func main() {
 	}
 
 	p := tea.NewProgram(tui.NewAppModel(Version))
-	if _, err := p.Run(); err != nil {
+	// Closing the terminal window sends SIGHUP, which Bubble Tea does not
+	// handle; quit cleanly so the history below still gets written.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		<-hup
+		p.Quit()
+	}()
+
+	_, err := p.Run()
+	// History is written 2s after the last page turn; quitting by kill,
+	// SIGHUP or from another screen must not drop that last page.
+	_ = storage.FlushHistory()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

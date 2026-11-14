@@ -132,7 +132,7 @@ func TestReaderFrameRendersFooterInStepRead(t *testing.T) {
 	if !strings.Contains(frame, "[ctrl+e] Xuất CBZ") {
 		t.Errorf("expected reader footer cbz hint, got:\n%q", frame)
 	}
-	if !strings.Contains(frame, "[↑/k] [↓/j] Chap") {
+	if !strings.Contains(frame, "[⇧↑/⇧↓] Chap") {
 		t.Errorf("expected reader footer chapter-jump hint, got:\n%q", frame)
 	}
 	if !strings.Contains(frame, "[←/h] [→/l] Trang") {
@@ -154,18 +154,6 @@ func TestClampCurrentIndex(t *testing.T) {
 	m.clampCurrentIndex()
 	if m.currentIdx != 2 {
 		t.Errorf("expected clamp to 2, got %d", m.currentIdx)
-	}
-}
-
-func TestReaderExportLabelFallsBackToChapterID(t *testing.T) {
-	m := NewReaderModel("m1", "Title", "https://example.com/ch/1", "12", nil, 0, -1, nil)
-	if got := m.exportLabel(); got != "12" {
-		t.Errorf("exportLabel = %q, want the chapter number", got)
-	}
-
-	m.chapterNumber = ""
-	if got := m.exportLabel(); got != "https://example.com/ch/1" {
-		t.Errorf("exportLabel = %q, want the chapter ID fallback", got)
 	}
 }
 

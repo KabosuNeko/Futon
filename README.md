@@ -78,7 +78,6 @@ futon update       # kiểm tra & cài bản mới (không cần mở TUI)
 | `ctrl+c` | Thoát |
 | `enter` | Search / mở truyện đang chọn |
 | `↑` / `↓` | Di chuyển list (xuống cuối feed/bộ lọc sẽ tự tải trang tiếp) |
-| `shift+←` / `shift+→` | Đổi nguồn khi cùng một truyện có ở nhiều nguồn |
 | `tab` | Chuyển tab (feed → yêu thích → lịch sử → nguồn → bộ lọc) |
 | `shift+tab` | Chuyển tab ngược (bộ lọc → nguồn → lịch sử → yêu thích → feed) |
 | `/fav` | Xem favorites |
@@ -108,9 +107,10 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 | `G` / `end` | Đến chapter cuối |
 | `ctrl+f` | Thêm truyện vào Yêu thích |
 | `ctrl+e` | Xuất chapter đang chọn ra CBZ |
+| `ctrl+a` | Xuất toàn bộ chapter ra CBZ (hiện tiến độ; `esc` để hủy) |
 | `enter` | Mở chapter |
 | `[number]` + `enter` | Jump tới chapter |
-| `esc` | Quay lại search |
+| `esc` | Hủy xuất cả bộ đang chạy, hoặc quay lại search |
 | `ctrl+c` | Thoát |
 
 #### Reader
@@ -119,11 +119,11 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 |-----|--------|
 | `→` / `l` | Trang tiếp |
 | `←` / `h` | Trang trước |
-| `j` / `↓` | Nhảy sang chapter tiếp theo (chế độ webtoon: `↓` cuộn trang) |
-| `k` / `↑` | Về chapter trước (chế độ webtoon: `↑` cuộn trang) |
+| `shift+↓` / `j` | Nhảy sang chapter tiếp theo |
+| `shift+↑` / `k` | Về chapter trước |
 | `w` | Bật/tắt chế độ webtoon: vừa chiều ngang, cuộn bằng `↑`/`↓`/`space`/chuột (được nhớ) |
 | `ctrl+d` | Save trang hiện tại |
-| `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng) |
+| `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng; được nhớ) |
 | `ctrl+e` | Xuất chapter hiện tại ra CBZ |
 | `r` | Tải lại trang bị lỗi |
 | `esc` | Về chapter list |
@@ -169,7 +169,9 @@ Kiểm tra nhanh: `resolvectl query api.mangadex.org` (hoặc `nslookup api.mang
 | Favorites + Sources + `/lang` | `~/.config/futon/userdata.json` |
 | Reading history | `~/.config/futon/history.json` |
 | Ảnh đã download | `~/Downloads/Futon/` |
-| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file) |
+| CBZ đã xuất | `~/Downloads/Futon/` (mỗi chapter một file; `ctrl+a` gom vào thư mục riêng của truyện) |
+
+`~/.config` theo `XDG_CONFIG_HOME` nếu có đặt (dữ liệu cũ ở `~/.config/futon` vẫn được dùng tiếp). `~/Downloads` là thư mục tải về của desktop (`XDG_DOWNLOAD_DIR`, vd. `~/Tải xuống`). Có thể mở nhiều cửa sổ Futon cùng lúc: lịch sử đọc của các cửa sổ được gộp chung.
 
 ## Architecture
 

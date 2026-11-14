@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/mattn/go-runewidth"
 )
@@ -81,7 +82,8 @@ func (m ReaderModel) frameContent() string {
 
 		if m.flashMsg != "" {
 			// One row only: a wrapped flash would spill onto the footer row.
-			flash := runewidth.Truncate(m.flashMsg, max(1, w-2), "…")
+			// Raw output: titles saved before CleanText existed must not carry escapes.
+			flash := runewidth.Truncate(api.CleanText(m.flashMsg), max(1, w-2), "…")
 			flashCol := max(1, (w-runewidth.StringWidth(flash))/2)
 			flashRow := max(1, h-1)
 			if m.hideFooter {
@@ -110,6 +112,7 @@ func (m ReaderModel) frameContent() string {
 
 // Fall back to model dimensions if terminal query fails (e.g. non-TTY).
 func (m ReaderModel) centerText(text string) string {
+	text = api.CleanText(text) // raw output, see the flash above
 	w, h := m.width, m.height
 	if ts, err := imgrender.GetTerminalSize(); err == nil && ts.Cols > 0 && ts.Rows > 0 {
 		w, h = ts.Cols, ts.Rows
@@ -179,9 +182,9 @@ func (m ReaderModel) footerText(width int) string {
 	}
 	hints := []footerHint{{page, 0}, {"[←/h] [→/l] Trang", 2}}
 	if m.fitWidth {
-		hints = append(hints, footerHint{"[↑/↓] Cuộn", 2}, footerHint{"[k/j] Chap", 3}, footerHint{"[w] Vừa màn hình", 4})
+		hints = append(hints, footerHint{"[↑/↓] Cuộn", 2}, footerHint{"[⇧↑/⇧↓] Chap", 3}, footerHint{"[w] Vừa màn hình", 4})
 	} else {
-		hints = append(hints, footerHint{"[↑/k] [↓/j] Chap", 3}, footerHint{"[w] Webtoon", 4})
+		hints = append(hints, footerHint{"[⇧↑/⇧↓] Chap", 3}, footerHint{"[w] Webtoon", 4})
 	}
 	if m.hasPreviousChapter() && m.currentIdx == 0 {
 		hints = append(hints, footerHint{"[←] Chap trước", 8})

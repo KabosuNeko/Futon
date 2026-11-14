@@ -6,6 +6,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/KabosuNeko/Futon/internal/models"
 )
@@ -73,7 +74,12 @@ func fanOut(ctx context.Context, providers []MangaProvider, fetch func(context.C
 				counts[p.Name()] = 0
 			} else {
 				for i := range results {
-					results[i].Provider = p.Name()
+					r := &results[i]
+					r.Provider = p.Name()
+					r.Title, r.Author, r.Status = CleanText(r.Title), CleanText(r.Author), CleanText(r.Status)
+					for j := range r.Genres {
+						r.Genres[j] = CleanText(r.Genres[j])
+					}
 				}
 				counts[p.Name()] = len(results)
 				all = append(all, results...)
@@ -101,4 +107,16 @@ func fanOut(ctx context.Context, providers []MangaProvider, fetch func(context.C
 		close(out)
 	}()
 	return out
+}
+
+// CleanText drops control characters from text that came from a source. A
+// title like "x&#27;]52;c;..." would otherwise reach the terminal as an
+// escape sequence (OSC 52 rewrites the clipboard).
+func CleanText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }

@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/KabosuNeko/Futon/internal/storage"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
@@ -58,23 +59,23 @@ func (m ReaderModel) renderCmd(idx int) tea.Cmd {
 		return nil
 	}
 	if !m.fitWidth {
-		return renderPage(m.renderer, m.imageData[idx], idx, m.chapterID, m.imageRows())
+		return renderPage(m.renderer, m.imageData[idx], idx, m.chapterID, m.renderGen, m.imageRows())
 	}
 	scroll := 0
 	var scaled image.Image
 	if idx == m.currentIdx {
 		scroll = m.scrollRow
-		if m.scaled != nil && m.scaled.idx == idx && m.scaled.chapterID == m.chapterID {
-			scaled = m.scaled.img
-		}
 	}
-	return renderWindow(m.renderer, m.imageData[idx], scaled, idx, m.chapterID, scroll, m.viewRows())
+	if s := m.scaledFor(idx); s != nil {
+		scaled = s.img
+	}
+	return renderWindow(m.renderer, m.imageData[idx], scaled, idx, m.chapterID, m.renderGen, scroll, m.viewRows())
 }
 
-func renderWindow(r imgrender.Renderer, data []byte, scaled image.Image, index int, chapterID string, scroll, rows int) tea.Cmd {
+func renderWindow(r imgrender.Renderer, data []byte, scaled image.Image, index int, chapterID string, gen, scroll, rows int) tea.Cmd {
 	return func() tea.Msg {
 		fail := func(err error) tea.Msg {
-			return renderDoneMsg{index: index, chapterID: chapterID, err: fmt.Errorf("render trang %d: %w", index+1, err)}
+			return renderDoneMsg{index: index, chapterID: chapterID, gen: gen, err: fmt.Errorf("render trang %d: %w", index+1, err)}
 		}
 		if scaled == nil {
 			var err error
@@ -88,10 +89,20 @@ func renderWindow(r imgrender.Renderer, data []byte, scaled image.Image, index i
 			return fail(err)
 		}
 		return renderDoneMsg{
-			index: index, chapterID: chapterID, img: img,
+			index: index, chapterID: chapterID, gen: gen, img: img,
 			windowed: true, scaled: scaled, requested: scroll, scroll: top, totalRows: total,
 		}
 	}
+}
+
+// scaledFor returns page idx already scaled to the width, if kept.
+func (m ReaderModel) scaledFor(idx int) *scaledPage {
+	for _, s := range []*scaledPage{m.scaled, m.nextScaled} {
+		if s != nil && s.idx == idx && s.chapterID == m.chapterID {
+			return s
+		}
+	}
+	return nil
 }
 
 // handleWindowRendered stores a webtoon-mode render.
@@ -99,8 +110,12 @@ func (m ReaderModel) handleWindowRendered(msg renderDoneMsg) (ReaderModel, tea.C
 	if msg.scroll == 0 {
 		m.setCached(msg.index, msg.img) // page tops double as the prefetch cache
 	}
+	page := &scaledPage{idx: msg.index, chapterID: msg.chapterID, img: msg.scaled, rows: msg.totalRows}
+	if msg.index == m.currentIdx+1 {
+		m.nextScaled = page
+	}
 	if msg.index == m.currentIdx {
-		m.scaled = &scaledPage{idx: msg.index, chapterID: msg.chapterID, img: msg.scaled, rows: msg.totalRows}
+		m.scaled = page
 		if msg.requested != m.scrollRow {
 			return m, nil // superseded by a newer scroll, which is on its way
 		}
@@ -142,10 +157,10 @@ func (m ReaderModel) scrollPage(dir int) (ReaderModel, tea.Cmd) {
 	}
 	view := m.viewRows()
 	step := max(1, view/2)
-	known := m.scaled != nil && m.scaled.idx == m.currentIdx && m.scaled.chapterID == m.chapterID
+	page := m.scaledFor(m.currentIdx)
 
 	if dir > 0 {
-		if known && m.scrollRow+view >= m.scaled.rows {
+		if page != nil && m.scrollRow+view >= page.rows {
 			return m.handleNextPage()
 		}
 		m.scrollRow += step
@@ -170,13 +185,14 @@ func (m ReaderModel) scrollPage(dir int) (ReaderModel, tea.Cmd) {
 // remembers the choice.
 func (m ReaderModel) toggleFitWidth() (ReaderModel, tea.Cmd) {
 	m.fitWidth = !m.fitWidth
+	on := m.fitWidth
 	m.scrollRow = 0
 	m.resetImageCache()
 	m.flashMsg = "Chế độ: vừa màn hình"
 	if m.fitWidth {
 		m.flashMsg = "Chế độ webtoon: vừa chiều ngang, [↑/↓] cuộn"
 	}
-	cmds := []tea.Cmd{saveReaderFitWidthCmd(m.fitWidth), clearFlashAfter(2 * time.Second)}
+	cmds := []tea.Cmd{saveUserDataCmd(func(ud *storage.UserData) { ud.ReaderFitWidth = on }), clearFlashAfter(2 * time.Second)}
 	if m.step == stepRead && m.validCurrentImage() {
 		m.isLoading = true
 		cmds = append(cmds, m.renderCmd(m.currentIdx))
@@ -186,10 +202,11 @@ func (m ReaderModel) toggleFitWidth() (ReaderModel, tea.Cmd) {
 
 // scrollPercent is how far down the current page the window is (webtoon mode).
 func (m ReaderModel) scrollPercent() (int, bool) {
-	if !m.fitWidth || m.scaled == nil || m.scaled.idx != m.currentIdx || m.scaled.chapterID != m.chapterID {
+	page := m.scaledFor(m.currentIdx)
+	if !m.fitWidth || page == nil {
 		return 0, false
 	}
-	span := m.scaled.rows - m.viewRows()
+	span := page.rows - m.viewRows()
 	if span <= 0 {
 		return 100, true
 	}

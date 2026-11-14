@@ -26,7 +26,6 @@ func httpGet(ctx context.Context, client *http.Client, endpoint, userAgent strin
 // The builder runs per attempt so POST bodies and headers are rebuilt fresh;
 // it must attach ctx to the request. A cancelled ctx stops retrying at once.
 func httpDo(ctx context.Context, client *http.Client, build func() (*http.Request, error)) (*http.Response, error) {
-	client = ensureClient(client)
 	var lastErr error
 	for attempt := 0; attempt <= providerMaxRetries; attempt++ {
 		if attempt > 0 {
@@ -81,13 +80,4 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
-}
-
-func ensureClient(client *http.Client) *http.Client {
-	if client.Timeout == 0 {
-		c := *client
-		c.Timeout = providerTimeout
-		return &c
-	}
-	return client
 }

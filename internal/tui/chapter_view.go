@@ -182,11 +182,15 @@ func (m ChapterListModel) buildContent() (string, int) {
 	if m.inputBuffer != "" {
 		footer = "[enter] Nhảy đến chapter  [esc] Hủy  [^c] Thoát"
 	} else {
-		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất CBZ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
+		footer = "[enter] Mở đọc  [↑/↓] Chọn  [ctrl+e] Xuất chap  [ctrl+a] Xuất cả bộ  [ctrl+f] Yêu thích  [gõ số] Nhảy chap  [esc] Quay lại"
 	}
 
+	// Wrap the hints to the card width: the block is centered on its widest
+	// line, so a wider footer shifted the card off narrow terminals.
 	footerNode := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
+		Width(boxW).
+		Align(lipgloss.Center).
 		Render(footer)
 
 	var elements []string
@@ -213,6 +217,10 @@ func (m ChapterListModel) buildContent() (string, int) {
 		placed = placed + "\n" + flashStyle.Render(m.flashMsg)
 	}
 
+	// Same rule as the search screen: a clipped list is worse than a notice.
+	if lipgloss.Width(placed) > w || lipgloss.Height(placed) > h {
+		return runewidth.Truncate(tooSmallNotice, w, "…"), 0
+	}
 	return placed, listTop
 }
 

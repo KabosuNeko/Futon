@@ -50,3 +50,15 @@ func TestSourcesTabUsableWhileFeedHasError(t *testing.T) {
 		t.Errorf("sources list not shown:\n%s", view)
 	}
 }
+
+func TestLegacySavedSourcesLongerThanProvidersAreKept(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	// An old list: every source but MangaDex, including ones since removed.
+	if err := storage.SaveSources([]string{"OTruyen", "TruyenGG", "FoxTruyen", "TruyenQQ", "BaoTangTruyen"}); err != nil {
+		t.Fatal(err)
+	}
+	providers := []api.MangaProvider{api.NewMangaDexProvider(), api.NewTruyenQQProvider(), api.NewBaoTangTruyenProvider()}
+	if got := loadSourceToggles(providers); got[0] || !got[1] || !got[2] {
+		t.Errorf("toggles = %v, want MangaDex off as saved", got)
+	}
+}

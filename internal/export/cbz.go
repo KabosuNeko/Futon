@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 var filenameReplacer = strings.NewReplacer(
@@ -23,14 +24,43 @@ var filenameReplacer = strings.NewReplacer(
 	"|", "-",
 )
 
+// maxNameBytes keeps names under the 255-byte file name limit of Linux and
+// macOS file systems, with room for an extension and a temp-file suffix.
+// Vietnamese letters take 2-3 bytes each, so long titles do hit it.
+const maxNameBytes = 200
+
 // SanitizeFilename cleans manga or chapter titles for safe file system usage.
 func SanitizeFilename(name string) string {
-	s := filenameReplacer.Replace(name)
-	s = strings.TrimSpace(s)
+	// No leading dots: ".." would point at the parent folder and ".x" hides the file.
+	s := strings.TrimLeft(strings.TrimSpace(truncateBytes(filenameReplacer.Replace(name), maxNameBytes)), ". ")
 	if s == "" {
 		return "Untitled"
 	}
 	return s
+}
+
+// truncateBytes cuts s to at most n bytes without splitting a character.
+func truncateBytes(s string, n int) string {
+	for len(s) > n {
+		_, size := utf8.DecodeLastRuneInString(s)
+		s = s[:len(s)-size]
+	}
+	return s
+}
+
+// FileStem names a chapter's files: "{Title}_{Chapter}". Some sources repeat
+// the title in the chapter name, so that prefix is dropped. When the name is
+// too long the title is shortened, never the chapter: two chapters must not
+// end up with the same name and overwrite each other.
+func FileStem(mangaTitle, chapterLabel string) string {
+	title := strings.TrimSpace(mangaTitle)
+	label := strings.TrimSpace(chapterLabel)
+	if title != "" && len(label) > len(title) && strings.HasPrefix(label, title) &&
+		strings.ContainsRune(" -:", rune(label[len(title)])) { // "One" must not cut "Oneshot"
+		label = strings.TrimLeft(label[len(title):], " -:")
+	}
+	chapter := truncateBytes(SanitizeFilename(ChapterFileLabel(label)), maxNameBytes/2)
+	return SanitizeFilename(truncateBytes(SanitizeFilename(title), maxNameBytes-1-len(chapter))) + "_" + chapter
 }
 
 // ChapterFileLabel names a chapter in file names: "Chap_12" for a bare
@@ -57,17 +87,42 @@ func ShortPath(path string) string {
 	return path
 }
 
-// GetDefaultExportDir returns the ~/Downloads/Futon directory, creating it if necessary.
+// GetDefaultExportDir returns {Downloads}/Futon, creating it if necessary.
 func GetDefaultExportDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	dir := filepath.Join(home, "Downloads", "Futon")
+	dir := filepath.Join(downloadsDir(home), "Futon")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return ".", err
 	}
 	return dir, nil
+}
+
+// downloadsDir is the user's download folder: XDG_DOWNLOAD_DIR from the
+// environment or from user-dirs.dirs (localized, e.g. "~/Tải xuống" on a
+// Vietnamese desktop), else ~/Downloads.
+func downloadsDir(home string) string {
+	if dir := os.Getenv("XDG_DOWNLOAD_DIR"); filepath.IsAbs(dir) {
+		return dir
+	}
+	if cfg, err := os.UserConfigDir(); err == nil {
+		if data, err := os.ReadFile(filepath.Join(cfg, "user-dirs.dirs")); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				v, ok := strings.CutPrefix(strings.TrimSpace(line), "XDG_DOWNLOAD_DIR=")
+				if !ok {
+					continue
+				}
+				v = filepath.Clean(strings.Replace(strings.Trim(v, `"`), "$HOME", home, 1))
+				// xdg-user-dirs points a disabled folder at $HOME itself.
+				if filepath.IsAbs(v) && v != filepath.Clean(home) {
+					return v
+				}
+			}
+		}
+	}
+	return filepath.Join(home, "Downloads")
 }
 
 // ExportImagesToCBZ packs already-downloaded page images into a .cbz file.
@@ -92,7 +147,7 @@ func ExportImagesToCBZ(mangaTitle, chapterNumber string, images [][]byte, destDi
 		}
 	}
 
-	filename := fmt.Sprintf("%s_%s.cbz", SanitizeFilename(mangaTitle), SanitizeFilename(ChapterFileLabel(chapterNumber)))
+	filename := FileStem(mangaTitle, chapterNumber) + ".cbz"
 	targetPath := filepath.Join(destDir, filename)
 
 	tmp, err := os.CreateTemp(destDir, filename+".tmp-*")

@@ -245,6 +245,14 @@ func (p *CuuTruyenProvider) FetchChapters(ctx context.Context, mangaID string) (
 	return chapters, nil
 }
 
+func (p *CuuTruyenProvider) lookupCover(ctx context.Context, mangaID string) (string, error) {
+	doc, err := p.fetchDoc(ctx, resolveURL(cuutruyenBaseURL, mangaID))
+	if err != nil {
+		return "", err
+	}
+	return pageCover(doc, ""), nil
+}
+
 func (p *CuuTruyenProvider) FetchPages(ctx context.Context, chapterID string) ([]string, error) {
 	doc, err := p.fetchDoc(ctx, resolveURL(cuutruyenBaseURL, chapterID))
 	if err != nil {

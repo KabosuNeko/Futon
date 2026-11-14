@@ -24,8 +24,8 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 
 - Continuous-scroll manga reading (infinite scroll) — page-by-page reading only.
 - Windows support (build targets are Linux + macOS only; Windows code merely compiles, it does not run).
-- Offline library management (downloading full series, reading offline).
-- Manual bulk page downloads (only 1 page per `ctrl+d`; CBZ export is per chapter, not arbitrary page selection).
+- Offline library management (reading downloaded chapters inside Futon; exported CBZ files are read with other apps).
+- Manual bulk page downloads (only 1 page per `ctrl+d`; CBZ export is per chapter or whole series, not arbitrary page selection).
 - User accounts, cloud sync, follow/notifications.
 - Comments, ratings, in-app reviews.
 
@@ -43,7 +43,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-S8**: Until the first results arrive, searches show the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ...") and the initial feed shows its loading text; partial results appear as each source completes; after completion a subtle warning lists the failed providers plus a healthy/total source count.
 - **FR-S9**: Provider HTTP calls have a **10s timeout** and retry up to **2 times** on network errors or 5xx responses with incremental backoff.
 - **FR-S10**: The latest feed and filter results are **paged**: moving the cursor onto the last item loads the next page and appends it below (titles already listed are skipped); an empty page ends paging. Search results are not paged.
-- **FR-S12**: The result list shows **one row per title**: results whose titles match after normalization (source suffix removed, case folded, punctuation and spacing ignored) are grouped and list all their sources, the picked one first. `shift+←`/`shift+→` change the picked source (plain `←`/`→` keep editing the query); the preview shows it ("1/2"), `enter` opens it, and the choice survives more results streaming in. Untitled entries are never grouped.
+- **FR-S12**: The result list shows **one row per result**, `Title (source)`: the same manga on two sources is two rows, and `enter` opens the row under the cursor.
 - **FR-S11**: Provider errors are never masked: a failing filter request surfaces as that provider's error instead of silently falling back to the latest list, and a latest-updates page that parses to nothing is an error (the site markup changed).
 
 #### Per-provider limits
@@ -74,6 +74,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-F1**: `ctrl+f` on the chapter list adds a manga to favorites; shows flash "Đã thêm ... vào Yêu thích" (2s).
 - **FR-F2**: Deduped by (Provider, MangaID) — adding a duplicate is a no-op; the same ID on two providers is two favorites.
 - **FR-F3**: Persisted to `~/.config/futon/userdata.json` (`favorites` field).
+- **FR-F4**: Favorites and history keep the manga's cover URL, so `/fav` and `/his` show the cover in the preview pane like the feed. An entry saved without one looks it up once from its source when it is focused in `/fav` or `/his` (MangaDex API, or the cover on the manga page) and keeps it.
 
 ### 4.4 Reading history
 
@@ -81,7 +82,8 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-H2**: Disk write is **debounced 2s** from the last save (timer resets on every save).
 - **FR-H3**: `esc` in the reader: flushes history immediately (does not wait for debounce).
 - **FR-H4**: Removing an entry (`ctrl+d` in `/his`) flushes synchronously right away.
-- **FR-H8**: `ctrl+c` in the reader (or from the router while in the reader): saves + flushes history before quitting (prevents losing the last page position when exiting before the 2s debounce).
+- **FR-H8**: `ctrl+c` in the reader (or from the router while in the reader): saves + flushes history before quitting (prevents losing the last page position when exiting before the 2s debounce). Every other exit also flushes once the program returns: quitting from another screen, `SIGTERM`, and `SIGHUP` (closing the terminal window), which is caught to quit cleanly.
+- **FR-H10**: Several Futon windows share one history file: each flush re-reads it and keeps entries written by the other windows (the newer `updated_at` wins per manga); entries deleted or re-keyed in this window are not brought back. Flushes are serialized, and files are synced to disk before the atomic rename.
 - **FR-H5**: The chapter list restores the cursor to the last-read chapter (`restoreHistoryPosition`).
 - **FR-H6**: The reader resumes at the correct page when opening a chapter that matches history (via `StartPageIndex=-1`).
 - **FR-H7**: History keeps the old Title/ChapterNumber if the new write does not provide them (prevents information loss).
@@ -99,17 +101,17 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 
 - **FR-R1**: Page navigation: `→`/`l` next page, `←`/`h` previous page. **Only active in the reader** (not swallowed by other screens).
 - **FR-R2**: **Continuous chapter switching**: on the last page, `→` goes to the next chapter; on the first page, `←` goes to the previous chapter — no need to return to the list.
-- **FR-R10**: **Fast chapter jump**: `j` (and `↓` outside webtoon mode) switches to the next chapter from any page; `k` (and `↑`) to the previous one. Both open the target chapter at its first page and use the preloaded next chapter when available.
-- **FR-R12**: **Webtoon mode** (`w` toggles, remembered in `userdata.json` as `reader_fit_width` and kept across chapters): pages are scaled to the terminal width, never beyond their native width, and shown through a window of terminal height. `↓`/`space`/wheel-down scroll half a screen; past the bottom they go to the next page (at its top); `↑`/wheel-up scroll back, and above the top go to the previous page **at its bottom**. `←`/`→` still change pages and `j`/`k` chapters. Each page is decoded and scaled once; a scroll only crops and encodes the visible window, and the previous window stays on screen until the new one is ready. The footer shows how far down the page the window is.
+- **FR-R10**: **Fast chapter jump**: `shift+↓` or `j` switches to the next chapter from any page; `shift+↑` or `k` to the previous one, in both modes (plain `↑`/`↓` only scroll, in webtoon mode). Both open the target chapter at its first page and use the preloaded next chapter when available.
+- **FR-R12**: **Webtoon mode** (`w` toggles, remembered in `userdata.json` as `reader_fit_width` and kept across chapters): pages are scaled to the terminal width, never beyond their native width, and shown through a window of terminal height. `↓`/`space`/wheel-down scroll half a screen; past the bottom they go to the next page (at its top); `↑`/wheel-up scroll back, and above the top go to the previous page **at its bottom**. `←`/`→` still change pages and `shift+↑`/`shift+↓` (or `j`/`k`) chapters. Each page is decoded and scaled once; a scroll only crops and encodes the visible window, and the previous window stays on screen until the new one is ready. The footer shows how far down the page the window is.
 - **FR-R13**: The footer never wraps: when the terminal is too narrow, the least important hints are dropped whole (page number, navigation and `esc` are kept). Flash messages are truncated to one row.
 - **FR-R3**: Chapter preload: being within 3 pages of the end (0-based index `>= total-3`, checked on every page change and when a chapter opens, so resumes and short chapters count) automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
 - **FR-R4**: LRU image cache of **20 rendered images** (key = page index), evicts the oldest page; reset when entering a new chapter. Pre-renders at most 3 pages ahead that are not yet cached.
 - **FR-R5**: Download the current page with `ctrl+d` → `~/Downloads/Futon/`, filename `{Title}_{Chapter}_Pg{page}.{ext}` where `ext` matches the image data (jpg/png/webp/gif), sanitizes special characters, handles name collisions with `_1`...`_999` suffixes.
 - **FR-R6**: Chapter image downloads: **max 4 concurrent**, prioritizing the current page → pages ahead → pages behind. Each image retries up to **3 attempts** on network errors, 5xx and 429.
 - **FR-R11**: A page that fails to download or decode does **not** end the chapter: that page shows "Lỗi trang N: … — [r] Thử lại", other pages and navigation keep working, and `r` downloads it again.
-- **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`).
-- **FR-R8**: Terminal resize → re-render the current page.
-- **FR-R9**: `ctrl+h` toggles the reader footer/hint row. Hidden, the page is re-rendered to use the freed row; rendered cache is cleared so pages are not reused at the old size.
+- **FR-R7**: `esc` = save history + flush + clear screen + return to chapter list (order guaranteed via `tea.Sequence`). From `esc` on, that reader paints nothing more: a page that finishes rendering meanwhile, or a later resize, must not draw over the next screen.
+- **FR-R8**: Terminal resize → re-render the current page. The rendered cache is cleared, and renders started before a resize or a `w`/`ctrl+h` toggle are dropped, so no page is shown at an old size or in the other mode.
+- **FR-R9**: `ctrl+h` toggles the reader footer/hint row. Hidden, the page is re-rendered to use the freed row; rendered cache is cleared so pages are not reused at the old size. The choice is kept across chapters and remembered in `userdata.json` (`reader_hide_footer`), like webtoon mode.
 
 ### 4.7 Image rendering
 
@@ -133,9 +135,10 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 ### 4.10 CBZ export
 
-- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used in the chapter list and the chapter ID in the reader. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. Messages show paths with `~` for the home directory.
+- **FR-E1**: `ctrl+e` in the chapter list or reader exports the focused/current chapter to `~/Downloads/Futon/{Title}_{Chapter}.cbz`; when a provider omits chapter numbers (HTML sources), the chapter title is used instead. `{Chapter}` is `Chap_{N}` for a bare chapter number and the chapter label as is otherwise ("Chương 12"), so names never repeat the word. When the chapter label starts with the manga title (some sources repeat it), that prefix is dropped. Names are kept under 200 bytes (file systems allow 255; Vietnamese letters take 2-3 bytes) by shortening the title, never the chapter part, so chapters cannot collide. Messages show paths with `~` for the home directory.
 - **FR-E2**: Each CBZ contains `ComicInfo.xml` (original series/chapter titles, XML-escaped; only the file name is sanitized) and zero-padded page entries named `001.<ext>`, `002.<ext>`, ...
 - **FR-E3**: A CBZ is only written when **every page** downloaded (pages download 4 at a time, with the FR-R6 retries); otherwise the export fails naming the page. The archive is written to a temp file and renamed, so a failed export leaves no partial `.cbz`.
+- **FR-E4**: `ctrl+a` in the chapter list exports every chapter into `~/Downloads/Futon/{Title}/`, one CBZ per chapter, showing `{done}/{total}` progress as each chapter finishes; `esc` cancels it (after the chapter in progress). Chapters that share a label (e.g. MangaDex oneshots with neither number nor title) get `_2`, `_3`... so none overwrites another. Chapters that fail are skipped and named in the final flash with `{success}/{total}` (the first 5, then `+N`). Progress keeps updating while a chapter is being read.
 
 ## 5. Non-Functional Requirements
 
@@ -144,6 +147,7 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 - **NFR-3**: Key input must respond instantly; network search must not freeze the interface.
 - **NFR-4**: Local data safety — write files with 0644, do not overwrite unnecessarily.
 - **NFR-5**: Cross-compilation without CGO (`CGO_ENABLED=0`).
+- **NFR-6**: Text from sources (titles, authors, genres, chapter names) has control characters removed before use, and the reader strips them again before writing raw to the terminal, so a crafted title cannot send terminal escape sequences (clipboard writes, screen changes). Images from sources are capped at 32 MB downloaded and 50 megapixels decoded, so a crafted page (a decompression bomb) fails like a broken page instead of exhausting memory.
 
 ## 6. Data & Storage
 
@@ -155,6 +159,7 @@ The keybindings table in `README.md` is the user-facing source of truth; FR-R1/F
 
 - **Migration**: on first run after upgrade, if `userdata.json` does not exist, old `favorites.json` + `sources.json` are auto-merged into `userdata.json` and the 2 old files are deleted (one-time).
 - Source toggles are stored by **provider name**; all enabled by default.
+- **Locations**: the config folder is `$XDG_CONFIG_HOME/futon` when that variable is set, unless `~/.config/futon` already exists (existing data is never orphaned). Downloads go to `{Downloads}/Futon`, where `{Downloads}` is `XDG_DOWNLOAD_DIR` (environment or `user-dirs.dirs`, e.g. `~/Tải xuống` on a Vietnamese desktop), else `~/Downloads`.
 
 ## 7. Platform
 

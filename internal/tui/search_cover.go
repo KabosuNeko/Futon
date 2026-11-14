@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
+	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 )
 
@@ -61,6 +62,14 @@ func (m *SearchModel) setCover(img *imgrender.RenderedImage) {
 
 func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	focused, ok := m.focusedManga()
+	if ok && focused.CoverURL == "" && m.canLookupCover(focused) {
+		// Debounced like a cover fetch: scrolling past entries must not send
+		// a page request for each of them.
+		m.setCover(nil)
+		m.currentCoverID = focused.ID
+		m.coverLoading = true
+		return debounceCover(focused.ID, "", 150*time.Millisecond)
+	}
 	if !ok || focused.CoverURL == "" {
 		m.setCover(nil)
 		m.currentCoverID = ""
@@ -79,6 +88,58 @@ func (m *SearchModel) updateFocusedCover() tea.Cmd {
 	m.setCover(nil)
 	m.coverLoading = true
 	return debounceCover(focused.ID, focused.CoverURL, 150*time.Millisecond)
+}
+
+// canLookupCover reports whether focused is a fav/his entry whose cover was
+// not looked up yet this session.
+func (m SearchModel) canLookupCover(focused models.Manga) bool {
+	return (m.view == viewFavorites || m.view == viewHistory) && !m.coverLookups[focused.Provider+"\x00"+focused.ID]
+}
+
+// lookupCover asks the source for focused's cover, once per session.
+func (m *SearchModel) lookupCover(focused models.Manga) tea.Cmd {
+	if m.coverLookups == nil {
+		m.coverLookups = make(map[string]bool)
+	}
+	m.coverLookups[focused.Provider+"\x00"+focused.ID] = true
+	m.coverLoading = true
+	return lookupCoverCmd(m.providerByName(focused.Provider), focused.ID, focused.Provider)
+}
+
+// coverFoundMsg carries the cover looked up for a fav/his entry saved without one.
+type coverFoundMsg struct {
+	mangaID, provider, url string
+	err                    error
+}
+
+func lookupCoverCmd(p api.MangaProvider, mangaID, provider string) tea.Cmd {
+	return func() tea.Msg {
+		url, err := api.LookupCover(context.Background(), p, mangaID)
+		return coverFoundMsg{mangaID: mangaID, provider: provider, url: url, err: err}
+	}
+}
+
+// applyFoundCover stores a looked-up cover in the lists and on disk, then
+// shows it if its entry is still focused.
+func (m SearchModel) applyFoundCover(msg coverFoundMsg) (SearchModel, tea.Cmd) {
+	// The flag belongs to the focused entry, which may be another one by now.
+	if msg.mangaID == m.currentCoverID {
+		m.coverLoading = false
+	}
+	if msg.err != nil {
+		return m, m.updateFocusedCover()
+	}
+	for i, f := range m.favorites {
+		if f.MangaID == msg.mangaID && f.Provider == msg.provider {
+			m.favorites[i].CoverURL = msg.url
+		}
+	}
+	for i, h := range m.history {
+		if h.MangaID == msg.mangaID && h.Provider == msg.provider {
+			m.history[i].CoverURL = msg.url
+		}
+	}
+	return m, tea.Batch(saveFoundCoverCmd(msg.mangaID, msg.provider, msg.url), m.updateFocusedCover())
 }
 
 type coverDebounceMsg struct {
@@ -133,6 +194,12 @@ type coverPaintKey struct {
 	eraseW    int
 	imgRow    int
 	imgCol    int
+}
+
+// sameCoverArea reports whether two paint keys cover the same screen cells.
+func sameCoverArea(a, b coverPaintKey) bool {
+	return a.isSplit == b.isSplit && a.clearFrom == b.clearFrom && a.clearTo == b.clearTo &&
+		a.eraseCol == b.eraseCol && a.eraseW == b.eraseW
 }
 
 // coverSequence mirrors the sequences the pre-v2 View appended for the preview

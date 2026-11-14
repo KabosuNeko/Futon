@@ -1,13 +1,16 @@
 package tui
 
 import (
+	"context"
 	"errors"
+	"image"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/KabosuNeko/Futon/internal/models"
 	"github.com/KabosuNeko/Futon/internal/tui/imgrender"
 	"github.com/mattn/go-runewidth"
 )
@@ -222,9 +225,9 @@ func TestReaderChapterJumpKeys(t *testing.T) {
 		wantStart int
 	}{
 		{"j next chapter", tea.KeyPressMsg{Code: 'j', Text: "j"}, "c2", 2, 0},
-		{"down next chapter", tea.KeyPressMsg{Code: tea.KeyDown}, "c2", 2, 0},
+		{"shift+down next chapter", tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}, "c2", 2, 0},
 		{"k previous chapter", tea.KeyPressMsg{Code: 'k', Text: "k"}, "c0", 0, 0},
-		{"up previous chapter", tea.KeyPressMsg{Code: tea.KeyUp}, "c0", 0, 0},
+		{"shift+up previous chapter", tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift}, "c0", 0, 0},
 	}
 
 	for _, tc := range cases {
@@ -426,7 +429,7 @@ func TestReaderFooterInWebtoonMode(t *testing.T) {
 	m := newReadingModel(3)
 	m.fitWidth = true
 	foot := m.footerText(200)
-	for _, want := range []string{"[↑/↓] Cuộn", "[k/j] Chap", "[w] Vừa màn hình"} {
+	for _, want := range []string{"[↑/↓] Cuộn", "[⇧↑/⇧↓] Chap", "[w] Vừa màn hình"} {
 		if !strings.Contains(foot, want) {
 			t.Errorf("webtoon footer missing %q: %q", want, foot)
 		}
@@ -518,9 +521,125 @@ func TestReaderModeCarriesAcrossChapters(t *testing.T) {
 	app := NewAppModel("dev")
 	app.reader = NewReaderModel("m", "T", "c1", "1", []string{"c1", "c2"}, 0, 0, nil)
 	app.reader.fitWidth = true
+	app.reader.hideFooter = true
 
 	updated, _ := app.Update(ViewChapterMsg{MangaID: "m", ChapterID: "c2", AllChapterIDs: []string{"c1", "c2"}, ChapterIndex: 1})
-	if !updated.(AppModel).reader.fitWidth {
+	next := updated.(AppModel).reader
+	if !next.fitWidth {
 		t.Error("the next chapter lost webtoon mode")
+	}
+	if !next.hideFooter {
+		t.Error("the next chapter showed the footer again after ctrl+h hid it")
+	}
+}
+
+func TestCtrlHIsRememberedAcrossLaunches(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := newReadingModel(1)
+	m.imageData[0] = []byte{1}
+
+	_, cmd := m.update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	collectMessages(cmd) // runs the save command
+
+	if !NewAppModel("dev").readerHideFooter {
+		t.Error("a new launch does not start with the footer hidden")
+	}
+}
+
+func TestWebtoonKeepsPrefetchedPageScaled(t *testing.T) {
+	m := webtoonModel()
+	next := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	m, _ = m.update(renderDoneMsg{index: 1, chapterID: m.chapterID, windowed: true, scaled: next, totalRows: 50})
+
+	m.currentIdx = 1
+	if s := m.scaledFor(1); s == nil || s.img != next || s.rows != 50 {
+		t.Fatal("the prefetched page is decoded and scaled again when it becomes current")
+	}
+}
+
+func TestReaderRawFrameHasNoEscapesFromTitles(t *testing.T) {
+	m := newReadingModel(1)
+	m.failed[0] = errors.New("x") // error frame: no image needed
+	m.flashMsg = "Đã lưu ảnh: ~/Downloads/Futon/Evil\x1b]52;c;cm0gLXJmIH4=\a_Pg1.jpg"
+	if frame := m.frameContent(); strings.Contains(frame, "\x1b]52") || strings.ContainsRune(frame, '\a') {
+		t.Errorf("an OSC 52 sequence from a title reached the terminal: %q", frame)
+	}
+}
+
+func TestChapterTitlesAreCleanedOnLoad(t *testing.T) {
+	p := escProvider{}
+	msg := fetchChaptersCmd(p, "m")().(chaptersLoadedMsg)
+	if strings.ContainsRune(msg.Chapters[0].Title, 0x1b) {
+		t.Errorf("chapter title kept an escape: %q", msg.Chapters[0].Title)
+	}
+}
+
+type escProvider struct{ pagedProvider }
+
+func (escProvider) FetchChapters(context.Context, string) ([]models.Chapter, error) {
+	return []models.Chapter{{ID: "c", Title: "Chap\x1b]0;pwned\a 1"}}, nil
+}
+
+func TestRenderStartedBeforeModeToggleIsDropped(t *testing.T) {
+	m := newReadingModel(3)
+	for i := range m.imageData {
+		m.imageData[i] = []byte{1}
+	}
+	oldGen := m.renderGen
+	m, _ = m.toggleFitWidth() // a fit-screen render of page 1 is still in flight
+
+	m, _ = m.update(renderDoneMsg{index: 1, chapterID: m.chapterID, gen: oldGen, img: imgrender.RenderedImage{WidthPx: 1, HeightPx: 1}})
+	if _, cached := m.imageCache[1]; cached {
+		t.Error("a render from before the toggle was cached in webtoon mode")
+	}
+}
+
+func TestResizeClearsRenderedPagesInFitScreenMode(t *testing.T) {
+	m := newReadingModel(3)
+	m.setCached(1, imgrender.RenderedImage{WidthPx: 1, HeightPx: 1})
+	m, _ = m.update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	if _, cached := m.imageCache[1]; cached {
+		t.Error("page 1 kept its render for the old terminal size")
+	}
+}
+
+func TestReaderShowsSettingsSaveError(t *testing.T) {
+	m := newReadingModel(1)
+	m, _ = m.update(storageSavedMsg{err: errors.New("parse userdata JSON")})
+	if !strings.Contains(m.flashMsg, "parse userdata JSON") {
+		t.Errorf("flash = %q, want the save error", m.flashMsg)
+	}
+}
+
+func TestPlainArrowsDoNotSwitchChapters(t *testing.T) {
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyDown}, {Code: tea.KeyUp}} {
+		m := NewReaderModel("m1", "Title", "c1", "1", []string{"c0", "c1", "c2"}, 1, -1, nil)
+		m.step = stepRead
+		m.total = 5
+		m.imageData = make([][]byte, 5)
+		if rm, _ := m.update(key); rm.step != stepRead || rm.chapterID != "c1" {
+			t.Errorf("%s switched chapters; only shift+arrows and j/k may", key.String())
+		}
+	}
+}
+
+func TestReaderPaintsNothingAfterEsc(t *testing.T) {
+	m := newReadingModel(3)
+	m.imageData[0] = []byte{1}
+	m.isLoading = true // the page on screen is still rendering
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(ReaderModel)
+
+	img := imgrender.RenderedImage{EscapeSequence: "\x1b_Gimg\x1b\\", WidthPx: 10, HeightPx: 10}
+	for _, msg := range []tea.Msg{
+		renderDoneMsg{index: 0, chapterID: m.chapterID, gen: m.renderGen, img: img}, // finishes during the flush
+		tea.WindowSizeMsg{Width: 100, Height: 30},                                   // routed here on the search screen
+	} {
+		updated, cmd := m.Update(msg)
+		m = updated.(ReaderModel)
+		if raw := collectRawPayloads(cmd); raw != "" {
+			t.Errorf("%T after esc painted %q over the next screen", msg, raw)
+		}
 	}
 }

@@ -26,7 +26,7 @@ func loadSourceToggles(providers []api.MangaProvider) []bool {
 	}
 
 	saved, err := storage.LoadSources()
-	if err != nil || len(saved) == 0 || len(saved) > len(providers) {
+	if err != nil || len(saved) == 0 {
 		return toggles
 	}
 

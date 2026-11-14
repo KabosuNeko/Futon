@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/KabosuNeko/Futon/internal/api"
 	"github.com/KabosuNeko/Futon/internal/export"
+	"github.com/KabosuNeko/Futon/internal/storage"
 )
 
 const preloadTriggerOffset = 3
@@ -26,6 +27,11 @@ func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 		return m, []tea.Cmd{m.renderCmd(m.currentIdx)}
 	}
 	return m, nil
+}
+
+// saveHistoryCmd records page as the reading position of the open chapter.
+func (m ReaderModel) saveHistoryCmd(page int) tea.Cmd {
+	return saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.coverURL, m.chapterID, m.chapterNumber, page)
 }
 
 func (m ReaderModel) providerName() string {
@@ -67,7 +73,7 @@ func (m ReaderModel) handleNextPage() (ReaderModel, tea.Cmd) {
 		m.scrollRow = 0
 
 		m, cmds := m.loadCurrentPage()
-		cmds = append(cmds, saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
+		cmds = append(cmds, m.saveHistoryCmd(m.currentIdx))
 		cmds = append(cmds, m.maybePreloadNext())
 		return m, tea.Batch(cmds...)
 	} else if m.hasNextChapter() {
@@ -86,7 +92,7 @@ func (m ReaderModel) handlePrevPage() (ReaderModel, tea.Cmd) {
 		m.scrollRow = 0
 
 		m, cmds := m.loadCurrentPage()
-		cmds = append(cmds, saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
+		cmds = append(cmds, m.saveHistoryCmd(m.currentIdx))
 		return m, tea.Batch(cmds...)
 	} else if m.hasPreviousChapter() {
 		return m.jumpChapter(-1, -2)
@@ -138,14 +144,14 @@ func (m ReaderModel) jumpChapter(delta, startPage int) (ReaderModel, tea.Cmd) {
 		return m, nil
 	}
 
-	saveCmd := saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx)
+	saveCmd := m.saveHistoryCmd(m.currentIdx)
 	targetID := m.allChapterIDs[target]
 
 	if delta > 0 && m.preloadedChapID == targetID && len(m.preloadedURLs) > 0 {
 		m.applyPreloadedChapter(targetID)
 		return m, tea.Sequence(
 			saveCmd,
-			saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, 0),
+			m.saveHistoryCmd(0),
 			clearGraphicsCmd(),
 			func() tea.Msg { return preloadTransitionReadyMsg{} },
 		)
@@ -188,15 +194,6 @@ func (m ReaderModel) handleMouseMsg(msg tea.MouseMsg) (ReaderModel, tea.Cmd) {
 	return m, nil
 }
 
-// exportLabel names the reader export; HTML providers have no chapter numbers,
-// so fall back to the chapter ID instead of the shared "Untitled" filename.
-func (m ReaderModel) exportLabel() string {
-	if m.chapterNumber != "" {
-		return m.chapterNumber
-	}
-	return m.chapterID
-}
-
 func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -204,14 +201,15 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, tea.Sequence(
-			saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx),
+			m.saveHistoryCmd(m.currentIdx),
 			flushHistoryCmd(),
 			tea.Quit,
 		)
 
 	case "esc":
+		m.exited = true
 		return m, tea.Sequence(
-			saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx),
+			m.saveHistoryCmd(m.currentIdx),
 			flushHistoryCmd(),
 			clearScreenCmd(),
 			func() tea.Msg { return BackToChaptersMsg{} },
@@ -219,8 +217,8 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 
 	case "ctrl+e":
 		if m.step == stepRead && m.total > 0 {
-			m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", m.exportLabel())
-			return m, exportReaderCBZCmd(m.provider, m.chapterID, m.mangaTitle, m.exportLabel(), m.imageData, m.urls)
+			m.flashMsg = fmt.Sprintf("Đang xuất CBZ Chapter %s...", m.chapterNumber)
+			return m, exportReaderCBZCmd(m.provider, m.chapterID, m.mangaTitle, m.chapterNumber, m.imageData, m.urls)
 		}
 		return m, nil
 
@@ -231,7 +229,8 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		m.hideFooter = !m.hideFooter
 		m.resetImageCache()
 		m.isLoading = true
-		return m, m.renderCmd(m.currentIdx)
+		hidden := m.hideFooter
+		return m, tea.Batch(m.renderCmd(m.currentIdx), saveUserDataCmd(func(ud *storage.UserData) { ud.ReaderHideFooter = hidden }))
 
 	case "ctrl+d":
 		if m.step == stepRead && m.validCurrentImage() {
@@ -259,25 +258,22 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		return m.toggleFitWidth()
 
 	case "down", "space":
-		// In webtoon mode the arrows scroll the page; j/k always switch chapters.
+		// Plain arrows only scroll (webtoon mode); shift+arrows switch chapters.
 		if m.fitWidth {
 			return m.scrollPage(1)
 		}
-		if msg.String() == "space" {
-			return m, nil
-		}
-		return m.jumpChapter(1, 0)
+		return m, nil
 
 	case "up":
 		if m.fitWidth {
 			return m.scrollPage(-1)
 		}
-		return m.jumpChapter(-1, 0)
+		return m, nil
 
-	case "j":
+	case "shift+down", "j":
 		return m.jumpChapter(1, 0)
 
-	case "k":
+	case "shift+up", "k":
 		return m.jumpChapter(-1, 0)
 	}
 	return m, nil

@@ -90,7 +90,7 @@ func TestMergedSourceNameOpensSuccessor(t *testing.T) {
 
 func TestHistoryEntryOpensStraightIntoReader(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := storage.SaveHistory("m1", "T", "", "c2", "2", 4); err != nil {
+	if err := storage.SaveHistory("m1", "T", "", "", "c2", "2", 4); err != nil {
 		t.Fatal(err)
 	}
 
@@ -114,5 +114,18 @@ func TestHistoryResumeFallsBackToListWhenChapterGone(t *testing.T) {
 	m.resumeChapterID = "removed"
 	if _, cmd := m.Update(chaptersLoadedMsg{Chapters: []models.Chapter{{ID: "c1"}}}); cmd != nil {
 		t.Error("a missing chapter must leave the user on the chapter list")
+	}
+}
+
+func TestCoverURLReachesFavoritesAndHistory(t *testing.T) {
+	app := NewAppModel("dev")
+	updated, _ := app.Update(ViewMangaMsg{MangaID: "m", Title: "T", ProviderName: "MangaDex", CoverURL: "https://x/c.jpg"})
+	app = updated.(AppModel)
+	if app.chapter.coverURL != "https://x/c.jpg" {
+		t.Fatalf("chapter list cover = %q; ctrl+f would save no cover", app.chapter.coverURL)
+	}
+	updated, _ = app.Update(ViewChapterMsg{MangaID: "m", MangaTitle: "T", ChapterID: "c1", AllChapterIDs: []string{"c1"}})
+	if got := updated.(AppModel).reader.coverURL; got != "https://x/c.jpg" {
+		t.Errorf("reader cover = %q; history would save no cover", got)
 	}
 }

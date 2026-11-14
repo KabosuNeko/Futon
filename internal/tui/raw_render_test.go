@@ -138,7 +138,7 @@ func TestReaderResizeReframes(t *testing.T) {
 	}
 
 	sm := newM.(ReaderModel)
-	_, cmd2 := sm.Update(renderDoneMsg{index: 0, chapterID: "c1", img: rendered})
+	_, cmd2 := sm.Update(renderDoneMsg{index: 0, chapterID: "c1", gen: sm.renderGen, img: rendered})
 	frame := collectRawPayloads(cmd2)
 	if !strings.Contains(frame, rendered.EscapeSequence) {
 		t.Errorf("expected re-rendered image frame after resize, got %q", frame)
@@ -218,12 +218,14 @@ func nextCoverPaint(t *testing.T, m SearchModel, cmd tea.Cmd) string {
 	if cmd == nil {
 		t.Fatal("expected a deferred cover paint command")
 	}
-	msg := cmd()
-	if _, ok := msg.(coverPaintMsg); !ok {
-		t.Fatalf("expected coverPaintMsg, got %T", msg)
+	for _, msg := range collectMessages(cmd) {
+		if paint, ok := msg.(coverPaintMsg); ok {
+			_, rawCmd := m.Update(paint)
+			return collectRawPayloads(rawCmd)
+		}
 	}
-	_, rawCmd := m.Update(msg)
-	return collectRawPayloads(rawCmd)
+	t.Fatal("expected a coverPaintMsg")
+	return ""
 }
 
 func TestSearchCoverDrawEmitsRawSequence(t *testing.T) {
@@ -305,7 +307,22 @@ func TestSearchCoverClearsWhenLayoutLeavesSplit(t *testing.T) {
 
 	newM2, cmd := sm.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
 	sm2 := newM2.(SearchModel)
-	into := nextCoverPaint(t, sm2, cmd)
+	// Sixel pixels stay in the old preview cells: they are erased at once,
+	// before the deferred paint. (A tick command runs only once.)
+	old := sm.coverPaintState()
+	var erase, into string
+	for _, msg := range collectMessages(cmd) {
+		switch msg := msg.(type) {
+		case tea.RawMsg:
+			erase += fmt.Sprint(msg.Msg)
+		case coverPaintMsg:
+			_, rawCmd := sm2.Update(msg)
+			into = collectRawPayloads(rawCmd)
+		}
+	}
+	if !strings.Contains(erase, fmt.Sprintf("\x1b[%d;%dH\x1b[%dX", old.clearFrom, old.eraseCol, old.eraseW)) {
+		t.Errorf("old preview area not erased on leaving the split layout: %q", erase)
+	}
 	want := "\x1b_Ga=d,d=A,q=2\x1b\\\x1b_Ga=d,d=a,q=2\x1b\\"
 	if into != want {
 		t.Errorf("leaving the split layout payload = %q, want %q", into, want)

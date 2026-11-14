@@ -73,6 +73,10 @@ type chaptersLoadedMsg struct {
 func fetchChaptersCmd(p api.MangaProvider, mangaID string) tea.Cmd {
 	return func() tea.Msg {
 		chapters, err := p.FetchChapters(context.Background(), mangaID)
+		for i := range chapters {
+			chapters[i].Title = api.CleanText(chapters[i].Title)
+			chapters[i].Number = api.CleanText(chapters[i].Number)
+		}
 		return chaptersLoadedMsg{Chapters: chapters, Err: err}
 	}
 }

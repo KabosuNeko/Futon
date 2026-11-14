@@ -63,6 +63,18 @@ func resolveURL(baseURL, path string) string {
 	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimPrefix(path, "/")
 }
 
+// pageCover reads a manga's cover from its page: the image matching
+// selector, or the page's og:image when there is none. A source with a
+// selector gets no og:image fallback: it may be the site logo.
+func pageCover(doc *goquery.Document, selector string) string {
+	if selector != "" {
+		src, _ := imageSrc(doc.Find(selector).First())
+		return src
+	}
+	cover, _ := doc.Find(`meta[property="og:image"]`).Attr("content")
+	return strings.TrimSpace(cover)
+}
+
 // Sites lazy-load images — check data attributes before falling back to src.
 func imageSrc(s *goquery.Selection) (string, bool) {
 	for _, attr := range []string{"data-original", "data-src", "data-lazy-src"} {

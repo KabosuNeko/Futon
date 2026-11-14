@@ -2,6 +2,7 @@ package imgrender
 
 import (
 	"bytes"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/png"
@@ -165,5 +166,28 @@ func TestWindowClampsToBottom(t *testing.T) {
 	}
 	if w.Bounds().Min != (image.Point{}) {
 		t.Error("window must start at the origin")
+	}
+}
+
+func TestScaleToWidthSkipsSameSizeScale(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 900, 5000))
+	wide := TerminalSize{Cols: 200, Rows: 50, PxW: 1600, PxH: 800}
+	if scaleToWidth(img, wide, 0) != image.Image(img) {
+		t.Error("a page that already fits is scaled anyway")
+	}
+}
+
+func TestDecodeRejectsDecompressionBomb(t *testing.T) {
+	// A PNG header claiming 60000x60000 RGBA: decoding it would allocate 14 GB.
+	ihdr := []byte("IHDR\x00\x00\xea\x60\x00\x00\xea\x60\x08\x06\x00\x00\x00")
+	crc := crc32.ChecksumIEEE(ihdr)
+	data := append([]byte("\x89PNG\r\n\x1a\n\x00\x00\x00\x0d"), ihdr...)
+	data = append(data, byte(crc>>24), byte(crc>>16), byte(crc>>8), byte(crc))
+
+	if _, err := ScaleToWidth(data, 80); err == nil || !strings.Contains(err.Error(), "quá lớn") {
+		t.Fatalf("ScaleToWidth err = %v, want too large", err)
+	}
+	if _, err := decodeAndScaleInBox(data, 80, 24); err == nil || !strings.Contains(err.Error(), "quá lớn") {
+		t.Fatalf("decodeAndScaleInBox err = %v, want too large", err)
 	}
 }

@@ -15,6 +15,7 @@ type ReadHistory struct {
 	MangaID       string `json:"manga_id"`
 	MangaTitle    string `json:"manga_title,omitempty"`
 	Provider      string `json:"provider,omitempty"`
+	CoverURL      string `json:"cover_url,omitempty"`
 	ChapterID     string `json:"chapter_id"`
 	ChapterNumber string `json:"chapter_number,omitempty"`
 	PageIndex     int    `json:"page_index"`
@@ -26,6 +27,12 @@ var (
 	historyCache  map[string]ReadHistory // keyed by historyKey
 	historyLoaded bool
 	flushTimer    *time.Timer
+	// historyDeleted holds keys removed in this session, so merging the file
+	// written by another Futon window does not bring them back.
+	historyDeleted = map[string]bool{}
+	// flushMu serializes flushes: the debounce timer and an explicit flush
+	// may run together, and an older snapshot must not be renamed in last.
+	flushMu sync.Mutex
 )
 
 const flushDelay = 2 * time.Second
@@ -79,7 +86,7 @@ func loadHistory() error {
 }
 
 // SaveHistory updates reading progress in memory and schedules background persistence.
-func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) error {
+func SaveHistory(mangaID, mangaTitle, provider, coverURL, chapterID, chapterNumber string, pageIndex int) error {
 	if mangaID == "" || chapterID == "" {
 		return nil
 	}
@@ -98,14 +105,19 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		if chapterNumber == "" {
 			chapterNumber = old.ChapterNumber
 		}
+		if coverURL == "" {
+			coverURL = old.CoverURL
+		}
 	}
 	// Re-key a legacy provider-less entry now that the provider is known.
-	delete(historyCache, historyKey(mangaID, ""))
+	forgetHistory(historyKey(mangaID, ""))
+	delete(historyDeleted, historyKey(mangaID, provider))
 
 	historyCache[historyKey(mangaID, provider)] = ReadHistory{
 		MangaID:       mangaID,
 		MangaTitle:    mangaTitle,
 		Provider:      provider,
+		CoverURL:      coverURL,
 		ChapterID:     chapterID,
 		ChapterNumber: chapterNumber,
 		PageIndex:     pageIndex,
@@ -124,6 +136,25 @@ func lookupHistory(mangaID, provider string) (ReadHistory, bool) {
 	}
 	h, ok := historyCache[historyKey(mangaID, "")]
 	return h, ok
+}
+
+// SetHistoryCover fills in the cover of an entry saved without one, keeping
+// its reading position and time.
+func SetHistoryCover(mangaID, provider, coverURL string) error {
+	historyMu.Lock()
+	defer historyMu.Unlock()
+
+	if err := loadHistory(); err != nil {
+		return err
+	}
+	h, ok := lookupHistory(mangaID, provider)
+	if !ok || h.CoverURL == coverURL {
+		return nil
+	}
+	h.CoverURL = coverURL
+	historyCache[historyKey(h.MangaID, h.Provider)] = h
+	scheduleFlush()
+	return nil
 }
 
 func GetHistory(mangaID, provider string) (*ReadHistory, bool) {
@@ -170,7 +201,44 @@ func sortedHistory() []ReadHistory {
 	return entries
 }
 
+// forgetHistory removes an entry for good. Callers hold historyMu.
+func forgetHistory(key string) {
+	delete(historyCache, key)
+	historyDeleted[key] = true
+}
+
+// mergeHistoryFromDisk takes in entries that another Futon window wrote since
+// this one loaded the file: missing ones, and newer ones for the same manga.
+// A missing or unreadable file leaves the cache as it is. Callers hold
+// historyMu.
+func mergeHistoryFromDisk() {
+	path, err := historyPath()
+	if err != nil {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var entries []ReadHistory
+	if json.Unmarshal(data, &entries) != nil {
+		return
+	}
+	for _, e := range entries {
+		key := historyKey(e.MangaID, e.Provider)
+		if historyDeleted[key] {
+			continue
+		}
+		if cur, ok := historyCache[key]; !ok || e.UpdatedAt > cur.UpdatedAt {
+			historyCache[key] = e
+		}
+	}
+}
+
 func FlushHistory() error {
+	flushMu.Lock()
+	defer flushMu.Unlock()
+
 	historyMu.Lock()
 	// Flushing before anything has read the file must not overwrite it with a
 	// snapshot of the still-empty cache.
@@ -178,6 +246,7 @@ func FlushHistory() error {
 		historyMu.Unlock()
 		return err
 	}
+	mergeHistoryFromDisk()
 	snapshot := sortedHistory()
 	historyMu.Unlock()
 
@@ -203,7 +272,7 @@ func DeleteHistory(mangaID, provider string) error {
 		return err
 	}
 
-	delete(historyCache, historyKey(mangaID, provider))
+	forgetHistory(historyKey(mangaID, provider))
 	historyMu.Unlock()
 
 	return FlushHistory()

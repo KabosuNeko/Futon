@@ -121,8 +121,8 @@ func TestSearchSlashCommands(t *testing.T) {
 		if (rm.view == viewHistory) != tc.wantHistory {
 			t.Errorf("%q: showingHistory = %v, want %v", tc.input, (rm.view == viewHistory), tc.wantHistory)
 		}
-		if rm.chapterLanguage != tc.wantLang {
-			t.Errorf("%q: chapterLanguage = %v, want %v", tc.input, rm.chapterLanguage, tc.wantLang)
+		if got := rm.providers[1].(*api.MangaDexProvider).Lang(); got != tc.wantLang {
+			t.Errorf("%q: MangaDex language = %v, want %v", tc.input, got, tc.wantLang)
 		}
 		if tc.wantSystemMsg != "" && rm.systemMsg != tc.wantSystemMsg {
 			t.Errorf("%q: systemMsg = %q, want %q", tc.input, rm.systemMsg, tc.wantSystemMsg)
@@ -398,5 +398,101 @@ func TestHTMLSourceChapterOpensWithReadableLabel(t *testing.T) {
 	msg := cmd().(ViewChapterMsg)
 	if msg.ChapterNumber != "Chương 1" || msg.AllChapterNumbers[0] != "Chương 1" {
 		t.Errorf("chapter label = %q / %v, want the title", msg.ChapterNumber, msg.AllChapterNumbers)
+	}
+}
+
+func TestSameTitleOnTwoSourcesIsTwoRows(t *testing.T) {
+	m := testSearchModel()
+	m.width, m.height = 120, 30
+	m.results = []models.Manga{
+		{ID: "/bt/bl", Title: "Blue Lock", Provider: "BaoTangTruyen"},
+		{ID: "md-bl", Title: "Blue Lock", Provider: "MangaDex"},
+	}
+	view := m.View().Content
+	for _, row := range []string{"Blue Lock (baotangtruyen)", "Blue Lock (mangadex)"} {
+		if !strings.Contains(view, row) {
+			t.Errorf("missing row %q in:\n%s", row, view)
+		}
+	}
+
+	m.cursor = 1
+	_, cmd, _ := m.handleEnter()
+	if msg, ok := cmd().(ViewMangaMsg); !ok || msg.ProviderName != "MangaDex" || msg.MangaID != "md-bl" {
+		t.Errorf("enter on row 2 opened %+v, want the MangaDex entry", msg)
+	}
+}
+
+func TestMissingFavoriteCoverIsLookedUpOnceAfterScrollingStops(t *testing.T) {
+	m := testSearchModel()
+	m.width, m.height = 120, 30
+	m.view = viewFavorites
+	m.favorites = []storage.FavoriteManga{
+		{MangaID: "m1", Title: "A", Provider: "MangaDex"},
+		{MangaID: "m2", Title: "B", Provider: "MangaDex"},
+	}
+
+	// Focusing entries only schedules a debounced lookup; scrolling past one
+	// must not mark it as looked up.
+	m.updateFocusedCover()
+	m.cursor = 1
+	m.updateFocusedCover()
+	if len(m.coverLookups) != 0 {
+		t.Fatalf("lookups started while scrolling: %v", m.coverLookups)
+	}
+	if updated, cmd := m.Update(coverDebounceMsg{mangaID: "m1"}); cmd != nil && len(updated.(SearchModel).coverLookups) > 0 {
+		t.Error("an entry scrolled past was looked up")
+	}
+	updated, _ := m.Update(coverDebounceMsg{mangaID: "m2"})
+	m = updated.(SearchModel)
+	if !m.coverLookups["MangaDex\x00m2"] || len(m.coverLookups) != 1 {
+		t.Fatalf("lookups = %v, want only the entry the cursor stopped on", m.coverLookups)
+	}
+	if cmd := m.updateFocusedCover(); cmd != nil {
+		t.Error("the same entry was looked up twice")
+	}
+
+	m, _ = m.applyFoundCover(coverFoundMsg{mangaID: "m2", provider: "MangaDex", url: "https://x/c.jpg"})
+	if m.favorites[1].CoverURL != "https://x/c.jpg" || !m.coverLoading {
+		t.Errorf("found cover not stored and fetched: %+v loading=%v", m.favorites[1], m.coverLoading)
+	}
+}
+
+func TestStaleSavedCoverIsLookedUpAgain(t *testing.T) {
+	m := testSearchModel()
+	m.width, m.height = 120, 30
+	m.view = viewHistory
+	m.history = []storage.ReadHistory{{MangaID: "m1", MangaTitle: "A", Provider: "MangaDex", CoverURL: "https://x/old.jpg"}}
+
+	updated, cmd := m.Update(coverRenderedMsg{mangaID: "m1", coverURL: "https://x/old.jpg", err: errors.New("HTTP 404")})
+	m = updated.(SearchModel)
+	if cmd == nil || !m.coverLookups["MangaDex\x00m1"] {
+		t.Fatal("a saved cover that fails to load must be looked up again")
+	}
+	if _, cmd := m.Update(coverRenderedMsg{mangaID: "m1", coverURL: "https://x/old.jpg", err: errors.New("HTTP 404")}); cmd != nil {
+		t.Error("looked up again after the lookup already ran this session")
+	}
+}
+
+func TestLookupOfAnotherEntryKeepsFocusedCoverLoading(t *testing.T) {
+	m := testSearchModel()
+	m.width, m.height = 120, 30
+	m.view = viewFavorites
+	m.favorites = []storage.FavoriteManga{
+		{MangaID: "a", Title: "A", Provider: "MangaDex"},
+		{MangaID: "b", Title: "B", Provider: "MangaDex", CoverURL: "https://x/b.jpg"},
+	}
+	m.cursor = 1
+	if m.updateFocusedCover() == nil || !m.coverLoading {
+		t.Fatal("expected B's cover fetch to be scheduled")
+	}
+	// A's lookup finishes while B's cover is still loading.
+	m, cmd := m.applyFoundCover(coverFoundMsg{mangaID: "a", provider: "MangaDex", url: "https://x/a.jpg"})
+	if !m.coverLoading {
+		t.Error("A's lookup cleared the loading flag of B")
+	}
+	for _, msg := range collectMessages(cmd) {
+		if d, ok := msg.(coverDebounceMsg); ok && d.mangaID == "b" {
+			t.Error("B's cover fetch was scheduled a second time")
+		}
 	}
 }

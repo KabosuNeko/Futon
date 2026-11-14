@@ -16,6 +16,8 @@ type UserData struct {
 	ChapterLang string `json:"chapter_lang,omitempty"`
 	// ReaderFitWidth remembers the reader's webtoon (fit-width) mode.
 	ReaderFitWidth bool `json:"reader_fit_width,omitempty"`
+	// ReaderHideFooter remembers whether the reader's hint row is hidden.
+	ReaderHideFooter bool `json:"reader_hide_footer,omitempty"`
 }
 
 // userdataMu serializes read-modify-write cycles: favorites and source
@@ -27,6 +29,7 @@ type FavoriteManga struct {
 	MangaID  string `json:"manga_id"`
 	Title    string `json:"title"`
 	Provider string `json:"provider,omitempty"`
+	CoverURL string `json:"cover_url,omitempty"`
 }
 
 func ConfigDir() (string, error) {
@@ -35,6 +38,12 @@ func ConfigDir() (string, error) {
 		return "", fmt.Errorf("lấy thư mục home: %w", err)
 	}
 	dir := filepath.Join(home, ".config", "futon")
+	// Honour XDG_CONFIG_HOME, but keep using data already saved in ~/.config.
+	if base := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(base) {
+		if _, err := os.Stat(dir); err != nil {
+			dir = filepath.Join(base, "futon")
+		}
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("tạo thư mục cấu hình: %w", err)
 	}
@@ -74,7 +83,9 @@ func LoadUserData() (*UserData, error) {
 	return &ud, nil
 }
 
-func updateUserData(update func(*UserData)) error {
+// UpdateUserData applies update to the saved user data and writes it back,
+// serialized against every other update.
+func UpdateUserData(update func(*UserData)) error {
 	userdataMu.Lock()
 	defer userdataMu.Unlock()
 
@@ -107,33 +118,7 @@ func LoadSources() ([]string, error) {
 }
 
 func SaveSources(names []string) error {
-	return updateUserData(func(ud *UserData) { ud.Sources = names })
-}
-
-// LoadChapterLang returns the saved MangaDex chapter language, or "" if unset.
-func LoadChapterLang() (string, error) {
-	ud, err := LoadUserData()
-	if err != nil {
-		return "", err
-	}
-	return ud.ChapterLang, nil
-}
-
-func SaveChapterLang(lang string) error {
-	return updateUserData(func(ud *UserData) { ud.ChapterLang = lang })
-}
-
-// LoadReaderFitWidth reports whether the reader opens in fit-width mode.
-func LoadReaderFitWidth() (bool, error) {
-	ud, err := LoadUserData()
-	if err != nil {
-		return false, err
-	}
-	return ud.ReaderFitWidth, nil
-}
-
-func SaveReaderFitWidth(on bool) error {
-	return updateUserData(func(ud *UserData) { ud.ReaderFitWidth = on })
+	return UpdateUserData(func(ud *UserData) { ud.Sources = names })
 }
 
 func LoadFavorites() ([]FavoriteManga, error) {
@@ -147,7 +132,7 @@ func LoadFavorites() ([]FavoriteManga, error) {
 // AddFavorite stores a manga once per (provider, ID): IDs are opaque strings
 // per source, so the same ID on two sources is two different manga.
 func AddFavorite(manga FavoriteManga) error {
-	return updateUserData(func(ud *UserData) {
+	return UpdateUserData(func(ud *UserData) {
 		for _, f := range ud.Favorites {
 			if f.MangaID == manga.MangaID && f.Provider == manga.Provider {
 				return
@@ -157,8 +142,27 @@ func AddFavorite(manga FavoriteManga) error {
 	})
 }
 
+// SetFavoriteCover fills in the cover of a saved favorite (entries saved
+// before covers were kept). It writes only when the cover changed.
+func SetFavoriteCover(mangaID, provider, coverURL string) error {
+	userdataMu.Lock()
+	defer userdataMu.Unlock()
+
+	ud, err := LoadUserData()
+	if err != nil {
+		return err
+	}
+	for i, f := range ud.Favorites {
+		if f.MangaID == mangaID && f.Provider == provider && f.CoverURL != coverURL {
+			ud.Favorites[i].CoverURL = coverURL
+			return SaveUserData(ud)
+		}
+	}
+	return nil
+}
+
 func RemoveFavorite(mangaID, provider string) error {
-	return updateUserData(func(ud *UserData) {
+	return UpdateUserData(func(ud *UserData) {
 		for i, f := range ud.Favorites {
 			if f.MangaID == mangaID && f.Provider == provider {
 				ud.Favorites = append(ud.Favorites[:i], ud.Favorites[i+1:]...)
@@ -184,6 +188,12 @@ func writeJSON(path string, v any) error {
 	defer os.Remove(tmpPath)
 
 	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	// Force the data to disk before the rename makes it the real file;
+	// otherwise a power cut can leave an empty file (APFS does not order these).
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}

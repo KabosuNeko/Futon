@@ -22,6 +22,11 @@ type (
 	}
 	// imageAgent overrides the User-Agent for page images.
 	imageAgent interface{ imageUserAgent() string }
+	// coverLooker finds a manga's cover URL from its ID, for entries saved
+	// without one.
+	coverLooker interface {
+		lookupCover(ctx context.Context, mangaID string) (string, error)
+	}
 )
 
 const defaultImageUserAgent = "Futon-App/1.0"
@@ -36,6 +41,9 @@ const imageMaxAttempts = 3
 
 // imageRetryDelay is the base backoff between attempts; tests shorten it.
 var imageRetryDelay = 500 * time.Millisecond
+
+// maxImageBytes caps one downloaded image; real pages are a few MB at most.
+const maxImageBytes = 32 << 20
 
 // maxConcurrentPageDownloads bounds parallel page downloads for one chapter.
 const maxConcurrentPageDownloads = 4
@@ -62,6 +70,19 @@ func FetchCover(ctx context.Context, p MangaProvider, coverURL string) ([]byte, 
 	}
 	data, _, err := fetchImage(ctx, coverURL, browserUserAgent, referer)
 	return data, err
+}
+
+// LookupCover finds the cover URL of mangaID on its source.
+func LookupCover(ctx context.Context, p MangaProvider, mangaID string) (string, error) {
+	l, ok := p.(coverLooker)
+	if !ok {
+		return "", fmt.Errorf("nguồn không hỗ trợ tìm ảnh bìa")
+	}
+	cover, err := l.lookupCover(ctx, mangaID)
+	if err == nil && cover == "" {
+		err = fmt.Errorf("không tìm thấy ảnh bìa")
+	}
+	return cover, err
 }
 
 // DownloadPage fetches one page image of chapterID with the headers the
@@ -117,9 +138,13 @@ func fetchImage(ctx context.Context, rawURL, userAgent, referer string) (data []
 		transient := resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests
 		return nil, transient, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	data, err = io.ReadAll(resp.Body)
+	// One byte past the cap tells an oversized image from one exactly at it.
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
 	if err != nil {
 		return nil, true, err
+	}
+	if len(data) > maxImageBytes {
+		return nil, false, fmt.Errorf("ảnh quá lớn (> %d MB)", maxImageBytes>>20)
 	}
 	if len(data) == 0 {
 		return nil, true, fmt.Errorf("ảnh rỗng")
