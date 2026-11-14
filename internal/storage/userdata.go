@@ -29,6 +29,7 @@ type FavoriteManga struct {
 	MangaID  string `json:"manga_id"`
 	Title    string `json:"title"`
 	Provider string `json:"provider,omitempty"`
+	CoverURL string `json:"cover_url,omitempty"`
 }
 
 func ConfigDir() (string, error) {
@@ -139,6 +140,25 @@ func AddFavorite(manga FavoriteManga) error {
 		}
 		ud.Favorites = append(ud.Favorites, manga)
 	})
+}
+
+// SetFavoriteCover fills in the cover of a saved favorite (entries saved
+// before covers were kept). It writes only when the cover changed.
+func SetFavoriteCover(mangaID, provider, coverURL string) error {
+	userdataMu.Lock()
+	defer userdataMu.Unlock()
+
+	ud, err := LoadUserData()
+	if err != nil {
+		return err
+	}
+	for i, f := range ud.Favorites {
+		if f.MangaID == mangaID && f.Provider == provider && f.CoverURL != coverURL {
+			ud.Favorites[i].CoverURL = coverURL
+			return SaveUserData(ud)
+		}
+	}
+	return nil
 }
 
 func RemoveFavorite(mangaID, provider string) error {

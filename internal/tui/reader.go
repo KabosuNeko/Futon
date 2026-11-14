@@ -51,6 +51,7 @@ type imageSavedMsg struct {
 type ReaderModel struct {
 	mangaID           string
 	mangaTitle        string
+	coverURL          string // saved with history, for the /his preview
 	chapterNumber     string
 	chapterID         string
 	allChapterIDs     []string

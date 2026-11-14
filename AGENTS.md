@@ -30,7 +30,7 @@ internal/
     provider.go      # MangaProvider interface, FilterOptions, FilterGenres, shared parsing helpers
     http.go          # httpGet/httpDo: timeout, retry with backoff, context cancellation
     aggregate.go     # SearchAll/LatestAll/FilterAll: fan out over providers, stream Snapshots on a channel
-    images.go        # FetchCover, DownloadPage, DownloadChapterPages; per-provider image headers
+    images.go        # FetchCover, LookupCover, DownloadPage, DownloadChapterPages; per-provider image headers
     mangadex.go      # MangaDex provider + its API response types
     truyenqq.go      # TruyenQQ provider (TruyenGG is its fallback mirror)
     baotangtruyen.go # BaoTangTruyen provider
@@ -51,7 +51,6 @@ internal/
     search_keys.go   # keyboard + mouse input, tab switching (switchView), slash commands
     search_results.go # latest/filter/search requests, paging, merge, debounce
     search_sources.go # source toggles and their persistence
-    search_groups.go # one row per title across sources; shift+←/→ picks the source
     search_cover.go  # preview cover: cache, debounce, fetch, out-of-band paint
     search_layout.go # pane sizes, viewport, list rows for mouse hit-testing
     search_view.go   # search screen rendering
@@ -123,7 +122,7 @@ Every Kitty graphics command carries `q=2` so the terminal sends no replies into
 ## Image Downloads
 
 - MangaDex image requests use `User-Agent: Futon-App/1.0 (https://github.com/KabosuNeko/Futon)` and **no** `Referer` header to avoid placeholder responses.
-- Providers declare image headers by implementing the optional `coverReferer`, `pageReferer(chapterID)` and `imageUserAgent` methods (see `images.go`); never switch on provider names. Chapter IDs may be paths, so the page Referer is built from the current mirror.
+- Providers declare image headers by implementing the optional `coverReferer`, `pageReferer(chapterID)` and `imageUserAgent` methods (see `images.go`); never switch on provider names. They also implement `lookupCover(ctx, mangaID)`, which finds the cover of a favorite/history entry saved without one (`api.LookupCover`). Chapter IDs may be paths, so the page Referer is built from the current mirror.
 - Reader downloads and CBZ export share `api.DownloadPage` / `api.DownloadChapterPages`, so both paths send the same headers and the same retry policy (3 attempts on network errors, 5xx, 429).
 
 ## Concurrency
@@ -144,7 +143,7 @@ Every Kitty graphics command carries `q=2` so the terminal sends no replies into
 - Views must not do I/O: screens get their size from the router (`WindowSizeMsg`, propagated to newly created screens) and cached state; mouse rows come from the same layout code that renders the view.
 - `g`/`home` and `G`/`end` jump to the first/last chapter.
 - `h`/`l` for page navigation are **only** active in Reader mode (not caught by other screens).
-- `j`/`k` (and `↓`/`↑` outside webtoon mode) in Reader mode jump to the next/previous chapter; `w` toggles webtoon mode, where `↑`/`↓`/`space` scroll.
+- `shift+↓`/`shift+↑` (or `j`/`k`) in Reader mode jump to the next/previous chapter in both modes; `w` toggles webtoon mode, where plain `↑`/`↓`/`space` scroll.
 - `q` is **not** a keybinding anywhere — use `ctrl+c` to quit, `esc` to go back.
 - The search screen shows the focused manga's cover in the preview pane (painted out-of-band with `tea.Raw`, see `search_cover.go`); there are no covers in the list itself.
 - When in `/fav`, `/his`, or `/src`, typing filters the list in real-time (case-insensitive substring match).

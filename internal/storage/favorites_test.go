@@ -117,3 +117,20 @@ func TestUpdateUserDataPersistsSettings(t *testing.T) {
 		t.Errorf("saved settings = %+v", ud)
 	}
 }
+
+func TestSetFavoriteCoverFillsOldEntry(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := AddFavorite(FavoriteManga{MangaID: "m1", Title: "A", Provider: "P"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFavoriteCover("m1", "P", "https://x/a.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFavoriteCover("m1", "Other", "https://x/b.jpg"); err != nil { // not a favorite
+		t.Fatal(err)
+	}
+	favs, err := LoadFavorites()
+	if err != nil || len(favs) != 1 || favs[0].CoverURL != "https://x/a.jpg" {
+		t.Fatalf("favorites = %+v, err %v", favs, err)
+	}
+}

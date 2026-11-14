@@ -316,6 +316,20 @@ func (p *TruyenQQProvider) FetchChapters(ctx context.Context, mangaURL string) (
 	return chapters, nil
 }
 
+func (p *TruyenQQProvider) lookupCover(ctx context.Context, mangaID string) (string, error) {
+	p.resolveDomain()
+	resp, err := httpGet(ctx, p.httpClient, resolveURL(p.baseURL, mangaID), browserUserAgent)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("parse HTML: %w", err)
+	}
+	return pageCover(doc, ""), nil
+}
+
 func (p *TruyenQQProvider) FetchPages(ctx context.Context, chapterID string) ([]string, error) {
 	p.resolveDomain()
 	endpoint := resolveURL(p.baseURL, chapterID)

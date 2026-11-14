@@ -225,9 +225,9 @@ func TestReaderChapterJumpKeys(t *testing.T) {
 		wantStart int
 	}{
 		{"j next chapter", tea.KeyPressMsg{Code: 'j', Text: "j"}, "c2", 2, 0},
-		{"down next chapter", tea.KeyPressMsg{Code: tea.KeyDown}, "c2", 2, 0},
+		{"shift+down next chapter", tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}, "c2", 2, 0},
 		{"k previous chapter", tea.KeyPressMsg{Code: 'k', Text: "k"}, "c0", 0, 0},
-		{"up previous chapter", tea.KeyPressMsg{Code: tea.KeyUp}, "c0", 0, 0},
+		{"shift+up previous chapter", tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift}, "c0", 0, 0},
 	}
 
 	for _, tc := range cases {
@@ -429,7 +429,7 @@ func TestReaderFooterInWebtoonMode(t *testing.T) {
 	m := newReadingModel(3)
 	m.fitWidth = true
 	foot := m.footerText(200)
-	for _, want := range []string{"[↑/↓] Cuộn", "[k/j] Chap", "[w] Vừa màn hình"} {
+	for _, want := range []string{"[↑/↓] Cuộn", "[⇧↑/⇧↓] Chap", "[w] Vừa màn hình"} {
 		if !strings.Contains(foot, want) {
 			t.Errorf("webtoon footer missing %q: %q", want, foot)
 		}
@@ -608,5 +608,17 @@ func TestReaderShowsSettingsSaveError(t *testing.T) {
 	m, _ = m.update(storageSavedMsg{err: errors.New("parse userdata JSON")})
 	if !strings.Contains(m.flashMsg, "parse userdata JSON") {
 		t.Errorf("flash = %q, want the save error", m.flashMsg)
+	}
+}
+
+func TestPlainArrowsDoNotSwitchChapters(t *testing.T) {
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyDown}, {Code: tea.KeyUp}} {
+		m := NewReaderModel("m1", "Title", "c1", "1", []string{"c0", "c1", "c2"}, 1, -1, nil)
+		m.step = stepRead
+		m.total = 5
+		m.imageData = make([][]byte, 5)
+		if rm, _ := m.update(key); rm.step != stepRead || rm.chapterID != "c1" {
+			t.Errorf("%s switched chapters; only shift+arrows and j/k may", key.String())
+		}
 	}
 }

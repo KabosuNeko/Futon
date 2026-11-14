@@ -43,7 +43,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-S8**: Until the first results arrive, searches show the active providers (e.g. "Đang tìm trên MangaDex, TruyenQQ...") and the initial feed shows its loading text; partial results appear as each source completes; after completion a subtle warning lists the failed providers plus a healthy/total source count.
 - **FR-S9**: Provider HTTP calls have a **10s timeout** and retry up to **2 times** on network errors or 5xx responses with incremental backoff.
 - **FR-S10**: The latest feed and filter results are **paged**: moving the cursor onto the last item loads the next page and appends it below (titles already listed are skipped); an empty page ends paging. Search results are not paged.
-- **FR-S12**: The result list shows **one row per title**: results whose titles match after normalization (source suffix removed, case folded, punctuation and spacing ignored) are grouped and list all their sources, the picked one first. `shift+←`/`shift+→` change the picked source (plain `←`/`→` keep editing the query); the preview shows it ("1/2"), `enter` opens it, and the choice survives more results streaming in. Untitled entries are never grouped.
+- **FR-S12**: The result list shows **one row per result**, `Title (source)`: the same manga on two sources is two rows, and `enter` opens the row under the cursor.
 - **FR-S11**: Provider errors are never masked: a failing filter request surfaces as that provider's error instead of silently falling back to the latest list, and a latest-updates page that parses to nothing is an error (the site markup changed).
 
 #### Per-provider limits
@@ -74,6 +74,7 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 - **FR-F1**: `ctrl+f` on the chapter list adds a manga to favorites; shows flash "Đã thêm ... vào Yêu thích" (2s).
 - **FR-F2**: Deduped by (Provider, MangaID) — adding a duplicate is a no-op; the same ID on two providers is two favorites.
 - **FR-F3**: Persisted to `~/.config/futon/userdata.json` (`favorites` field).
+- **FR-F4**: Favorites and history keep the manga's cover URL, so `/fav` and `/his` show the cover in the preview pane like the feed. An entry saved without one looks it up once from its source when it is focused in `/fav` or `/his` (MangaDex API, or the cover on the manga page) and keeps it.
 
 ### 4.4 Reading history
 
@@ -100,8 +101,8 @@ Futon is a terminal manga reader: multi-source search, chapter browsing, inline 
 
 - **FR-R1**: Page navigation: `→`/`l` next page, `←`/`h` previous page. **Only active in the reader** (not swallowed by other screens).
 - **FR-R2**: **Continuous chapter switching**: on the last page, `→` goes to the next chapter; on the first page, `←` goes to the previous chapter — no need to return to the list.
-- **FR-R10**: **Fast chapter jump**: `j` (and `↓` outside webtoon mode) switches to the next chapter from any page; `k` (and `↑`) to the previous one. Both open the target chapter at its first page and use the preloaded next chapter when available.
-- **FR-R12**: **Webtoon mode** (`w` toggles, remembered in `userdata.json` as `reader_fit_width` and kept across chapters): pages are scaled to the terminal width, never beyond their native width, and shown through a window of terminal height. `↓`/`space`/wheel-down scroll half a screen; past the bottom they go to the next page (at its top); `↑`/wheel-up scroll back, and above the top go to the previous page **at its bottom**. `←`/`→` still change pages and `j`/`k` chapters. Each page is decoded and scaled once; a scroll only crops and encodes the visible window, and the previous window stays on screen until the new one is ready. The footer shows how far down the page the window is.
+- **FR-R10**: **Fast chapter jump**: `shift+↓` or `j` switches to the next chapter from any page; `shift+↑` or `k` to the previous one, in both modes (plain `↑`/`↓` only scroll, in webtoon mode). Both open the target chapter at its first page and use the preloaded next chapter when available.
+- **FR-R12**: **Webtoon mode** (`w` toggles, remembered in `userdata.json` as `reader_fit_width` and kept across chapters): pages are scaled to the terminal width, never beyond their native width, and shown through a window of terminal height. `↓`/`space`/wheel-down scroll half a screen; past the bottom they go to the next page (at its top); `↑`/wheel-up scroll back, and above the top go to the previous page **at its bottom**. `←`/`→` still change pages and `shift+↑`/`shift+↓` (or `j`/`k`) chapters. Each page is decoded and scaled once; a scroll only crops and encodes the visible window, and the previous window stays on screen until the new one is ready. The footer shows how far down the page the window is.
 - **FR-R13**: The footer never wraps: when the terminal is too narrow, the least important hints are dropped whole (page number, navigation and `esc` are kept). Flash messages are truncated to one row.
 - **FR-R3**: Chapter preload: being within 3 pages of the end (0-based index `>= total-3`, checked on every page change and when a chapter opens, so resumes and short chapters count) automatically fetches the next chapter + **preloads the first 2 images**; if preload finished, switching chapters **does not refetch and does not wait** (zero waiting).
 - **FR-R4**: LRU image cache of **20 rendered images** (key = page index), evicts the oldest page; reset when entering a new chapter. Pre-renders at most 3 pages ahead that are not yet cached.

@@ -15,6 +15,7 @@ type ReadHistory struct {
 	MangaID       string `json:"manga_id"`
 	MangaTitle    string `json:"manga_title,omitempty"`
 	Provider      string `json:"provider,omitempty"`
+	CoverURL      string `json:"cover_url,omitempty"`
 	ChapterID     string `json:"chapter_id"`
 	ChapterNumber string `json:"chapter_number,omitempty"`
 	PageIndex     int    `json:"page_index"`
@@ -85,7 +86,7 @@ func loadHistory() error {
 }
 
 // SaveHistory updates reading progress in memory and schedules background persistence.
-func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) error {
+func SaveHistory(mangaID, mangaTitle, provider, coverURL, chapterID, chapterNumber string, pageIndex int) error {
 	if mangaID == "" || chapterID == "" {
 		return nil
 	}
@@ -104,6 +105,9 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		if chapterNumber == "" {
 			chapterNumber = old.ChapterNumber
 		}
+		if coverURL == "" {
+			coverURL = old.CoverURL
+		}
 	}
 	// Re-key a legacy provider-less entry now that the provider is known.
 	forgetHistory(historyKey(mangaID, ""))
@@ -113,6 +117,7 @@ func SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber string,
 		MangaID:       mangaID,
 		MangaTitle:    mangaTitle,
 		Provider:      provider,
+		CoverURL:      coverURL,
 		ChapterID:     chapterID,
 		ChapterNumber: chapterNumber,
 		PageIndex:     pageIndex,
@@ -131,6 +136,25 @@ func lookupHistory(mangaID, provider string) (ReadHistory, bool) {
 	}
 	h, ok := historyCache[historyKey(mangaID, "")]
 	return h, ok
+}
+
+// SetHistoryCover fills in the cover of an entry saved without one, keeping
+// its reading position and time.
+func SetHistoryCover(mangaID, provider, coverURL string) error {
+	historyMu.Lock()
+	defer historyMu.Unlock()
+
+	if err := loadHistory(); err != nil {
+		return err
+	}
+	h, ok := lookupHistory(mangaID, provider)
+	if !ok || h.CoverURL == coverURL {
+		return nil
+	}
+	h.CoverURL = coverURL
+	historyCache[historyKey(h.MangaID, h.Provider)] = h
+	scheduleFlush()
+	return nil
 }
 
 func GetHistory(mangaID, provider string) (*ReadHistory, bool) {

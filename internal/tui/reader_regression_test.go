@@ -132,7 +132,7 @@ func TestReaderFrameRendersFooterInStepRead(t *testing.T) {
 	if !strings.Contains(frame, "[ctrl+e] Xuất CBZ") {
 		t.Errorf("expected reader footer cbz hint, got:\n%q", frame)
 	}
-	if !strings.Contains(frame, "[↑/k] [↓/j] Chap") {
+	if !strings.Contains(frame, "[⇧↑/⇧↓] Chap") {
 		t.Errorf("expected reader footer chapter-jump hint, got:\n%q", frame)
 	}
 	if !strings.Contains(frame, "[←/h] [→/l] Trang") {

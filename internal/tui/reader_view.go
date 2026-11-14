@@ -182,9 +182,9 @@ func (m ReaderModel) footerText(width int) string {
 	}
 	hints := []footerHint{{page, 0}, {"[←/h] [→/l] Trang", 2}}
 	if m.fitWidth {
-		hints = append(hints, footerHint{"[↑/↓] Cuộn", 2}, footerHint{"[k/j] Chap", 3}, footerHint{"[w] Vừa màn hình", 4})
+		hints = append(hints, footerHint{"[↑/↓] Cuộn", 2}, footerHint{"[⇧↑/⇧↓] Chap", 3}, footerHint{"[w] Vừa màn hình", 4})
 	} else {
-		hints = append(hints, footerHint{"[↑/k] [↓/j] Chap", 3}, footerHint{"[w] Webtoon", 4})
+		hints = append(hints, footerHint{"[⇧↑/⇧↓] Chap", 3}, footerHint{"[w] Webtoon", 4})
 	}
 	if m.hasPreviousChapter() && m.currentIdx == 0 {
 		hints = append(hints, footerHint{"[←] Chap trước", 8})

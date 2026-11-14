@@ -36,7 +36,7 @@ func (m SearchModel) currentListLen() int {
 	case viewSources:
 		return len(m.filteredProviderIndices())
 	default:
-		return len(m.resultRows())
+		return len(m.results)
 	}
 }
 

@@ -17,7 +17,7 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 			fav := m.favorites[indices[m.cursor]]
 			m.resetView(viewFeed)
 			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: fav.Provider}
+				return ViewMangaMsg{MangaID: fav.MangaID, Title: fav.Title, ProviderName: fav.Provider, CoverURL: fav.CoverURL}
 			}, true
 		}
 		return m, nil, true
@@ -33,7 +33,7 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 				title = h.MangaID
 			}
 			return m, func() tea.Msg {
-				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: h.Provider, ResumeChapterID: h.ChapterID}
+				return ViewMangaMsg{MangaID: h.MangaID, Title: title, ProviderName: h.Provider, CoverURL: h.CoverURL, ResumeChapterID: h.ChapterID}
 			}, true
 		}
 		return m, nil, true
@@ -45,7 +45,7 @@ func (m SearchModel) selectCurrentItem() (SearchModel, tea.Cmd, bool) {
 			return m, nil, false
 		}
 		return m, func() tea.Msg {
-			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: manga.Provider}
+			return ViewMangaMsg{MangaID: manga.ID, Title: manga.Title, ProviderName: manga.Provider, CoverURL: manga.CoverURL}
 		}, true
 	}
 
@@ -140,19 +140,6 @@ func (m SearchModel) handleKeyMsg(msg tea.KeyMsg) (SearchModel, tea.Cmd, bool) {
 		m, cmd := m.cycleView(-1)
 		return m, cmd, true
 
-	case "shift+left", "shift+right":
-		// Same title on several sources: pick which one to open.
-		if m.view == viewFeed {
-			delta := 1
-			if msg.String() == "shift+left" {
-				delta = -1
-			}
-			if m.cycleVariant(delta) {
-				return m, m.updateFocusedCover(), true
-			}
-			return m, nil, true
-		}
-
 	case "left", "right":
 		if m.view == viewFilters {
 			delta := 1
@@ -202,6 +189,7 @@ func (m SearchModel) deleteFocusedEntry() (SearchModel, tea.Cmd, bool) {
 		return m, tea.Batch(
 			func() tea.Msg { return storageSavedMsg{err: storage.RemoveFavorite(fav.MangaID, fav.Provider)} },
 			clearFlashAfter(2*time.Second),
+			m.updateFocusedCover(),
 		), true
 
 	case viewHistory:
@@ -213,7 +201,7 @@ func (m SearchModel) deleteFocusedEntry() (SearchModel, tea.Cmd, bool) {
 		h := m.history[actualIdx]
 		m.history = append(m.history[:actualIdx], m.history[actualIdx+1:]...)
 		m.clampCursorAfterDelete()
-		return m, deleteHistoryCmd(h.MangaID, h.Provider), true
+		return m, tea.Batch(deleteHistoryCmd(h.MangaID, h.Provider), m.updateFocusedCover()), true
 	}
 	return m, nil, true
 }

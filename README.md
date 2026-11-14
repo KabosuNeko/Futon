@@ -78,7 +78,6 @@ futon update       # kiểm tra & cài bản mới (không cần mở TUI)
 | `ctrl+c` | Thoát |
 | `enter` | Search / mở truyện đang chọn |
 | `↑` / `↓` | Di chuyển list (xuống cuối feed/bộ lọc sẽ tự tải trang tiếp) |
-| `shift+←` / `shift+→` | Đổi nguồn khi cùng một truyện có ở nhiều nguồn |
 | `tab` | Chuyển tab (feed → yêu thích → lịch sử → nguồn → bộ lọc) |
 | `shift+tab` | Chuyển tab ngược (bộ lọc → nguồn → lịch sử → yêu thích → feed) |
 | `/fav` | Xem favorites |
@@ -120,8 +119,8 @@ Khi ở màn hình `/fav`, `/his`, hoặc `/src`: gõ chữ để lọc danh sá
 |-----|--------|
 | `→` / `l` | Trang tiếp |
 | `←` / `h` | Trang trước |
-| `j` / `↓` | Nhảy sang chapter tiếp theo (chế độ webtoon: `↓` cuộn trang) |
-| `k` / `↑` | Về chapter trước (chế độ webtoon: `↑` cuộn trang) |
+| `shift+↓` / `j` | Nhảy sang chapter tiếp theo |
+| `shift+↑` / `k` | Về chapter trước |
 | `w` | Bật/tắt chế độ webtoon: vừa chiều ngang, cuộn bằng `↑`/`↓`/`space`/chuột (được nhớ) |
 | `ctrl+d` | Save trang hiện tại |
 | `ctrl+h` | Ẩn/hiện gợi ý phím tắt (trang dùng thêm 1 dòng; được nhớ) |

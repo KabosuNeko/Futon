@@ -229,6 +229,22 @@ func (m *MangaDexProvider) FetchChapters(ctx context.Context, mangaID string) ([
 	return all, nil
 }
 
+func (m *MangaDexProvider) lookupCover(ctx context.Context, mangaID string) (string, error) {
+	endpoint := fmt.Sprintf("%s/manga/%s?includes[]=cover_art", mangadexBaseURL, url.PathEscape(mangaID))
+	resp, err := httpGet(ctx, m.httpClient, endpoint, defaultUserAgent)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Data mangadexManga `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("parse JSON: %w", err)
+	}
+	return result.Data.toManga().CoverURL, nil
+}
+
 func (m *MangaDexProvider) FetchPages(ctx context.Context, chapterID string) ([]string, error) {
 	endpoint := fmt.Sprintf(
 		"%s/at-home/server/%s",

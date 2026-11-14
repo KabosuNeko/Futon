@@ -16,6 +16,7 @@ import (
 type ChapterListModel struct {
 	mangaID       string
 	mangaTitle    string
+	coverURL      string // saved with favorites, for the /fav preview
 	provider      api.MangaProvider
 	chapters      []models.Chapter
 	cursor        int
@@ -141,6 +142,7 @@ func (m ChapterListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						MangaID:  m.mangaID,
 						Title:    m.mangaTitle,
 						Provider: m.provider.Name(),
+						CoverURL: m.coverURL,
 					})
 					return storageSavedMsg{err: err}
 				},

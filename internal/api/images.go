@@ -22,6 +22,11 @@ type (
 	}
 	// imageAgent overrides the User-Agent for page images.
 	imageAgent interface{ imageUserAgent() string }
+	// coverLooker finds a manga's cover URL from its ID, for entries saved
+	// without one.
+	coverLooker interface {
+		lookupCover(ctx context.Context, mangaID string) (string, error)
+	}
 )
 
 const defaultImageUserAgent = "Futon-App/1.0"
@@ -65,6 +70,19 @@ func FetchCover(ctx context.Context, p MangaProvider, coverURL string) ([]byte, 
 	}
 	data, _, err := fetchImage(ctx, coverURL, browserUserAgent, referer)
 	return data, err
+}
+
+// LookupCover finds the cover URL of mangaID on its source.
+func LookupCover(ctx context.Context, p MangaProvider, mangaID string) (string, error) {
+	l, ok := p.(coverLooker)
+	if !ok {
+		return "", fmt.Errorf("nguồn không hỗ trợ tìm ảnh bìa")
+	}
+	cover, err := l.lookupCover(ctx, mangaID)
+	if err == nil && cover == "" {
+		err = fmt.Errorf("không tìm thấy ảnh bìa")
+	}
+	return cover, err
 }
 
 // DownloadPage fetches one page image of chapterID with the headers the

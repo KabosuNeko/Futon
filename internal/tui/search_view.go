@@ -218,12 +218,7 @@ func (m SearchModel) renderPreviewPane() string {
 
 	if focused.Provider != "" {
 		sourceLabel := metaLabelStyle.Render("Nguồn: ")
-		line := sourceLabel + providerBadge(focused.Provider)
-		if row, ok := m.focusedRow(); ok && m.view == viewFeed && len(row.variants) > 1 {
-			_, sel := m.selectedVariant(row)
-			line += metaLabelStyle.Render(fmt.Sprintf(" %d/%d · ⇧←/→ đổi", sel+1, len(row.variants)))
-		}
-		contentLines = append(contentLines, line)
+		contentLines = append(contentLines, sourceLabel+providerBadge(focused.Provider))
 	} else {
 		contentLines = append(contentLines, "")
 	}
@@ -569,27 +564,16 @@ func (m SearchModel) renderFilterModal() string {
 }
 
 func (m SearchModel) renderSearchResults() string {
-	rows := m.resultRows()
-	// Only the rows in view are drawn; formatting all of them made every
-	// cursor blink cost ~40ms once the feed had grown to thousands.
+	rows := m.results
+	// Only the rows in view are formatted; the feed grows to thousands.
 	items := make([]string, len(rows))
 	end := min(len(rows), m.viewportStart+m.listVisibleItems())
 	for i := m.viewportStart; i < end; i++ {
-		row := rows[i]
-		manga, sel := m.selectedVariant(row)
-		t := cleanTitle(manga.Title, manga.Provider)
-		if manga.Provider == "" {
-			items[i] = t
-			continue
+		r := rows[i]
+		items[i] = cleanTitle(r.Title, r.Provider)
+		if r.Provider != "" {
+			items[i] = fmt.Sprintf("%s (%s)", items[i], strings.ToLower(r.Provider))
 		}
-		// The picked source first, then the other sources with the title.
-		sources := []string{strings.ToLower(manga.Provider)}
-		for j, v := range row.variants {
-			if j != sel {
-				sources = append(sources, strings.ToLower(v.Provider))
-			}
-		}
-		items[i] = fmt.Sprintf("%s (%s)", t, strings.Join(sources, " · "))
 	}
 	var title string
 	switch m.listMode {

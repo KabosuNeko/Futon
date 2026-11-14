@@ -8,9 +8,9 @@ import (
 // Storage calls wrapped as commands so disk I/O never runs inside Update.
 // Errors are dropped: history is best-effort and a later save retries.
 
-func saveHistoryCmd(mangaID, mangaTitle, provider, chapterID, chapterNumber string, pageIndex int) tea.Cmd {
+func saveHistoryCmd(mangaID, mangaTitle, provider, coverURL, chapterID, chapterNumber string, pageIndex int) tea.Cmd {
 	return func() tea.Msg {
-		_ = storage.SaveHistory(mangaID, mangaTitle, provider, chapterID, chapterNumber, pageIndex)
+		_ = storage.SaveHistory(mangaID, mangaTitle, provider, coverURL, chapterID, chapterNumber, pageIndex)
 		return nil
 	}
 }
@@ -50,6 +50,28 @@ func loadHistoryCmd() tea.Cmd {
 	return func() tea.Msg {
 		all, err := storage.LoadAllHistory()
 		return historyLoadedMsg{history: all, err: err}
+	}
+}
+
+// setFavoriteCoverCmd fills in the cover of a favorite saved without one.
+func setFavoriteCoverCmd(mangaID, provider, coverURL string) tea.Cmd {
+	if coverURL == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return storageSavedMsg{err: storage.SetFavoriteCover(mangaID, provider, coverURL)}
+	}
+}
+
+// saveFoundCoverCmd keeps a looked-up cover on the favorite and the history
+// entry of that manga, whichever exist.
+func saveFoundCoverCmd(mangaID, provider, coverURL string) tea.Cmd {
+	return func() tea.Msg {
+		err := storage.SetFavoriteCover(mangaID, provider, coverURL)
+		if herr := storage.SetHistoryCover(mangaID, provider, coverURL); err == nil {
+			err = herr
+		}
+		return storageSavedMsg{err: err}
 	}
 }
 

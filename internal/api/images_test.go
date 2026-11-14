@@ -200,3 +200,57 @@ func TestDownloadPageRejectsOversizedImage(t *testing.T) {
 		t.Errorf("requests = %d, want 1 (too large is not transient)", n)
 	}
 }
+
+func TestLookupCoverOnEverySource(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/manga/md-1":
+			fmt.Fprint(w, `{"data":{"id":"md-1","relationships":[{"type":"cover_art","attributes":{"fileName":"c.jpg"}}]}}`)
+		case "/truyen-tranh/qq-1", "/truyen/ct-1":
+			fmt.Fprint(w, `<meta property="og:image" content="https://cdn.example/og.jpg">`)
+		case "/truyen-tranh/bt-1":
+			fmt.Fprint(w, `<meta property="og:image" content="https://bt.example/logo.png">
+				<div class="col-image"><img src="https://bt.example/cover.jpg"></div>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	oldMD, oldCT := mangadexBaseURL, cuutruyenBaseURL
+	mangadexBaseURL, cuutruyenBaseURL = srv.URL, srv.URL
+	defer func() { mangadexBaseURL, cuutruyenBaseURL = oldMD, oldCT }()
+	bt := NewBaoTangTruyenProvider()
+	bt.baseURL = srv.URL
+
+	cases := []struct {
+		p    MangaProvider
+		id   string
+		want string
+	}{
+		{NewMangaDexProvider(), "md-1", "https://uploads.mangadex.org/covers/md-1/c.jpg.256.jpg"},
+		{testQQ(srv.URL), "/truyen-tranh/qq-1", "https://cdn.example/og.jpg"},
+		{bt, "/truyen-tranh/bt-1", "https://bt.example/cover.jpg"}, // not the og:image logo
+		{NewCuuTruyenProvider(), "/truyen/ct-1", "https://cdn.example/og.jpg"},
+	}
+	for _, c := range cases {
+		if got, err := LookupCover(context.Background(), c.p, c.id); err != nil || got != c.want {
+			t.Errorf("%s: cover = %q, %v; want %q", c.p.Name(), got, err, c.want)
+		}
+	}
+	if _, err := LookupCover(context.Background(), testQQ(srv.URL), "/truyen-tranh/missing"); err == nil {
+		t.Error("a missing page must be an error, not an empty cover")
+	}
+}
+
+func TestBaoTangCoverNeverFallsBackToTheLogo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<meta property="og:image" content="https://bt.example/logo.png"><div class="new-layout"></div>`)
+	}))
+	defer srv.Close()
+	bt := NewBaoTangTruyenProvider()
+	bt.baseURL = srv.URL
+	if got, err := LookupCover(context.Background(), bt, "/truyen-tranh/x"); err == nil {
+		t.Errorf("cover = %q, want an error instead of the og:image logo", got)
+	}
+}

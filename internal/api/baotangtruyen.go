@@ -200,6 +200,20 @@ func (p *BaoTangTruyenProvider) FetchChapters(ctx context.Context, mangaURL stri
 	return chapters, nil
 }
 
+// lookupCover reads .col-image: the site's og:image is its logo.
+func (p *BaoTangTruyenProvider) lookupCover(ctx context.Context, mangaID string) (string, error) {
+	resp, err := httpGet(ctx, p.httpClient, resolveURL(p.baseURL, mangaID), browserUserAgent)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("parse HTML: %w", err)
+	}
+	return pageCover(doc, ".col-image img"), nil
+}
+
 func (p *BaoTangTruyenProvider) FetchPages(ctx context.Context, chapterID string) ([]string, error) {
 	endpoint := resolveURL(p.baseURL, chapterID)
 

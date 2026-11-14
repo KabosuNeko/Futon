@@ -13,6 +13,7 @@ type ViewMangaMsg struct {
 	MangaID      string
 	Title        string
 	ProviderName string
+	CoverURL     string
 	// ResumeChapterID opens this chapter in the reader as soon as the
 	// chapter list loads (used when continuing from history).
 	ResumeChapterID string
@@ -163,12 +164,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chapter = NewChapterListModel(msg.MangaID, msg.Title, m.currentProvider)
 		m.chapter.setSize(m.width, m.height)
 		m.chapter.resumeChapterID = msg.ResumeChapterID
+		m.chapter.coverURL = msg.CoverURL
 		// Clear the preview cover while the search view is still current, then
 		// switch state: a clear emitted after the switch would sit on top of the
 		// freshly rendered chapter list.
-		return m, tea.Sequence(
-			m.search.clearCoverCmd(),
-			func() tea.Msg { return chaptersReadyMsg{} },
+		return m, tea.Batch(
+			tea.Sequence(
+				m.search.clearCoverCmd(),
+				func() tea.Msg { return chaptersReadyMsg{} },
+			),
+			setFavoriteCoverCmd(msg.MangaID, provider.Name(), msg.CoverURL),
 		)
 
 	case chaptersReadyMsg:
@@ -189,6 +194,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = stateReader
 		m.reader = NewReaderModel(msg.MangaID, msg.MangaTitle, msg.ChapterID, msg.ChapterNumber, msg.AllChapterIDs, msg.ChapterIndex, msg.StartPageIndex, m.currentProvider)
 		m.reader.allChapterNumbers = msg.AllChapterNumbers
+		m.reader.coverURL = m.chapter.coverURL
 		m.reader.fitWidth = m.readerFitWidth
 		m.reader.hideFooter = m.readerHideFooter
 		if m.width > 0 && m.height > 0 {

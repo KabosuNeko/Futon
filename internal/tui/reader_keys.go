@@ -29,6 +29,11 @@ func (m ReaderModel) loadCurrentPage() (ReaderModel, []tea.Cmd) {
 	return m, nil
 }
 
+// saveHistoryCmd records page as the reading position of the open chapter.
+func (m ReaderModel) saveHistoryCmd(page int) tea.Cmd {
+	return saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.coverURL, m.chapterID, m.chapterNumber, page)
+}
+
 func (m ReaderModel) providerName() string {
 	if m.provider != nil {
 		return m.provider.Name()
@@ -68,7 +73,7 @@ func (m ReaderModel) handleNextPage() (ReaderModel, tea.Cmd) {
 		m.scrollRow = 0
 
 		m, cmds := m.loadCurrentPage()
-		cmds = append(cmds, saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
+		cmds = append(cmds, m.saveHistoryCmd(m.currentIdx))
 		cmds = append(cmds, m.maybePreloadNext())
 		return m, tea.Batch(cmds...)
 	} else if m.hasNextChapter() {
@@ -87,7 +92,7 @@ func (m ReaderModel) handlePrevPage() (ReaderModel, tea.Cmd) {
 		m.scrollRow = 0
 
 		m, cmds := m.loadCurrentPage()
-		cmds = append(cmds, saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx))
+		cmds = append(cmds, m.saveHistoryCmd(m.currentIdx))
 		return m, tea.Batch(cmds...)
 	} else if m.hasPreviousChapter() {
 		return m.jumpChapter(-1, -2)
@@ -139,14 +144,14 @@ func (m ReaderModel) jumpChapter(delta, startPage int) (ReaderModel, tea.Cmd) {
 		return m, nil
 	}
 
-	saveCmd := saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx)
+	saveCmd := m.saveHistoryCmd(m.currentIdx)
 	targetID := m.allChapterIDs[target]
 
 	if delta > 0 && m.preloadedChapID == targetID && len(m.preloadedURLs) > 0 {
 		m.applyPreloadedChapter(targetID)
 		return m, tea.Sequence(
 			saveCmd,
-			saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, 0),
+			m.saveHistoryCmd(0),
 			clearGraphicsCmd(),
 			func() tea.Msg { return preloadTransitionReadyMsg{} },
 		)
@@ -196,14 +201,14 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, tea.Sequence(
-			saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx),
+			m.saveHistoryCmd(m.currentIdx),
 			flushHistoryCmd(),
 			tea.Quit,
 		)
 
 	case "esc":
 		return m, tea.Sequence(
-			saveHistoryCmd(m.mangaID, m.mangaTitle, m.providerName(), m.chapterID, m.chapterNumber, m.currentIdx),
+			m.saveHistoryCmd(m.currentIdx),
 			flushHistoryCmd(),
 			clearScreenCmd(),
 			func() tea.Msg { return BackToChaptersMsg{} },
@@ -252,25 +257,22 @@ func (m ReaderModel) handleKeyMsg(msg tea.KeyMsg) (ReaderModel, tea.Cmd) {
 		return m.toggleFitWidth()
 
 	case "down", "space":
-		// In webtoon mode the arrows scroll the page; j/k always switch chapters.
+		// Plain arrows only scroll (webtoon mode); shift+arrows switch chapters.
 		if m.fitWidth {
 			return m.scrollPage(1)
 		}
-		if msg.String() == "space" {
-			return m, nil
-		}
-		return m.jumpChapter(1, 0)
+		return m, nil
 
 	case "up":
 		if m.fitWidth {
 			return m.scrollPage(-1)
 		}
-		return m.jumpChapter(-1, 0)
+		return m, nil
 
-	case "j":
+	case "shift+down", "j":
 		return m.jumpChapter(1, 0)
 
-	case "k":
+	case "shift+up", "k":
 		return m.jumpChapter(-1, 0)
 	}
 	return m, nil

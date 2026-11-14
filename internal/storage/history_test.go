@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 func TestSaveAndGetHistory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	if err := SaveHistory("m1", "Title", "otruyen", "c1", "1", 5); err != nil {
+	if err := SaveHistory("m1", "Title", "otruyen", "", "c1", "1", 5); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
@@ -50,10 +50,10 @@ func TestSaveAndGetHistory(t *testing.T) {
 
 func TestSaveHistoryKeepsOldTitle(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := SaveHistory("m1", "Original", "otruyen", "c1", "1", 0); err != nil {
+	if err := SaveHistory("m1", "Original", "otruyen", "https://x/cover.jpg", "c1", "1", 0); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
-	if err := SaveHistory("m1", "", "otruyen", "c2", "2", 3); err != nil {
+	if err := SaveHistory("m1", "", "otruyen", "", "c2", "2", 3); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
@@ -64,6 +64,9 @@ func TestSaveHistoryKeepsOldTitle(t *testing.T) {
 	if h.MangaTitle != "Original" {
 		t.Errorf("expected old title preserved, got %s", h.MangaTitle)
 	}
+	if h.CoverURL != "https://x/cover.jpg" {
+		t.Errorf("expected old cover preserved, got %q", h.CoverURL)
+	}
 	if h.ChapterNumber != "2" {
 		t.Errorf("expected new chapter number, got %s", h.ChapterNumber)
 	}
@@ -71,7 +74,7 @@ func TestSaveHistoryKeepsOldTitle(t *testing.T) {
 
 func TestDeleteHistory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := SaveHistory("m1", "Title", "otruyen", "c1", "1", 0); err != nil {
+	if err := SaveHistory("m1", "Title", "otruyen", "", "c1", "1", 0); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 	if err := DeleteHistory("m1", "otruyen"); err != nil {
@@ -124,7 +127,7 @@ func TestLoadAllHistorySortsByUpdatedAt(t *testing.T) {
 // The accessors return copies; mutating them must not touch the RAM cache.
 func TestGetHistoryReturnsCopy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := SaveHistory("m1", "Title", "otruyen", "c1", "1", 5); err != nil {
+	if err := SaveHistory("m1", "Title", "otruyen", "", "c1", "1", 5); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
@@ -145,7 +148,7 @@ func TestGetHistoryReturnsCopy(t *testing.T) {
 
 func TestLoadAllHistoryReturnsCopy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := SaveHistory("m1", "Title", "otruyen", "c1", "1", 5); err != nil {
+	if err := SaveHistory("m1", "Title", "otruyen", "", "c1", "1", 5); err != nil {
 		t.Fatalf("SaveHistory error: %v", err)
 	}
 
@@ -208,10 +211,10 @@ func TestHistoryIsKeyedByProvider(t *testing.T) {
 	resetHistoryForTest()
 	defer resetHistoryForTest()
 
-	if err := SaveHistory("same-id", "A", "ProviderA", "a1", "1", 1); err != nil {
+	if err := SaveHistory("same-id", "A", "ProviderA", "", "a1", "1", 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveHistory("same-id", "B", "ProviderB", "b7", "7", 3); err != nil {
+	if err := SaveHistory("same-id", "B", "ProviderB", "", "b7", "7", 3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -254,7 +257,7 @@ func TestLegacyHistoryWithoutProviderIsFoundAndRekeyed(t *testing.T) {
 		t.Fatalf("legacy entry not found via provider lookup: %+v, %v", h, ok)
 	}
 
-	if err := SaveHistory("old", "", "OTruyen", "c2", "", 0); err != nil {
+	if err := SaveHistory("old", "", "OTruyen", "", "c2", "", 0); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := LoadAllHistory()
@@ -283,7 +286,7 @@ func TestFlushKeepsEntriesWrittenByAnotherWindow(t *testing.T) {
 	resetHistoryForTest()
 	defer resetHistoryForTest()
 
-	if err := SaveHistory("a", "A", "P", "a1", "1", 0); err != nil {
+	if err := SaveHistory("a", "A", "P", "", "a1", "1", 0); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().Unix()
@@ -308,7 +311,7 @@ func TestFlushDoesNotResurrectDeletedEntries(t *testing.T) {
 	resetHistoryForTest()
 	defer resetHistoryForTest()
 
-	if err := SaveHistory("a", "A", "P", "a1", "1", 0); err != nil {
+	if err := SaveHistory("a", "A", "P", "", "a1", "1", 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := FlushHistory(); err != nil {
@@ -331,7 +334,7 @@ func TestRekeyedLegacyEntryIsNotDuplicatedOnFlush(t *testing.T) {
 	defer resetHistoryForTest()
 
 	writeOtherWindow(t, `[{"manga_id":"old","chapter_id":"c1","page_index":2,"updated_at":1}]`)
-	if err := SaveHistory("old", "", "OTruyen", "c2", "", 0); err != nil {
+	if err := SaveHistory("old", "", "OTruyen", "", "c2", "", 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := FlushHistory(); err != nil {
@@ -339,5 +342,21 @@ func TestRekeyedLegacyEntryIsNotDuplicatedOnFlush(t *testing.T) {
 	}
 	if all, _ := LoadAllHistory(); len(all) != 1 {
 		t.Errorf("entries = %+v, want only the re-keyed one", all)
+	}
+}
+
+func TestSetHistoryCoverKeepsPosition(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resetHistoryForTest()
+	if err := SaveHistory("m1", "T", "P", "", "c3", "3", 7); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := GetHistory("m1", "P")
+	if err := SetHistoryCover("m1", "P", "https://x/c.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := GetHistory("m1", "P")
+	if h.CoverURL != "https://x/c.jpg" || h.ChapterID != "c3" || h.PageIndex != 7 || h.UpdatedAt != before.UpdatedAt {
+		t.Errorf("entry = %+v, want the cover added and nothing else changed", h)
 	}
 }
